@@ -1,0 +1,108 @@
+---
+title: "The Best Crisp Alternatives in 2026"
+description: "The 6 best Crisp alternatives in 2026 compared — free, open-source, and hosted options for teams who want to cut per-seat costs or self-host."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["crisp alternative", "live chat", "open source", "self-hosted", "comparison"]
+type: "comparison"
+---
+
+![Six live chat tools lined up like contestants in a bakeoff, one of them is a croissant](/blog/best-crisp-alternatives-2026-hero.png)
+
+*Buttr audited six tools, saved $400/month, and still had time for a second croissant.*
+
+> 🥐 **Buttr:** crisp is good software. crisp is also $95/seat/month. so here we are.
+
+The best Crisp alternatives in 2026 are Tawk.to (free forever), Chatwoot (open-source, self-hostable), Tidio (freemium with AI), Intercom (full-featured enterprise), HubSpot Chat (bundled with a free CRM), and Krispy (MIT-licensed, Cloudflare edge, AI replies built in). The right pick depends on your team size, how much you care about data ownership, and whether a per-seat cost structure makes sense at your current stage.
+
+## Why are teams looking for Crisp alternatives?
+
+Crisp's Basic plan starts at $25 per seat per month; the Pro plan runs $95 per seat per month ([Crisp pricing](https://crisp.chat/en/pricing/)). For a four-person team on the Basic plan, that's $100/month before AI features, which require an additional tier. There's also no self-hosting option — your conversation history lives on Crisp's servers, and it leaves when you do. Those two facts — per-seat billing and hosted-only infrastructure — drive most teams to start looking around.
+
+## What are the best Crisp alternatives in 2026?
+
+| Tool | Open-source | Self-hostable | AI built-in | Starting price | Best for |
+|---|---|---|---|---|---|
+| **Tawk.to** | No | No | No | Free forever | Budget-first teams |
+| **Chatwoot** | Yes (MIT) | Yes | No | $0 self-host / $19/seat hosted | Teams needing multi-agent inbox |
+| **Tidio** | No | No | Add-on | Free / $29+/mo | E-commerce, Shopify stores |
+| **Intercom** | No | No | Yes (Fin) | $39/seat/mo | Funded startups, enterprise |
+| **HubSpot Chat** | No | No | No | Free (CRM-bundled) | Teams already on HubSpot |
+| **Krispy** | Yes (MIT) | Yes (Cloudflare) | Yes (built in) | $0 self-host / $19/mo flat | Indie hackers, solo founders, small teams |
+
+## What's the best free alternative to Crisp?
+
+Tawk.to is completely free — and has been since 2013. It runs on an ad-support model: the software is free, and they sell an optional "hired agents" service at $1/hour if you want their team to handle chats for you. You get unlimited agents, unlimited chat history, and a functional widget with no paid tier gate.
+
+The honest trade-offs: no self-hosting, no AI replies, and your conversation data lives on tawk.to's servers. The interface has been stable for years — stable meaning unchanged. If free-forever is your only requirement and AI isn't a priority, it delivers on that promise.
+
+For a broader look at tools in this tier, [the best open-source live chat tools in 2026](/best-open-source-live-chat) covers options where you get both free and code access.
+
+## What's the best open-source alternative to Crisp?
+
+**Chatwoot** is the most mature open-source Crisp alternative. It's MIT-licensed, runs on any VPS, and ships with a real multi-agent inbox — conversations can be assigned, labeled, tagged, and routed between team members. The hosted version starts at $19 per seat per month ([Chatwoot pricing](https://www.chatwoot.com/pricing/)), and the self-hosted version is free with no feature restrictions.
+
+What Chatwoot doesn't include out of the box: AI replies. You can wire in an LLM via their integration API, but it's a setup you build rather than a toggle you flip. If your primary need is a multi-agent support inbox with conversation routing, Chatwoot is the honest recommendation.
+
+**Krispy** takes a narrower angle — it's built for the "one founder, AI handles the first pass, Telegram gets the overflow" workflow. No agent assignment queues, no visual inbox — just an AI that answers inbound questions, then taps you on Telegram when something needs a human. See [the full Krispy vs Crisp breakdown](/krispy-vs-crisp) for a direct feature comparison if you're switching from Crisp specifically.
+
+> 🥐 **Buttr:** chatwoot does 40 things beautifully. i do four things, extremely well. different tools.
+
+## Is Intercom worth it as a Crisp alternative?
+
+Intercom is meaningfully more capable than Crisp — and meaningfully more expensive. The Starter plan begins at $39/seat/month; Fin AI is billed separately on usage on top of that. For a five-person team with AI replies, you're looking at $300–600/month before integrations or enterprise features.
+
+Intercom wins on CRM depth, conversation routing, in-app messaging, product tours, and team analytics. If those capabilities are directly tied to your retention numbers, the cost is defensible. For a founder comparing the two on infrastructure and long-term cost, [how Krispy compares to Intercom on the $0-vs-$400 math](/krispy-vs-intercom) goes into the specifics.
+
+## Which Crisp alternative is best for solo founders and indie hackers?
+
+Krispy. Here's the honest case:
+
+**No per-seat cost.** Self-host free on Cloudflare Workers. Your Cloudflare account has a free tier that covers the compute; you pay nothing for the platform.
+
+**AI without an extra billing relationship.** Krispy uses Cloudflare Workers AI, which comes bundled at up to 10,000 inference requests per day on the free tier ([Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)). No OpenAI key required. No third billing relationship to track.
+
+**Handoff on Telegram.** When a visitor needs a human, Krispy sends you a Telegram message. You reply in Telegram; it appears live in the widget. No support app to download, no inbox to check, no notification fatigue from a tool nobody checks. [Connecting Telegram for live handoff](/connect-telegram-handoff) has the step-by-step setup.
+
+**Your data stays in your account.** Conversations sit in your Cloudflare KV namespace — not Krispy's servers, not a third-party database. You own the data and can take it anywhere. For the broader argument on why that matters even when you're small, [owning your customer conversations](/own-your-customer-conversations) lays it out plainly.
+
+For the self-hosting walkthrough, [self-host live chat on Cloudflare in one command](/self-host-live-chat-cloudflare) is the fastest path from zero to deployed. And if you're building a full zero-overhead support stack, [the zero-dollar support stack](/the-zero-dollar-support-stack) shows how Krispy fits alongside free tooling for email, status, and docs.
+
+[Why open source matters for your support stack](/why-open-source) makes the case for why the license question isn't just ideological — it's a hedge against pricing changes, shutdowns, and data held hostage.
+
+## What if I'm already on HubSpot?
+
+HubSpot's free CRM includes a live chat widget and a shared team inbox at no extra cost. If you already use HubSpot for contacts, this is the obvious zero-friction path — conversations tie into your contact records automatically.
+
+The limitation: the free chat widget is basic, and HubSpot's AI features are locked behind paid Marketing and Service Hub tiers. The free experience is closer to a contact form with a chat icon than a real support channel. If HubSpot is already your CRM, use it. If not, it's not a reason to start.
+
+> 🥐 **Buttr:** hubspot is great for pipeline. for chat, it's a little... pipeline-ish.
+
+## FAQ
+
+### Is there a free open-source alternative to Crisp that I can self-host?
+
+Yes — two solid options. Chatwoot is MIT-licensed, runs on any VPS or Docker setup, and gives you a full multi-agent inbox at no cost when self-hosted. Krispy is MIT-licensed and deploys on Cloudflare Workers in one command, with AI replies and Telegram handoff included. Chatwoot is the right pick for teams who need agent routing; Krispy is built for solo founders and small teams where the bot should handle most queries.
+
+### Does Crisp have a permanently free plan?
+
+Crisp offers a free tier for up to two seats with a 30-day conversation history limit. The features that make Crisp genuinely useful — automated replies, integrations, longer history, AI — are on paid plans starting at $25 per seat per month. The free plan is functional for testing, not for running production support.
+
+### Can I migrate my conversation history from Crisp?
+
+Crisp exports conversation history as JSON from the dashboard. Chatwoot supports importing that JSON via a migration script, though it's not a UI wizard — you run a script against your self-hosted instance. Krispy includes a similar import path. Core conversation history transfers cleanly; some metadata fields don't map one-to-one.
+
+### What's the cheapest live chat tool with AI replies in 2026?
+
+Krispy self-hosted: $0. It runs on Cloudflare Workers AI at no marginal cost for up to 10,000 AI replies per day. Krispy Cloud is $19/month flat with no per-seat pricing — cheaper than one seat on most alternatives. Tidio has an AI product (Lyro) but it starts at $39/month on top of the base plan.
+
+### Is Tidio a good Crisp alternative?
+
+Tidio is well-suited to e-commerce, particularly Shopify stores. Its free plan caps at 50 conversations per month; paid plans start at $29/month. The AI product (Lyro) is an additional $39/month. For a SaaS product or developer tool without a Shopify dependency, the per-conversation cap and the separate AI billing make the cost structure awkward. Chatwoot or Krispy tend to be cleaner fits for non-e-commerce teams.
+
+---
+
+Self-host Krispy free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one command deploys the Workers API, the AI layer, and the chat widget. Or skip the infrastructure: [Krispy Cloud](https://krispy.chat) is the same open-source stack, hosted, with a 14-day free trial and $19/month flat after that — no per-seat pricing, no card required to start.
+
+> 🥐 **Buttr:** picked. deployed. napping. à bientôt 🥐

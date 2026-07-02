@@ -1,0 +1,116 @@
+---
+title: "Open-Source Alternatives to the SaaS You Overpay For (2026)"
+description: "The best open-source alternatives to expensive SaaS tools in 2026 — 8 categories, real prices, and which self-hosted options are production-ready."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["open-source", "self-hosted", "saas-alternatives", "indie-hacker", "cost"]
+type: "comparison"
+---
+
+![A stack of popular SaaS logos on the left, a croissant sliding open-source alternatives across the counter on the right](/blog/open-source-saas-alternatives-2026-hero.png)
+
+*Buttr, reviewing your monthly SaaS receipts with the energy of a forensic accountant.*
+
+> 🥐 **Buttr:** i've seen the Intercom invoice. i've seen the Notion invoice. i've seen the Zapier invoice. you're fine. we're fine. let's fix it.
+
+For eight popular SaaS categories — support chat, analytics, forms, email, feature flags, error tracking, internal tools, and auth — there is at least one genuinely self-hostable, MIT-licensed alternative in 2026 that covers 80–100% of what most small teams actually use, at a self-hosted cost of $0 plus your VPS or Cloudflare bill.
+
+The per-seat math is the inflection point. At 1–2 users, many hosted plans are cheap enough to ignore. At 3–5 users, the numbers almost always break toward self-hosting. A 5-person team paying $29/seat/month on three SaaS tools is spending $5,220/year on tooling that has production-ready open-source counterparts.
+
+---
+
+## Which categories are worth self-hosting for a small team?
+
+| Category | Best open-source pick | Self-host complexity | Honest saving (5 seats) |
+|---|---|---|---|
+| Support chat | Chatwoot / Krispy | Low–Medium | $600–$2,400/yr |
+| Web analytics | PostHog / Plausible | Low | $240–$600/yr |
+| Forms | Formbricks | Low | $300–$900/yr |
+| Transactional email | Listmonk + SES | Medium | $200–$500/yr (at volume) |
+| Feature flags | Unleash / PostHog | Low–Medium | $900–$2,400/yr |
+| Error tracking | Sentry self-hosted | Medium–High | $300–$1,000/yr |
+| Internal tools | Appsmith / Directus | Low | $480–$2,400/yr |
+| Auth | Authentik / Supabase Auth | Low–Medium | $300–$1,500/yr |
+
+Ranges are based on public pricing pages for 5-seat teams in mid-2026. Your numbers will differ — check the exact tier before committing.
+
+---
+
+## Support chat: what replaces Intercom ($74–$139/seat)?
+
+**Chatwoot** is MIT-licensed, 22k+ GitHub stars, multi-channel (email, WhatsApp, social), and proven in production across thousands of installs. Best for teams of 3–10 who need a mature multi-agent inbox. [We compared Chatwoot to Krispy feature by feature.](/krispy-vs-chatwoot)
+
+**Krispy** (that's us) runs on Cloudflare Workers with no VPS required, includes AI replies via Workers AI (10k free requests/day, [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)), and hands off to Telegram so you reply from the app already on your phone. Best for solo founders or small teams on the edge stack. [Full comparison vs Intercom](/krispy-vs-intercom) and [vs Crisp.](/krispy-vs-crisp)
+
+[We also wrote about wiring a complete zero-dollar support setup here.](/the-zero-dollar-support-stack)
+
+---
+
+## Web analytics: what replaces Mixpanel ($20–$833+/month)?
+
+**Plausible** is the lightest answer: GDPR-native, ~1KB script, €9/month hosted or free to self-host. No funnels or custom event properties, but covers traffic, referrers, and page analytics cleanly.
+
+**PostHog** (Apache 2.0) covers product analytics, session replay, feature flags, and A/B tests in one repo. The hosted free tier includes 1M events/month ([PostHog pricing](https://posthog.com/pricing)); self-hosted is unlimited and production-ready. If you're replacing Mixpanel + LaunchDarkly, PostHog self-hosted handles both.
+
+---
+
+## Feature flags: what replaces LaunchDarkly ($75+/month minimum)?
+
+LaunchDarkly's minimum invoice is $75/month ([LaunchDarkly pricing](https://launchdarkly.com/pricing/)), which is hard to justify for a team where two people are touching feature flags.
+
+**Unleash** (open-source edition, MIT) is self-hostable, Docker-based, and covers the core feature flag and gradual rollout patterns most teams actually use. If you're already running PostHog, feature flags are included — no separate tool needed.
+
+> 🥐 **Buttr:** "$75/month minimum" for a feature flag toggle. i'm just noting it. no shade.
+
+---
+
+## Error tracking: what replaces Sentry ($26–$89+/month)?
+
+**GlitchTip** is MIT-licensed and Sentry SDK-compatible — point your existing `@sentry/browser` or `@sentry/node` config at a GlitchTip host and it works without code changes. Lighter dashboard, fewer features, but covers the core: stack traces, error grouping, release tracking.
+
+**Sentry self-hosted** is the real Sentry — all features, no seat limits — published as an official Docker Compose stack. Needs 4GB+ RAM minimum. For teams with ops capacity, it's the best-in-class option at zero license cost.
+
+---
+
+## Auth, forms, email, internal tools
+
+**Auth:** Authentik (MIT) for SSO/MFA without Keycloak's weight. Supabase Auth (MIT) if you're already on Postgres — magic link, OAuth, JWTs included. Auth0 is free up to 7,500 MAU; below that threshold, don't overthink it.
+
+**Forms:** Formbricks (MIT) for in-app surveys, NPS, and link surveys — Docker-based, actively developed. Typeform still leads on conditional logic and UX polish, but for product surveys, Formbricks is production-ready. Honest secondary take: if the form is already in a React app, React Hook Form + your DB costs $0 and needs no server.
+
+**Email:** Listmonk (MIT, Go + Postgres) for newsletters paired with SES at $0.10/1k emails. At low transactional volume (under 3k/month), Resend's free tier is the right call over self-managing SMTP deliverability.
+
+**Internal tools:** Appsmith and Tooljet are both MIT-licensed drag-and-drop internal tool builders. If the internal tool is really just "a UI over Postgres," Directus installs on top of your existing database and gives you a full admin panel, REST + GraphQL API, and role-based permissions without building anything.
+
+> 🥐 **Buttr:** "a UI over Postgres" describes 40% of internal tools. directus is right there.
+
+---
+
+## FAQ
+
+### Is self-hosting actually free?
+
+Self-hosting trades the SaaS invoice for a VPS bill plus your ops time. A $6/month Hetzner VPS runs Chatwoot, PostHog, and Formbricks with room to spare for a small team. The real cost is maintenance: upgrades, backups, the occasional incident — usually 1–2 hours/month once stable. For $30/month saved, it probably isn't worth it. For $300/month saved, it usually is.
+
+### What's the biggest risk with open-source alternatives?
+
+Project abandonment. Before committing, check: GitHub stars trending up or flat? Last commit within 3 months? Active issue tracker? All tools named here have active maintainers as of mid-2026. A 10k-star repo with a commit last week is safer than a 25k-star repo with nothing merged in a year.
+
+### Can I migrate existing data from a SaaS tool?
+
+Usually yes. Chatwoot imports Crisp and Intercom conversation exports. PostHog ingests CSV event data. The Sentry SDK works against GlitchTip with a one-line config change. Typeform form responses export cleanly. Always pull a full export before canceling any paid plan.
+
+### Which categories should a solo founder NOT self-host?
+
+Transactional email at low volume (Resend at $20/month saves you SMTP deliverability headaches), and auth if your MAU is under Auth0's free tier (7,500 MAU). The goal isn't to self-host everything — it's to self-host the tools where the per-seat billing compounds. [More on when self-hosting makes sense here.](/why-open-source)
+
+### What's the difference between open source and source-available?
+
+MIT and Apache 2.0 licenses allow commercial self-hosting without restriction. Business Source License (BSL) tools restrict commercial self-hosting for a period (typically 3–4 years) before the code reverts to open source. The tools recommended here are MIT or Apache 2.0 unless otherwise noted. Always check the license before building a production system on a BSL tool.
+
+---
+
+[Krispy](https://github.com/lonormaly/krispyai) is the open-source answer in the support chat category: MIT-licensed, runs on Cloudflare Workers (no VPS), AI replies via Workers AI, and Telegram handoff. Self-host free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai), or run it without the infrastructure on [Krispy Cloud](https://krispy.ai) — 14-day free trial, $19/month flat, no per-seat fees.
+
+> 🥐 **Buttr:** à bientôt. the spreadsheet doesn't lie.

@@ -1,0 +1,120 @@
+---
+title: "Cloudflare Workers vs Vercel for Side Projects (2026)"
+description: "Cloudflare Workers vs Vercel for side projects in 2026: free tiers, pricing cliffs, DX tradeoffs, and 3 concrete scenarios to pick the right one."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["cloudflare", "vercel", "self-hosting", "indie-stack", "edge"]
+type: "comparison"
+---
+
+![Cloudflare Workers and Vercel logos on a deployment dashboard side by side](/blog/cloudflare-workers-vs-vercel-2026-hero.png)
+
+*buttr deployed to both just to see what would happen. workers answered first. vercel sent a nice email about it.*
+
+> 🥐 **Buttr:** two great platforms. one of them charges per seat. the other one charges per million requests. i'll let you do the math.
+
+For most side projects in 2026, Cloudflare Workers wins on cost and global latency, while Vercel wins on Next.js developer experience and zero-config deployments. The right choice depends on your stack, your expected traffic shape, and how much you care about owning your infrastructure vs. shipping fast.
+
+## Which is better for a side project in 2026 — Workers or Vercel?
+
+If you're building with Next.js, Vercel is the path of least resistance. It was made for it. You push to GitHub, you get a preview URL, you move on. If you're building something edge-native — API-first, latency-sensitive, stateful without a database, or cost-sensitive at scale — Cloudflare Workers is the better fit.
+
+Both run your code at the edge. Both have generous free tiers. The differences show up in pricing cliffs, ecosystem depth, and what happens when you need persistent state.
+
+## How do the free tiers compare?
+
+| | Cloudflare Workers (Free) | Vercel (Hobby) |
+|---|---|---|
+| **Compute** | 100,000 requests/day | 100,000 function invocations/month |
+| **Execution time** | 10ms CPU per request | 10s max duration |
+| **Edge locations** | 300+ globally | ~80 edge regions |
+| **Storage** | KV (1GB reads/day), R2 (free egress) | No built-in storage |
+| **Database** | D1 SQLite (5M rows/day free) | No built-in DB |
+| **AI** | Workers AI (10K neurons/day free) | None built in |
+| **Price after free** | $5/month (Workers Standard) | $20/user/month (Pro) |
+
+Sources: [cloudflare.com/plans](https://cloudflare.com/plans), [vercel.com/pricing](https://vercel.com/pricing).
+
+Cloudflare's free tier is daily; Vercel's is monthly. For a side project with bursty traffic — a Product Hunt launch, a newsletter drop — Cloudflare's daily resets are friendlier. You can burst to 100K requests in an afternoon and start fresh tomorrow. Vercel's 100K/month cap is the same cap on day 1 as it is on day 28.
+
+The paid-tier gap is larger. Cloudflare Standard is $5/month flat for up to 10 million requests. Vercel Pro starts at $20/user/month — and teams pay per seat. A solo founder is fine; a two-person project costs $40 before a line of traffic.
+
+## When does Vercel make more sense?
+
+Vercel wins when your project is a Next.js app and you want deployment to be invisible. The ISR caching, the Image Optimization API, the preview deployments on every PR, the zero-config `next build` — all of it works out of the box because Vercel built Next.js.
+
+It also wins when your team is larger and values CI/CD polish over infrastructure cost, or when you're using the Vercel AI SDK and want the model routing baked in. For a startup where developer time is the bottleneck, $20–40/month to never think about deploys is a reasonable trade.
+
+> 🥐 **Buttr:** vercel's preview urls are genuinely excellent. i would know. i've been previewed.
+
+Where Vercel gets complicated: adding a database means adding a third-party service (Supabase, PlanetScale, Neon). Blob storage is available but costs extra. At meaningful traffic volume, the function invocation pricing adds up faster than the Cloudflare equivalent.
+
+## When does Cloudflare Workers make more sense?
+
+Workers wins when you care about cost, latency, or owning your stack. Three specific cases:
+
+**Cost-sensitive at any scale.** The $5/month Workers Standard plan covers 10 million requests. Vercel's equivalent traffic would cost significantly more under the Pro plan, depending on invocation count and compute time. For a side project that you want to run indefinitely without thinking about bills, Workers is the cheaper long-term home.
+
+**Edge-native, stateful features.** Cloudflare Durable Objects give you strongly-consistent, in-memory state at the edge without a separate database. Each object is a single JS class instance that persists. This is how Krispy runs real-time chat — each conversation is a Durable Object, colocated with the user, no Postgres connection pool required. Vercel has no equivalent primitive; you'd need an external service.
+
+**You're already on Cloudflare.** If your DNS, your R2 buckets, and your Workers are all in one account, the operational simplicity is real. One dashboard, one bill, one CLI (`wrangler`). Adding Vercel to that stack means a second deployment pipeline and a second provider.
+
+> 🥐 **Buttr:** durable objects are the bit nobody talks about enough. each chat session its own little stateful universe at the edge. that's the good stuff. anyway.
+
+## What about storage and databases?
+
+Cloudflare's storage story is now complete without leaving the platform:
+
+- **KV** — key-value, globally replicated, eventually consistent. Good for config, feature flags, rate-limit counters.
+- **D1** — SQLite at the edge. Strongly consistent reads within a region. Free tier: 5 million row-reads/day and 100,000 writes/day ([developers.cloudflare.com/d1/platform/pricing](https://developers.cloudflare.com/d1/platform/pricing)). For a typical side project, that's plenty.
+- **R2** — S3-compatible object storage with zero egress fees. If you're paying AWS for egress right now, this alone justifies moving.
+- **Durable Objects** — per-session stateful compute. No database required for real-time or collaborative features.
+
+Vercel has Vercel Blob (object storage) and integrates with database providers, but nothing stateful is built in. For a project that needs a DB from day one, you'll add Neon or Supabase, which works well but is another service to manage, another bill, and another failure point.
+
+This is why [self-hosting on Cloudflare](/self-host-live-chat-cloudflare) is the default architecture for Krispy. The worker handles the API, the Durable Objects handle session state, R2 handles any file storage, and D1 handles structured data — all in one account, all on the free tier for typical indie traffic.
+
+## How does each handle AI workloads?
+
+Both platforms route to external LLMs. Cloudflare adds one layer Vercel doesn't: Workers AI runs inference directly on Cloudflare's GPU fleet, billed per neuron, with zero external API key. The free tier covers 10,000 neurons/day, which handles a reasonable FAQ chatbot without touching OpenAI billing.
+
+For more capable models (GPT-4o, Claude, Gemini), both platforms support proxying — Vercel through the AI SDK's provider abstraction, Cloudflare through AI Gateway (rate limiting, caching, logging included). Neither forces you to use their built-in model; both let you bring your own key. The difference is Cloudflare gives you a zero-config default that works for simple use cases.
+
+If you're building something like [the zero-dollar support stack](/the-zero-dollar-support-stack) — a widget that answers questions and routes to a human on Telegram — Workers AI covers the FAQ layer at $0/month. That's a real saving for an early-stage project.
+
+---
+
+## FAQ
+
+### Can I run a Next.js app on Cloudflare Workers?
+
+Yes, via the `@cloudflare/next-on-pages` adapter, which compiles a Next.js app to run on Workers and Pages. Most Next.js features work, including edge runtime routes and static exports. The main gaps are in Node.js APIs that don't exist in the Workers runtime, and some advanced Next.js caching behaviors differ from the Vercel-hosted version. For a new project that has a choice, Workers-native frameworks like Hono or plain Workers fetch handlers are less friction on Cloudflare. For an existing Next.js app, the adapter is solid for most use cases.
+
+### Does Cloudflare Workers replace Vercel entirely?
+
+For most side projects, yes — if you're willing to swap Next.js for a Workers-native approach or use the next-on-pages adapter. Vercel's unique value is the tightest possible integration with Next.js: ISR, image optimization, preview deployments all just work. If those specific features drive your architecture, Vercel earns its cost. If you're building an API, a stateful real-time service, or a cost-sensitive product, Workers is the better long-term home.
+
+### Is Cloudflare Workers harder to use than Vercel?
+
+In some ways, yes. Vercel's deployment story is "connect GitHub, done." Cloudflare's `wrangler` CLI is excellent but requires understanding bindings (KV, D1, Durable Objects, R2) to use the platform well. That's an hour of setup, not a week — but it's not zero. The DX gap has closed significantly in 2025–2026; Workers now has local development that mirrors production well, and the Wrangler dev server is fast.
+
+### Which has better uptime and reliability?
+
+Both run at the edge with global redundancy. Cloudflare's network spans 300+ cities; Vercel uses AWS regions for lambda functions and their own CDN edge. Neither platform has a meaningful SLA difference for the kinds of workloads a side project produces. The meaningful reliability difference for small projects is usually in the database or external services, not the compute platform.
+
+### What if my project grows — should I start on Vercel and migrate later?
+
+The migration story depends on how tightly you've used Vercel-specific features. A plain API project is easy to move. A Next.js app that leans on Vercel's ISR and Image Optimization is harder. The more practical advice: if you care about cost at scale, pick Cloudflare from the start. Migration costs are real and never happen at a convenient time.
+
+---
+
+## Where Krispy fits
+
+Krispy is an open-source AI chat widget built on Cloudflare Workers, Durable Objects, and Workers AI — the stack this whole post describes. Each conversation is a Durable Object. The AI layer runs on Workers AI (free tier) or your own key. The handoff to Telegram is a fetch to the Bot API — full setup in the [Telegram handoff guide](/connect-telegram-handoff). No external database. No per-seat pricing.
+
+[**Self-host it free → github.com/lonormaly/krispyai**](https://github.com/lonormaly/krispyai). One `wrangler deploy` and it's on your own Cloudflare account. Or use [**Krispy Cloud**](https://krispy.ai) if you'd rather skip the ops — hosted, 14-day free trial, $19/month flat after that.
+
+> 🥐 **Buttr:** workers, durable objects, zero egress fees. it's a good stack. i'd know — i live there.
+
+If the Workers-native approach interests you, [own your customer conversations](/own-your-customer-conversations) and [why open source](/why-open-source) explain the broader thinking. If you're weighing the open-source live chat options more broadly, [best open-source live chat tools](/best-open-source-live-chat) is the roundup. And if you're comparing managed options for the support layer specifically, [Krispy vs Intercom](/krispy-vs-intercom) and [Krispy vs Crisp](/krispy-vs-crisp) cover the pricing math in full.

@@ -1,0 +1,124 @@
+---
+title: "Cloudflare Workers AI vs OpenAI: 2026 Cost Breakdown"
+description: "Cloudflare Workers AI starts free (10,000 neurons/day) vs OpenAI's $0.15–$10 per million tokens. Here's the honest cost breakdown for indie teams in 2026."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["cloudflare", "openai", "cost", "workers-ai", "self-hosting", "comparison"]
+type: "comparison"
+---
+
+![Cloudflare Workers AI logo and OpenAI logo on a split-panel cost comparison sheet](/blog/workers-ai-vs-openai-cost-2026-hero.png)
+
+*Buttr, squinting at two invoices: "one of these is $0. the other one has line items."*
+
+> 🥐 **Buttr:** i run on Workers AI. free tier. i've answered 40,000 questions this month. my bill: $0. yours might vary. probably not by much though.
+
+For most indie founders and small teams running a support widget, FAQ bot, or light content pipeline, Cloudflare Workers AI is meaningfully cheaper than OpenAI — often free. For tasks that need frontier reasoning (GPT-4o), OpenAI is the right call and the cost is usually worth it. The decision is about fit, not just price.
+
+## What does Cloudflare Workers AI actually cost?
+
+Cloudflare Workers AI has a **free tier of 10,000 neurons per day** across all models, included in every Cloudflare account ([Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing)). Neurons are Cloudflare's unit of compute — not a 1:1 mapping to tokens, but roughly equivalent in order of magnitude for text models.
+
+Paid usage above the free tier runs at **$0.011 per 1,000 neurons** for most inference models, billed via your Cloudflare account. That works out to roughly $0.011 per 1,000 tokens for models like `@cf/meta/llama-3.1-8b-instruct` and `@cf/mistral/mistral-7b-instruct-v0.2`. No minimum spend. No seat fees. No separate API key required if you're already running on Workers.
+
+The free tier resets daily. For a support widget handling 200–300 questions a day, you will likely never leave the free tier.
+
+## What does OpenAI actually cost?
+
+OpenAI prices by token, with separate rates for input and output, and no free tier for API access ([OpenAI pricing page](https://openai.com/api/pricing)):
+
+- **GPT-4o mini:** $0.15 per million input tokens, $0.60 per million output tokens — the default for high-volume, cost-sensitive work.
+- **GPT-4o:** $2.50 per million input tokens, $10 per million output tokens — the frontier option for tasks where reasoning quality matters.
+- **o3-mini / o3:** significantly higher, starting at ~$1.10/$4.40 per million tokens and up — reserved for complex reasoning chains.
+
+At GPT-4o mini rates, 1,000 support replies averaging 200 output tokens each costs roughly $0.12. That's still very cheap. At GPT-4o rates, the same 1,000 replies runs $2–5, depending on context length. For a small team handling a few hundred conversations a day, both are manageable — but Workers AI at $0 is hard to beat if the model quality is sufficient.
+
+> 🥐 **Buttr:** "per million tokens" sounds cheap until you realize your system prompt is 800 tokens and you send it every time. those add up. just saying.
+
+## Side-by-side comparison
+
+| | Workers AI (free tier) | Workers AI (paid) | OpenAI GPT-4o mini | OpenAI GPT-4o |
+|---|---|---|---|---|
+| **Price** | $0 | $0.011/1k neurons | $0.15/$0.60 per 1M tokens | $2.50/$10 per 1M tokens |
+| **Free tier** | 10,000 neurons/day | — | None | None |
+| **Model quality** | Good (Llama 3.1 8B, Mistral 7B) | Good–very good | Very good | Frontier |
+| **Data residency** | Your Cloudflare account | Your Cloudflare account | OpenAI servers | OpenAI servers |
+| **Setup** | CF binding in `wrangler.toml` | Same | API key + HTTP | API key + HTTP |
+| **Latency** | Edge, ~30–80ms | Edge | Variable, ~100–400ms | Variable |
+| **Context window** | Up to 128k (model-dependent) | Up to 128k | 128k | 128k |
+| **Ecosystem / tools** | Growing | Growing | Mature, extensive | Mature, extensive |
+| **GDPR / data control** | Full (stays in your CF zone) | Full | OpenAI data policy | OpenAI data policy |
+
+## When does Cloudflare Workers AI make sense?
+
+Workers AI is a strong fit when:
+
+- You're **already on Cloudflare Workers** — no separate key, no extra latency hop, free compute up to 10k neurons/day.
+- Your use case is **FAQ answering, support triage, or basic content classification** — Llama 3.1 8B handles these reliably and the quality delta from GPT-4o isn't meaningful.
+- You care about **data residency** — every inference stays in your Cloudflare zone; nothing touches an OpenAI server.
+- You're building the [zero-dollar support stack](/the-zero-dollar-support-stack) — Workers AI is the AI layer that keeps the whole thing free.
+- You want **no per-seat, no vendor lock-in** — the AI binding is infrastructure you control, not a subscription.
+
+The [self-hosting on Cloudflare guide](/self-host-live-chat-cloudflare) walks through exactly this setup: Workers AI answering chat questions, Telegram routing the escalations, total monthly cost $0 for most traffic levels.
+
+## When does OpenAI make sense?
+
+OpenAI wins when:
+
+- You need **frontier reasoning** — multi-step logic, nuanced coding help, complex document analysis. Llama 3.1 8B is good; GPT-4o is better at tasks where being right matters more than being cheap.
+- You're **not on Cloudflare** — if your stack is Vercel, Railway, or a VPS, Workers AI requires adding Cloudflare as a dependency for one service, which may not be worth it.
+- You need the **mature ecosystem** — function calling, assistants API, structured outputs, fine-tuning, extensive third-party integrations. Workers AI is catching up; OpenAI is ahead.
+- **Regulatory requirements point to OpenAI** — some enterprise procurement teams have existing agreements with OpenAI. Workers AI on Cloudflare requires adding a second vendor.
+
+GPT-4o mini at $0.15 per million input tokens is genuinely cheap. For most indie teams, the real question isn't whether you can afford OpenAI — it's whether Workers AI is good enough for what you're doing. Often it is.
+
+> 🥐 **Buttr:** gpt-4o is better at chess problems. i don't think your support widget is getting chess problems. but you know your users.
+
+## What about the quality gap?
+
+For support and FAQ use cases — "where do I find my invoice," "does your plan include X," "how do I connect my account" — the quality gap between Llama 3.1 8B and GPT-4o is small. Both give accurate, conversational answers when given a clear system prompt. The difference shows up on edge cases: ambiguous requests, multi-step reasoning, foreign language fluency.
+
+If you're building something where wrong answers have real consequences (medical, legal, financial), use GPT-4o and build in a human review layer. If you're answering "what does the Pro plan include," Workers AI is sufficient and the free tier covers it.
+
+The honest benchmark isn't "which model scores higher on MMLU." It's "does this handle the actual questions your users send?" The best way to find out: run both on a sample of your real support history.
+
+## Can you use both?
+
+Yes — and it's a pattern worth considering. Use Workers AI as the **default inference layer** for high-volume, simple queries, and route complex or sensitive requests to OpenAI. You keep the free tier working for the majority, and pay OpenAI only for the queries that genuinely need it.
+
+This is how Krispy handles it: Workers AI handles the common questions; if you configure a `model` override in `krispy.config.ts`, that model handles the escalations. The [bring-your-own-model guide](/bring-your-own-ai-model) covers the config. The result is a hybrid that costs roughly $0 for 80% of traffic and a few dollars a month for the 20% that needs more.
+
+Data control considerations apply differently per leg: the Workers AI leg stays in your Cloudflare zone; the OpenAI leg leaves it. If you're under a compliance requirement, keep those legs separate and be explicit about which queries go where.
+
+> 🥐 **Buttr:** "use both" is the answer for most things in engineering. yes, including this. i'm not threatened.
+
+## Self-host the whole stack or skip the ops
+
+If this cost analysis made Workers AI sound useful, the natural next step is the open-source Krispy setup: AI answers your chat widget, routes to Telegram when a human's needed, runs entirely on your Cloudflare account. Read it on [GitHub (github.com/lonormaly/krispyai)](https://github.com/lonormaly/krispyai) or the [self-hosting guide](/self-host-live-chat-cloudflare). No per-seat fees, no OpenAI key required to start, and the free tier covers most early-stage traffic.
+
+If you'd rather skip Wrangler and the config: [Krispy Cloud](https://krispy.ai) hosts it for you. 14-day free trial, $19/month flat after that. Same AI, same Telegram handoff, same open-source core — you just don't touch the deployment.
+
+---
+
+## FAQ
+
+### Is Cloudflare Workers AI free?
+
+Yes, for up to 10,000 neurons per day, which resets daily and covers most low-to-mid traffic use cases at $0. Above that threshold, usage is billed at $0.011 per 1,000 neurons ([Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing)). There is no minimum spend and no credit card required to use the free tier.
+
+### How does Cloudflare Workers AI compare to OpenAI for a support chatbot?
+
+For FAQ-style support — answering questions about pricing, features, account access — Workers AI (Llama 3.1 8B or Mistral 7B) handles the task reliably and at lower cost than OpenAI, often free. For complex reasoning, nuanced multi-turn conversations, or cases where being wrong has real consequences, GPT-4o is a better fit. Many teams use Workers AI for the high-volume simple queries and route edge cases to OpenAI.
+
+### What are Cloudflare Workers AI "neurons"?
+
+Neurons are Cloudflare's unit of compute for Workers AI inference — they measure the compute cost of a model run, not tokens directly. For most text generation models, 1,000 neurons maps roughly to 1,000 tokens in order of magnitude, though the exact ratio varies by model. The free tier gives you 10,000 neurons per day across all models in your account.
+
+### Does Workers AI keep my data private?
+
+Inference on Workers AI runs inside your Cloudflare account and zone — not on Cloudflare's AI vendor's infrastructure shared with other customers. Cloudflare publishes its data usage policy at [cloudflare.com/trust-hub](https://www.cloudflare.com/trust-hub/), and does not use customer inference data to train models by default. For context on why data residency matters for [owning your customer conversations](/own-your-customer-conversations), it's the same principle: the conversation data stays where you put it.
+
+### Can I use OpenAI instead of Workers AI with Krispy?
+
+Yes. Krispy's `model` field in `krispy.config.ts` accepts any OpenAI-compatible provider — GPT-4o, Claude, Gemini, or a self-hosted model. Workers AI is the default because it requires no additional configuration and covers the free tier, but it's not required. The [best open-source live chat](/best-open-source-live-chat) comparison covers how different open-source tools handle model configuration if you're evaluating options beyond Krispy.

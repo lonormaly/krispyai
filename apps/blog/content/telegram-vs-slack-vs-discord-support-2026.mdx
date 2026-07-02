@@ -1,0 +1,107 @@
+---
+title: "Telegram vs Slack vs Discord for Customer Support (2026)"
+description: "Compare Telegram, Slack, and Discord for customer support in 2026: costs, real tradeoffs, and which fits indie teams, B2B SaaS, and open-source communities."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["telegram", "slack", "discord", "customer-support", "comparison", "self-hosted"]
+type: "comparison"
+---
+
+![A Telegram paper plane, a Slack hashtag, and a Discord clyde walking into a support queue](/blog/telegram-vs-slack-vs-discord-support-2026-hero.png)
+
+*Buttr, watching three messaging apps queue for "customer support tool": "none of you are customer support tools. you're messaging apps. i respect the hustle."*
+
+> 🥐 **Buttr:** asked which app to run support on. answered "yes" anyway. legend behavior.
+
+For small teams and indie projects in 2026, **Telegram is the best operator notification layer**, **Slack Connect works for B2B customers who are already on Slack**, and **Discord fits open-source communities where peer-to-peer answers are the product**. None of the three natively offers a website visitor chat widget — every setup requires a bridge or a separate tool to close that gap.
+
+## Why do teams use messaging apps for support at all?
+
+Because the alternative — Intercom, Zendesk, Freshdesk — carries a per-seat bill that hurts before you have the revenue to justify it. A two-agent Intercom Essentials setup runs around $58/month minimum ([Intercom pricing, July 2026](https://www.intercom.com/pricing)); Zendesk Suite starts at $55/agent/month. Teams that already live in Telegram, Slack, or Discord reach for what they have.
+
+The tradeoff is real: none of these platforms was designed for support queues, SLA tracking, or anonymous website visitors. You get the conversation layer for free and rebuild everything else yourself.
+
+## What is Telegram actually good for in a support setup?
+
+Telegram handles **async operator handoff better than any other messaging app** for solo founders and small teams. The Bot API (free, documented at [core.telegram.org](https://core.telegram.org/bots/api)) lets you pipe inbound messages into a group or channel, reply from your phone, and route the response back to the source. Latency is low, the mobile UX is fast, and the free tier has no meaningful limits for support volumes under a few thousand messages a month.
+
+What Telegram doesn't provide: a public-facing chat widget, a ticket queue, canned responses, or CSAT collection. If a visitor lands on your website and you want them in a Telegram thread, something has to bridge the gap — a custom bot or a tool like [Krispy, which does exactly this handoff natively](/connect-telegram-handoff).
+
+GDPR posture is worth noting: Telegram's servers are now in Dubai, not Russia. Cloud messages (non-secret chats) are stored server-side, which matters if you're processing EU customer data and need a DPA. Telegram does not offer a standard DPA for business use.
+
+> 🥐 **Buttr:** "your DMs are on a server in Dubai" is a sentence i was not expecting to type in 2026. here we are.
+
+## Is Slack Connect a real support option?
+
+For B2B SaaS teams whose customers are already paying Slack users, Slack Connect is genuinely useful. A shared channel gives your customer's team and your support team a real-time thread with full context, threading, and file sharing. It's the closest messaging apps get to a proper support inbox — for enterprise buyers who operate in Slack anyway.
+
+The cost: Slack Pro is **$7.25/seat/month** billed annually ([Slack pricing, July 2026](https://slack.com/intl/en-us/pricing)). Slack Connect is available on Pro and above. For a two-person support team, that's $14.50/month before any customer channels — and grows as headcount does. The per-seat shape is the same problem as [Intercom's](/krispy-vs-intercom); it's just smaller.
+
+What Slack does not do: serve anonymous website visitors, handle inbound from non-Slack users, or offer AI-assisted first-response without a third-party integration. It's a B2B-to-B2B channel, not a public-facing support layer.
+
+## When does Discord actually make sense for support?
+
+Discord works for **open-source projects and developer tools** where community knowledge is part of the product. A public server with topic channels means users can answer each other; pinned messages and forum channels create a searchable knowledge base. It costs $0 to run a server.
+
+The limits are the same as any community forum: there's no ticket system, no assignment, no SLA, and no way to have a private conversation with an anonymous website visitor. Discord Nitro ($9.99/month for individuals, [discord.com/nitro](https://discord.com/nitro)) doesn't change the server model. If you need private, one-to-one, first-response support for paying customers, Discord requires building it.
+
+Best use case: OSS maintainers who want a self-serve community layer that takes pressure off direct support. See the [zero-dollar support stack](/the-zero-dollar-support-stack) for how this fits a broader no-cost setup.
+
+## Comparison table
+
+| | Telegram | Slack | Discord |
+|---|---|---|---|
+| **Cost** | Free | $7.25/seat/mo | Free (server) |
+| **Website chat widget** | No (needs bridge) | No | No |
+| **Anonymous visitor support** | Via bot/bridge | No | No |
+| **B2B shared channel** | Group chats (informal) | Slack Connect (proper) | Server channels |
+| **Community Q&A** | Groups/channels (limited) | No | Yes (forum channels) |
+| **AI first-response** | Via third-party | Via integration | Via bot |
+| **GDPR DPA available** | No | Yes | Yes |
+| **Best for** | Async handoff, small teams | B2B SaaS with Slack customers | OSS/community projects |
+
+## What all three are missing
+
+None of these platforms serves an anonymous website visitor without external code. If someone lands on your pricing page at 11pm and types a question, Telegram, Slack, and Discord have no native answer — you need a chat widget, an AI layer for off-hours, and a handoff path when the bot can't close it.
+
+This is what [open-source live chat tools](/best-open-source-live-chat) solve. Tools like [Crisp](/krispy-vs-crisp) or Chatwoot add the widget and can push conversations into Slack or email. Krispy takes a different angle: the AI answers first, and unresolved questions route to Telegram — your operator notification stays where you already live.
+
+> 🥐 **Buttr:** a support tool should meet visitors where they are (your website) and operators where *they* are (Telegram, probably). the gap between those two is the whole product.
+
+[Own your customer conversations](/own-your-customer-conversations) covers why controlling that pipeline matters long-term.
+
+## FAQ
+
+### Can I use Telegram as my main customer support inbox?
+
+Yes, with a bot bridge. Telegram alone won't catch website visitors — you need a widget on the frontend that routes into a Telegram bot. For very small teams or solo founders handling under 50 conversations a month, this works fine. At higher volumes, the lack of queue management, assignment, and SLA tooling becomes a bottleneck. Telegram is strong as a notification and reply layer; the widget and routing layer needs to live somewhere else.
+
+### Is Discord good for one-on-one customer support?
+
+Discord is better for community support than private support. Forum channels and threads handle structured Q&A well, and community members often answer before you do. For private, one-on-one support with paying customers, Discord lacks ticket assignment, private threads with non-members, and any integration with a website widget. It's a community layer, not a helpdesk.
+
+### How does Slack Connect compare to a proper support tool?
+
+Slack Connect handles B2B well — shared channels, threading, real context. What it doesn't offer: AI first-response, CSAT, SLA dashboards, or per-seat cost control. For a small team supporting enterprise accounts who already live in Slack, it's clean. For broad inbound support at scale, you'll want a proper inbox eventually.
+
+### Does self-hosting a support tool solve the cost problem?
+
+If the cost concern is per-seat pricing, yes. [Self-hosting on Cloudflare Workers](/self-host-live-chat-cloudflare) eliminates the seat bill entirely — you pay only for your own infrastructure, which is near-zero at small volumes. The tradeoff is setup time. Most indie teams find one afternoon plus a working `wrangler deploy` is a better trade than a recurring SaaS bill. [Why open source](/why-open-source) goes into the lock-in and data-ownership side in more detail.
+
+### What's the cheapest support stack that actually works?
+
+Telegram for operator notifications (free), an open-source widget with an AI first-response layer (free to self-host), and Discord or a public forum for community Q&A (free). The [zero-dollar support stack](/the-zero-dollar-support-stack) maps this out in detail, including what breaks at which scale.
+
+---
+
+> 🥐 **Buttr:** "what if we just used Slack for support" is the "what if we just used Google Sheets for a database" of ops conversations. works until it doesn't. plan accordingly.
+
+## Where Krispy fits
+
+If your setup is: **website visitor chat → AI handles it → human gets a Telegram ping when needed**, Krispy is built for exactly that. It runs on Cloudflare Workers, includes the AI layer with no external API key required, and routes unresolved questions to Telegram where you reply from your phone. Conversations go back to the widget in real time.
+
+No per-seat pricing. No lock-in. Your data stays on your own Cloudflare account.
+
+**Self-host free:** [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one `wrangler deploy`.  
+**Krispy Cloud:** hosted, 14-day free trial, $19/month flat. No seat math.

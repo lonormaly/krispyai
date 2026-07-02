@@ -1,0 +1,107 @@
+---
+title: "AI Customer Support Tools Compared (2026)"
+description: "Six AI customer support tools compared for 2026: real pricing, self-hosting options, and who each one is actually built for."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["ai customer support", "comparison", "open source", "self-hosting", "live chat"]
+type: "comparison"
+---
+
+![Six AI customer support tools — Intercom, Zendesk, Crisp, Tidio, Freshdesk, and Krispy side by side](/blog/ai-customer-support-tools-2026-hero.png)
+
+*Buttr evaluated all six. Said "fine, mostly." High praise from a croissant.*
+
+> 🥐 **Buttr:** ran the numbers. got sad. made this table instead.
+
+The best AI customer support tool in 2026 depends on your team size and ownership model. Intercom and Zendesk lead enterprise with deep integrations and full ticket pipelines. Crisp and Tidio serve mid-size teams at lower cost. For solo founders and small teams, open-source and flat-rate tools remove the per-seat tax entirely.
+
+## What changed in AI support tooling between 2025 and 2026?
+
+The AI layer stopped being optional — every major platform ships one now. The real shift is how they charge for it. More vendors moved to **per-resolution pricing**: you pay when the bot closes a ticket, not just for a seat. Intercom's Fin AI charges $0.99 per AI resolution on top of platform fees. Zendesk bundles AI into its higher tiers at $89/agent/mo. The question is no longer "does it have AI?" — it's "what does that AI cost, and do you own the data?"
+
+## How do the top AI customer support tools compare?
+
+| Tool | Starting Price | AI Included | Self-Host | Open Source | Best for |
+|---|---|---|---|---|---|
+| **Intercom** | ~$39/seat/mo + $0.99/AI resolution | ✅ Fin AI | ❌ | ❌ | Enterprise, product-led SaaS |
+| **Zendesk** | $55/agent/mo (Suite Team) | ✅ from Growth tier | ❌ | ❌ | Large support orgs, full ticket pipeline |
+| **Crisp** | Free (2 seats); $25/mo for 4 seats | ✅ on paid plans | ❌ | ❌ | Growing startups, small teams |
+| **Tidio** | Free; $29/mo Starter | ✅ Lyro AI (add-on) | ❌ | ❌ | E-commerce, SMBs |
+| **Freshdesk** | Free (10 agents); $18/agent/mo Growth | ✅ Freddy AI from Pro | ❌ | ❌ | Teams scaling from zero |
+| **Krispy AI** | Free to self-host; $19/mo cloud | ✅ | ✅ | ✅ | Indie founders, self-hosters, Telegram users |
+
+*Pricing from each tool's public pricing page, mid-2026. Per-seat fees compound: a 5-person team on Zendesk Growth pays $445/mo before add-ons.*
+
+### Intercom
+
+Intercom is the category leader for product-led SaaS. Fin AI is genuinely good at resolving tickets from docs and past conversations without a human. The tradeoff is the pricing architecture: platform access starts around $39/seat/month, and AI resolutions add $0.99 each ([Intercom pricing](https://www.intercom.com/pricing)). For high-volume enterprise teams where $0.99/resolution rounds to noise, it's a strong fit. For a 3-person team, the math gets uncomfortable fast. See the full breakdown: [Krispy vs Intercom](/krispy-vs-intercom).
+
+> 🥐 **Buttr:** intercom is great at being intercom. no shade. i'm just free.
+
+### Zendesk
+
+Zendesk is the ticket-management workhorse: full omnichannel (email, phone, chat, social), SLA rules, routing, reporting. The AI layer is bundled starting with Suite Growth at $89/agent/mo ([Zendesk pricing](https://www.zendesk.com/pricing/)). If you have a support org large enough to need a real ops layer, it earns its price. Solo or small-team founders will use 10% of it and pay for all of it.
+
+### Crisp
+
+Crisp punches above its price. The free plan handles 2 seats with live chat and email; paid plans start at $25/mo for 4 seats ([Crisp pricing](https://crisp.chat/en/pricing/)). The AI chatbot improves meaningfully on paid tiers. No self-hosting. It's a solid middle ground for teams that want real features without enterprise complexity. Compare: [Krispy vs Crisp](/krispy-vs-crisp).
+
+### Tidio
+
+Tidio is the e-commerce pick: Shopify-native, fast to set up, and Lyro AI handles common buyer questions reliably. The free tier is functional; Starter is $29/mo ([Tidio pricing](https://www.tidio.com/pricing/)). Lyro AI is priced separately by conversation volume. If you run a shop and want "bot answers routine questions, I handle the rest" with zero DevOps, Tidio delivers.
+
+### Freshdesk
+
+Freshdesk's free plan is genuinely generous: 10 agents, live chat, email, and basic automation at $0. The AI assistant (Freddy) starts at the Pro tier ($47/agent/mo) ([Freshdesk pricing](https://freshdesk.com/pricing/)). For teams starting from zero who expect to grow into the Freshworks ecosystem (CRM, ITSM), the free tier is a rational entry point. The AI paywall is the main catch for small teams on a budget.
+
+### Krispy AI
+
+Krispy is the [open-source option](/why-open-source): MIT-licensed, built on Cloudflare Workers, and designed to [hand off to a human via Telegram](/connect-telegram-handoff) when the bot hits its limit. No per-seat pricing. No vendor lock-in. Cloud is $19/mo flat. Self-hosting is [one command and free](/self-host-live-chat-cloudflare). If you want to [own your customer conversations](/own-your-customer-conversations), run on a [$0 support stack](/the-zero-dollar-support-stack), or simply aren't excited about paying $100/mo to route conversations on your own website — Krispy is the honest choice for the indie stack. Check the [best open-source live chat](/best-open-source-live-chat) roundup for how it compares to Chatwoot and others.
+
+> 🥐 **Buttr:** i run on the edge. my latency is competitive. and i don't charge $0.99 per answer. just saying.
+
+## Which AI support tools are open source or self-hostable?
+
+Of the six tools above, only **Krispy AI** offers self-hosting. Intercom, Zendesk, Crisp, Tidio, and Freshdesk are SaaS-only — your data lives on their infrastructure, your access depends on their uptime, and your costs scale with their pricing decisions. If data residency, cost predictability, or no vendor dependency matters to your stack, the self-host path is Krispy or a handful of less polished projects (Chatwoot, Papercups). Krispy is the only one purpose-built for the edge with Telegram handoff included.
+
+## What's the cheapest AI support tool for a small team in 2026?
+
+For a solo founder or a team under five people:
+
+- **Freshdesk free** — 10 agents, live chat, email. AI is paywalled but the base tooling is real.
+- **Crisp free** — 2 seats, working chatbot on paid plans, good enough to start.
+- **Krispy AI self-hosted** — $0 forever. AI and Telegram handoff included. Runs on Cloudflare Workers; indie-scale traffic fits comfortably in the free tier.
+- **Krispy Cloud** — $19/mo flat. No per-seat math, no resolution fees, no surprises.
+
+To put a number on the gap: according to Intercom's published pricing, a 3-person team resolving 300 AI tickets per month pays roughly $117 in platform fees plus $297 in resolution fees — $414/mo total. On Krispy Cloud, that's still $19.
+
+> 🥐 **Buttr:** math is not my strongest suit. i am a croissant. but even i got that one.
+
+---
+
+## FAQ
+
+### What is the best AI customer support tool for small teams in 2026?
+
+For small teams, the best tool depends on budget and technical comfort. Freshdesk's free plan is the best zero-cost SaaS option. Crisp is a clean paid pick at $25/mo. Krispy AI is the strongest value for founders comfortable with a light self-hosting setup — $0 to run, full AI and Telegram handoff included, no per-seat fees. Krispy Cloud at $19/mo flat suits those who'd rather not manage infrastructure.
+
+### How much does Intercom cost for a small team?
+
+Intercom's base platform runs around $39/seat/month. A 3-person team pays ~$117/mo in platform fees. Each AI-resolved ticket adds $0.99 on top. At 300 AI resolutions per month, total cost reaches roughly $414/mo. Intercom is cost-effective when your ticket volume and team size justify the resolution model — for most indie teams and solo founders, it's significantly overpriced relative to what you actually use.
+
+### Is there a free AI customer support tool?
+
+Yes. Freshdesk has a free plan for up to 10 agents with live chat and email (AI requires the Pro tier). Crisp's free plan covers 2 seats with a basic chatbot. Krispy AI is free to self-host — the AI and Telegram handoff are included with no usage caps. Note that SaaS free tiers typically gate AI features to push you into paid plans.
+
+### Can I self-host an AI customer support tool?
+
+Yes, but the mainstream options don't support it. Intercom, Zendesk, Crisp, Tidio, and Freshdesk are all SaaS-only. Krispy AI is MIT-licensed and runs on Cloudflare Workers with no database to manage — [self-hosting takes one command](/self-host-live-chat-cloudflare). Chatwoot is the other well-known open-source option; it's fuller-featured but requires more infrastructure (Ruby on Rails, Postgres, Redis).
+
+### What's the difference between an AI chatbot and AI customer support?
+
+An AI chatbot matches keywords to scripted responses. AI customer support uses a large language model to understand arbitrary questions and generate answers from your documentation, product context, or past tickets — then routes to a human when it can't resolve the issue. Intercom Fin, Freshdesk Freddy, and Krispy all work in this second category: they understand the question, not just the keyword, and know when to hand off.
+
+---
+
+Done reading? If your takeaway is "I want the one that doesn't charge me per seat or per resolution" — that's Krispy. [Self-host free on GitHub](https://github.com/lonormaly/krispyai): MIT license, runs on Cloudflare Workers, the bot answers your visitors and taps you in on Telegram when it's a human job. Prefer managed? [Krispy Cloud](https://krispy.ai) is $19/mo flat with a 14-day free trial and no credit card required to start.

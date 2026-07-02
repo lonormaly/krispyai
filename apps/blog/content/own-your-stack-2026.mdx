@@ -1,0 +1,106 @@
+---
+title: "Own Your Stack: The Case Against Renting Your SaaS (2026)"
+description: "Renting SaaS means per-seat pricing, vendor lock-in, and losing your data when you cancel. In 2026, at least 6 core tools can be self-hosted for 60–80% less — here's the honest comparison."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["self-hosting", "open-source", "indie-hacker", "saas", "cost", "vendor-lock-in"]
+type: "category"
+---
+
+![A solo founder staring at a SaaS billing dashboard with too many line items](/blog/own-your-stack-2026-hero.png)
+
+*Buttr, upon seeing the invoice: "ah yes. the 'per seat' line. my favorite genre of fiction."*
+
+> 🥐 **Buttr:** renting is fine for apartments. for your customer data, maybe don't.
+
+Owning your stack means running tools on infrastructure you control — your Cloudflare account, a VPS, your own database — instead of paying month-to-month to access a vendor's hosted version. For solo founders and small teams in 2026, self-hosting or buying tools outright typically costs 60–80% less than renting equivalent SaaS, with no lock-in risk and no data hostage situation when you decide to switch.
+
+## What does renting SaaS actually cost a small team?
+
+The sticker price of most SaaS is the per-seat line, not the plan line. Intercom's "Essential" plan starts at $29/seat/month ([Intercom pricing](https://www.intercom.com/pricing)) — a 5-person team pays $145/month before touching AI features. Linear charges $8/seat/month. Notion's team plan with audit logs runs $16/seat/month. Add a project management tool, an analytics platform, and a live chat widget, and a 5-person startup is at $300–600/month in SaaS rent before they've provisioned a single server.
+
+None of that is inherently bad. Renting is the right call when the alternative is weeks of setup time, ongoing maintenance overhead, or capabilities you genuinely can't replicate with open-source code. The question is: for each tool, does renting still make sense *for your team size and actual usage*?
+
+## Which tools are realistically self-hostable in 2026?
+
+Not all SaaS is equal here. Payment processing, email deliverability, and SMS gateways are hard to own because they rely on bank relationships and ISP reputation — things that can't be replaced by code. Others are just software running on a server, and the open-source version is often comparable to the hosted one.
+
+Here's an honest look at the categories where self-hosting is a real option:
+
+| Category | Rent option | Own option | Self-host cost | Worth it if… |
+|---|---|---|---|---|
+| **Live chat / support** | Intercom ($29–90/seat/mo), Crisp ($95+/mo) | Krispy, Chatwoot, Zammad | $0–19/mo flat | You handle fewer than a few hundred chats/day |
+| **Web analytics** | Mixpanel ($20+/mo), Amplitude ($500+/mo) | Plausible, Matomo, PostHog (self-hosted) | $0–9/mo (Hetzner VPS) | You want GDPR-clean or privacy-first data |
+| **Internal docs / wiki** | Notion ($16/seat/mo) | Outline, Docmost | $6–15/mo VPS | Small team, mostly internal documentation |
+| **Status pages** | Atlassian Statuspage ($29+/mo) | Gatus, Uptime Kuma | $0 (free-tier VPSes) | Basic uptime monitoring is all you need |
+| **Error tracking** | Sentry team ($26+/mo) | Sentry (self-hosted), GlitchTip | $6–10/mo VPS | You hit Sentry's event limits regularly |
+| **Email newsletters** | ConvertKit ($79+/mo Creator Pro) | Listmonk | $6/mo VPS | You own a list and want zero per-email cost |
+
+A few of those — Plausible, PostHog, Sentry — also have cloud tiers that are cheaper than incumbents. "Own your stack" doesn't always mean "run a server." Sometimes it just means picking the vendor that charges per product, not per seat.
+
+## What do real teams save by switching?
+
+The numbers are public. Plausible's self-hosted version runs free on a $6 Hetzner VPS ([Hetzner Cloud pricing](https://www.hetzner.com/cloud)) — versus $9–19/month on Plausible Cloud, and versus $400+/month on Amplitude's team tier for growing teams.
+
+Listmonk, a self-hosted newsletter tool, replaces ConvertKit's Creator Pro plan. For a 20,000-person list, ConvertKit charges $116/month ([ConvertKit pricing](https://convertkit.com/pricing)). Listmonk charges the cost of a VPS you probably already have.
+
+For live chat: Intercom charges $29–400+/seat/month depending on features; Chatwoot and Krispy self-hosted are free. We ran that comparison in detail in [Krispy vs Intercom](/krispy-vs-intercom) and [Krispy vs Crisp](/krispy-vs-crisp). For the indie-hacker end of the spectrum, the [zero-dollar support stack](/the-zero-dollar-support-stack) covers how to run the whole customer support layer for near-$0/month.
+
+> 🥐 **Buttr:** "per seat" pricing was invented by someone who wanted to charge you more for succeeding. no shade — just math.
+
+## What's the real downside of owning your stack?
+
+It's not maintenance overhead — modern self-hostable tools are close to "deploy and forget" at small scales. The real costs are more specific:
+
+**Setup time.** The first hour is real. You're configuring a VPS, setting DNS, maybe running Docker Compose. Not hard, but not zero.
+
+**Upgrades.** Rented SaaS upgrades itself. Self-hosted tools need you to pull a new image or re-deploy. For most tools this is quarterly, and takes about 10 minutes.
+
+**Reliability ceiling.** Your VPS goes down, your tool goes down. Managed services have SLAs. For customer-facing tools, that matters. Cloudflare Workers-based tools — including Krispy — sidestep most of this because Cloudflare's network is the server, but you're still managing config and deployments.
+
+**No OSS alternative for everything.** Stripe has no real self-hosted replacement. Twilio has no FOSS equivalent worth running in production. Some tools are worth renting because the vendor provides something infrastructure can't replicate.
+
+> 🥐 **Buttr:** a $6 VPS running your analytics: completely fine. a $6 VPS as your payment processor: different conversation.
+
+## How do you decide what to own vs rent?
+
+The most useful heuristic: **own what stores your data or talks directly to your customers; rent what requires network relationships or compliance that code alone can't provide.**
+
+- Customer conversations? [Own them.](/own-your-customer-conversations) Chat history, contact info, support context — that's your relationship, sitting in someone else's database.
+- Analytics and error tracking? Own if you care about data privacy or are approaching the volume where rented tiers get expensive. Rent if the hosted tier fits your budget and you want zero ops.
+- Payment rails, SMS, email deliverability? Rent. The vendor's infrastructure and legal agreements *are* the product.
+
+For live chat specifically, [self-hosting live chat on Cloudflare](/self-host-live-chat-cloudflare) walks through the setup. If Telegram is your support channel, [connecting Telegram for human handoff](/connect-telegram-handoff) covers the escalation setup end to end. [Best open-source live chat tools in 2026](/best-open-source-live-chat) compares the category options honestly, including who each tool is actually for.
+
+The [why open source matters for a chat tool](/why-open-source) post is worth reading if you're evaluating any tool that handles customer messages — the case for being able to read the code before trusting it with conversations is stronger than it sounds.
+
+> 🥐 **Buttr:** i'm open source. you can read every line before trusting me with your visitors. which is, honestly, how it should work.
+
+---
+
+## FAQ
+
+### Is self-hosting actually cheaper once you count your time?
+
+For most tools, yes — after the initial setup. First-time deployment for something like Plausible or Krispy takes 30–60 minutes. Upgrades are quarterly and take about 10 minutes each. At a $100/hour opportunity cost, that's $100–200 amortized over a year, against monthly savings of $50–200+. The math favors self-hosting at any realistic usage level for a solo founder or small team.
+
+### What's the real risk of vendor lock-in with rented SaaS?
+
+Your data lives in their database. Export tooling ranges from excellent (Linear, Notion) to "good luck" (older helpdesks, some CRMs). When you cancel, you typically have 30 days to export before deletion. Self-hosted tools eliminate this by design — your data is in your database from day one, and you can leave without asking anyone's permission.
+
+### Can a solo founder realistically self-host four or five tools?
+
+Yes, if you pick tools built for it. Cloudflare Workers-based tools like Krispy deploy in one command with no server to manage. VPS-based tools like Plausible and Listmonk can often share a single $6–10 Hetzner instance behind Caddy. A realistic indie stack of four or five self-hosted tools fits on one $10/month server.
+
+### Does self-hosting help with GDPR compliance?
+
+Often more than rented SaaS. When your tool runs on your server in your chosen region, you know exactly where data sits. GDPR compliance for rented SaaS requires trusting the vendor's Data Processing Agreement and their subprocessor list. Self-hosted analytics, chat, and error tracking simplify compliance posture meaningfully — especially for EU-based users.
+
+### Which tools should I never try to self-host?
+
+Payment processing (Stripe, Paddle, Lemon Squeezy), transactional email infrastructure (Resend, Postmark — the IP reputation, not the code), SMS gateways, and tax compliance software. These tools are valuable because of their network relationships and legal agreements. The code is a small part of what you're paying for.
+
+---
+
+Krispy fits the "own it" column for live chat and customer support. The self-hosted version runs on Cloudflare Workers — the free tier covers most indie workloads without a bill — and you can [read exactly why we built it open source](/why-open-source). If you'd rather skip the infrastructure: [Krispy Cloud](https://app.krispy.ai) is $19/month flat, no per-seat pricing, 14-day free trial. [Star the repo on GitHub](https://github.com/krispyai/krispy), or start the trial — same code either way.

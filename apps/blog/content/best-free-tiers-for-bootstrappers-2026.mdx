@@ -1,0 +1,121 @@
+---
+title: "Best Free Tiers for Bootstrapped Founders (2026)"
+description: "The 20 best free-tier tools for bootstrapped founders in 2026, covering support, database, email, analytics, hosting, and AI — with real limits and no surprises."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["free-tier", "bootstrapping", "indie-hacker", "open-source", "self-hosting"]
+type: "comparison"
+---
+
+![A solo founder's laptop on a plain desk, black coffee, no VC term sheet in sight](/blog/best-free-tiers-for-bootstrappers-2026-hero.png)
+
+*the desk of someone who has refreshed their billing dashboard eleven times today. zero charges pending. we're winning.*
+
+> 🥐 **Buttr:** "free tier" is a philosophy until you hit the event cap at 11pm on launch day. read this first, celebrate later.
+
+The best free tiers for bootstrapped founders in 2026 span five categories: live chat (Krispy self-hosted or Tawk.to), analytics (PostHog up to 1M events/month), email sending (Resend at 3k emails/month), databases (Supabase at 500MB + 50k MAUs, or Neon for serverless Postgres), and edge hosting (Cloudflare Workers at 100k requests/day). Together they cover a production-ready stack at $0/month before you hit meaningful scale.
+
+## The full free-tier map (2026)
+
+| Tool | Category | Free Tier | Self-Host Option |
+|---|---|---|---|
+| **Krispy** | Live chat + AI support | Self-host: unlimited | Yes (MIT) |
+| **Tawk.to** | Live chat | Unlimited agents & chats | No |
+| **Crisp** | Live chat | 2 seats, 1 chatbot scenario | No |
+| **PostHog** | Product analytics | 1M events/mo, 5k replays/mo | Yes (OSS) |
+| **Microsoft Clarity** | Web analytics | Unlimited sessions | No |
+| **Umami** | Web analytics | 10k pageviews/mo (cloud) | Yes (OSS) |
+| **Resend** | Transactional email | 3k emails/mo, 100/day cap | No |
+| **Brevo** | Email (transactional + marketing) | 300 emails/day | No |
+| **Supabase** | Postgres + Auth + Storage | 500MB DB, 50k MAUs, 1GB storage | Yes (OSS) |
+| **Neon** | Serverless Postgres | 0.5GB storage, 190 compute hours/mo | No |
+| **Turso** | SQLite at the edge | 500 DBs, 9GB total, 1B row reads/mo | No |
+| **Cloudflare Workers** | Edge compute + hosting | 100k requests/day, 10ms CPU/req | N/A |
+| **Render** | App hosting | Free web service (sleeps after 15 min) | N/A |
+| **Clerk** | Auth | 10k MAUs | No |
+| **Groq** | AI inference | Rate-limited free access to Llama + Mixtral | No |
+
+> 🥐 **Buttr:** PlanetScale deleted their free tier in 2024 with 30 days notice. Railway and Fly both narrowed theirs. this table reflects what's actually standing mid-2026 — not what was true when that Medium post you found was written in 2022.
+
+## What are the best free live-chat and support tools in 2026?
+
+For a solo founder or small team, **Tawk.to** and **Krispy** are the two live-chat options worth using without a budget. Tawk.to is permanently free — unlimited agents, unlimited chat volume — and monetizes through paid add-ons. Krispy is [open-source and self-hostable](/best-open-source-live-chat) with no per-seat fee, or $19/month flat on Krispy Cloud.
+
+Crisp's free plan gives you 2 seats and one chatbot scenario, which covers early validation but gets cramped fast. Tidio's free tier caps at 50 live-chat conversations and 100 chatbot triggers per month — that's a week of traction at any real volume.
+
+If your stack runs on Cloudflare, [self-hosting live chat on the edge](/self-host-live-chat-cloudflare) changes the math entirely: no separate server to run, no ops overhead. The key difference between Tawk.to and Krispy isn't features — it's data. Tawk.to hosts your conversation history; Krispy lets you [own your customer conversations](/own-your-customer-conversations) on infrastructure you control. For a solo founder who needs to stay responsive without a support team, the [Telegram handoff](/connect-telegram-handoff) means you reply from your phone and the response shows up live in the widget. No dashboard required.
+
+## Which database has the best free tier for a solo project?
+
+**Supabase** is the best all-in-one: 500MB Postgres, 50k monthly active users on auth, and 1GB file storage — all in one free project ([source: supabase.com/pricing](https://supabase.com/pricing)). The main constraint is one free project; separate dev and prod environments require a paid plan.
+
+**Neon** is the call for serverless Postgres: 0.5GB storage and 190 compute hours per month, scales to zero when idle, so a dormant project costs nothing ([source: neon.tech/pricing](https://neon.tech/pricing)).
+
+**Turso** is the edge-latency pick: 500 databases, 9GB total, 1 billion row reads per month on the free plan ([source: turso.tech/pricing](https://turso.tech/pricing)). SQLite replicated globally reads measurably faster than a round-trip to a US-East Postgres cluster from a European user.
+
+Worth noting: PlanetScale killed their Hobby tier in March 2024 with 30 days notice. If the free-tier database you're building on has no self-host path, the floor can disappear. Supabase, Neon, and Turso all have OSS or export options.
+
+## What free email sending options are worth using?
+
+**Resend** is the cleanest pick for transactional email: 3,000 emails per month capped at 100 per day, one custom domain, no credit card ([source: resend.com/pricing](https://resend.com/pricing)). The API is well-designed and React Email works with it out of the box.
+
+**Brevo** allows 300 emails per day — roughly 9,000 per month — on the free tier, with no monthly ceiling on total sends. Useful when you need a small drip sequence alongside transactional mail and don't want two different services.
+
+Mailchimp's free plan covers 500 contacts and 1,000 emails per month, but their pricing structure ratchets steeply as the list grows. For a bootstrapper building a transactional + lightweight drip stack from zero, Resend plus Brevo handles most of it for nothing until you're well past launch.
+
+> 🥐 **Buttr:** your welcome email landing in spam because you're on a shared free-tier IP is a rite of passage. warm the domain. it's not optional.
+
+## Which analytics tools are free without hidden limits?
+
+**PostHog** gives you 1 million events per month and 5,000 session replays free, with no expiry date on the plan ([source: posthog.com/pricing](https://posthog.com/pricing)). Product analytics, feature flags, A/B experiments, and session replay under one account. It's the most generous free analytics tier available in 2026.
+
+**Microsoft Clarity** is free with no event cap at all — heatmaps, session recordings, funnel analysis. The tradeoff: Microsoft processes your user data. If that matters for your audience or your compliance posture, self-host PostHog or Umami instead.
+
+**Umami** is the right OSS web analytics pick: deploy it yourself for unlimited data ownership, or use Umami Cloud's free tier at 10k pageviews per month for something managed.
+
+## Where can I host an indie project for free?
+
+**Cloudflare Workers** is the most genuinely useful free hosting tier for a solo founder: 100,000 requests per day, 10ms CPU time per invocation, global edge distribution, and $0 ([source: cloudflare.com/plans](https://www.cloudflare.com/plans/)). For an API, a webhook handler, or a lightweight full-stack app, this is the right default.
+
+**Render** offers a free web service, but it sleeps after 15 minutes of inactivity. The cold-start latency (30–60 seconds) rules it out for any public-facing product. Render's free tier is useful for internal cron jobs and background workers — not your main API.
+
+Vercel's Hobby plan is free, but their terms explicitly exclude commercial use. If you're invoicing a customer while running on Hobby, read the fine print before assuming it's fair game.
+
+## Is there a usable free AI inference tier?
+
+**Groq** offers rate-limited free access to Llama 3 and Mixtral models — fast inference, good for building and prototyping, but the rate limits are aggressive enough that they don't hold up in production.
+
+**OpenRouter** surfaces genuinely free models (rate-limited) alongside paid ones. The selection shifts, but there's usually a capable text model available at $0 for lightweight tasks like classification or simple extraction.
+
+For [anything customer-facing](/the-zero-dollar-support-stack), budget at least a few dollars per month for AI. The free inference tiers are for building the product; your users shouldn't be the ones absorbing the rate limit.
+
+---
+
+## FAQ
+
+### What is the best completely free support tool for a one-person startup?
+
+For a solo founder, **Tawk.to** (permanently free, unlimited chat volume) or **Krispy** (self-hosted at $0) cover live chat without a monthly bill. Crisp's free plan handles early validation. If you want AI-assisted replies and a Telegram handoff so you can respond from your phone, Krispy is the only option that [combines all three without a per-seat charge](/the-zero-dollar-support-stack).
+
+### Are free tiers safe to build on, or will they disappear?
+
+They can disappear. PlanetScale's free tier ended in 2024; Railway and Fly both narrowed their free allowances in the same period. The safest free tiers are either (a) OSS tools you self-host — Supabase, PostHog, Krispy, Umami — where your data and your deployment are on your infrastructure, or (b) tools where free is a permanent acquisition model, not a promotional phase (Tawk.to, Resend). Always know your migration path before you need it.
+
+### Should I self-host or use managed free tiers?
+
+Self-hosting costs server time — typically $5–10/month on a VPS — but gives you data ownership, no usage caps, and no exposure to a vendor's pricing decisions. The [case for open-source tooling](/why-open-source) in your indie stack is partly about philosophy and mostly about economics: you're not building on someone else's runway. Managed free tiers are lower-ops and the right call when you're moving fast, but you're renting, not owning.
+
+### What's the catch with Cloudflare Workers' free tier?
+
+The 10ms CPU time cap per request is the main constraint — fine for API routing and typical business logic, tight for anything CPU-intensive like image transforms or heavy parsing. Async I/O (network calls, KV reads, Supabase queries) doesn't count against CPU time, so most standard API work stays well under the limit.
+
+### How does Krispy compare to Intercom and Crisp on price?
+
+[Intercom's Essentials plan starts at $29/seat/month](/krispy-vs-intercom) — a three-person team is $87+ before AI add-ons. [Crisp's Pro plan runs €25/month for 4 seats](/krispy-vs-crisp). Krispy Cloud is $19/month flat with no per-seat pricing. Self-hosted Krispy is $0 beyond your server costs. For an indie team, the per-seat model is the line item that compounds in the wrong direction; flat-rate or self-host removes it from the equation.
+
+---
+
+Krispy is [open-source on GitHub](https://github.com/lonormaly/krispyai) — self-host it free on any VPS or Cloudflare Worker. If you'd rather skip the ops, [Krispy Cloud](https://krispy.ai) is $19/month flat, 14-day free trial, no per-seat pricing.
+
+*à bientôt 🥐*

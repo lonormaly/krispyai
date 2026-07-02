@@ -1,0 +1,99 @@
+---
+title: "The Best Intercom Alternatives in 2026 (Open-Source & Hosted)"
+description: "6 real Intercom alternatives in 2026 — from free open-source tools to hosted options — with pricing, self-hosting details, and who each one actually suits."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["intercom-alternatives", "live-chat", "open-source", "self-hosted", "comparison"]
+type: "comparison"
+---
+
+![A croissant mascot sliding a stack of Intercom invoices off a desk](/blog/best-intercom-alternatives-2026-hero.png)
+
+*Buttr, reviewing the bill: "per seat. per month. per year. i'm starting to think 'scale' was theirs, not yours."*
+
+> 🥐 **Buttr:** no shade toward intercom. incredible product. incredible invoice.
+
+The best Intercom alternatives in 2026 are **Crisp** (hosted free tier, strong team inbox), **Chatwoot** (open-source, self-hostable, most feature-complete), **Tawk.to** (permanently free, hosted), **Freshdesk Messaging** (mid-market SaaS), **Help Scout** (inbox-first, $50/mo flat), and **Krispy** (open-source, runs on Cloudflare Workers, routes to Telegram, no per-seat fee). The right pick depends on whether you need self-hosting, a shared inbox, or just want to stop paying per agent.
+
+## Why are people looking for Intercom alternatives?
+
+Intercom's Essentials plan starts at **$29 per seat per month** billed annually ([Intercom pricing, verified July 2026](https://www.intercom.com/pricing)). Add their AI agent Fin and Copilot — bundled in the Advanced tier — and a two-person team routinely lands at $200–400/month before any add-ons. That's a fair price for a funded startup with a real support operation. For a solo founder or a small agency, the per-seat model compounds in the wrong direction as the team grows.
+
+The other reason: data ownership. Every conversation, every customer email, every support thread lives on Intercom's infrastructure. That's not a problem until a GDPR audit, a pricing change, or a migration forces you to extract it.
+
+> 🥐 **Buttr:** they built something genuinely good. it's just priced for people who aren't you.
+
+## What are the best open-source Intercom alternatives?
+
+**Chatwoot** is the most feature-complete open-source option. It includes a shared inbox, live chat widget, email, WhatsApp, and Twitter integrations, and a full agent dashboard — all self-hostable on your own server or Docker. It has over 22,000 GitHub stars and an active maintainer community. The hosted Chatwoot Cloud starts at $19/mo for 5 agents. Self-hosting is free; you pay for your own infrastructure.
+
+**Krispy** is open-source live chat built on Cloudflare Workers. It answers visitors with built-in AI (Cloudflare Workers AI — no external API key), and routes unanswered questions to Telegram, where a human replies from their phone. No shared inbox UI to maintain, no VPS to SSH into. Cloudflare Workers' free tier handles 100,000 requests per day ([Cloudflare platform limits](https://developers.cloudflare.com/workers/platform/limits/)), which covers most small-project volumes at $0 in platform fees. It's a narrower tool than Chatwoot — it fits teams that live in Telegram and don't want a separate support dashboard. More on the approach in [why we built on Cloudflare Workers](/self-host-live-chat-cloudflare).
+
+For a deeper look at the open-source field, [the full open-source live chat roundup](/best-open-source-live-chat) goes into more detail on setup and tradeoffs.
+
+## What are the best hosted (non-self-hosted) alternatives?
+
+**Crisp** has a genuinely usable free tier: two seats, one inbox, live chat widget, basic chatbot. The paid Mini plan is $25/month for the workspace (not per seat), which is a meaningful structural difference from Intercom. We compared Krispy and Crisp directly in [Krispy vs Crisp](/krispy-vs-crisp).
+
+**Tawk.to** is permanently free. The business model is optional staffed support agents you can hire from them; the software itself costs nothing. It's ad-free and the widget is functional. Tawk.to is the right answer when budget is the only constraint and feature depth doesn't matter yet.
+
+**Freshdesk Messaging** (formerly Freshchat) starts at $19/agent/month on the paid tier, with a limited free tier. It's more affordable than Intercom at scale and integrates tightly with the broader Freshworks support suite, which matters if you're already there.
+
+**Help Scout** is inbox-first rather than chat-first. If most of your support is email and you want a clean shared inbox without per-agent sticker shock, Help Scout starts at $50/month flat for up to 25 users — a very different cost shape than Intercom at the same team size.
+
+> 🥐 **Buttr:** "flat per-workspace pricing" is just how it should always have worked. anyway.
+
+## Comparison table
+
+| Tool | Open source | Self-hostable | Free tier | Starting price | Best for |
+|---|---|---|---|---|---|
+| Intercom | No | No | No | $29/seat/mo | Funded teams, full CS ops |
+| Chatwoot | Yes | Yes | Self-host only | $19/mo (hosted) | Teams wanting full inbox, OSS |
+| Krispy | Yes | Yes | Self-host free | $19/mo (cloud) | Solo/small, Telegram handoff |
+| Crisp | No | No | 2 seats | $25/mo (workspace) | Small teams, per-workspace pricing |
+| Tawk.to | No | No | Yes (always free) | Free | Absolute budget constraint |
+| Freshdesk Messaging | No | No | Limited | $19/agent/mo | Freshworks users, mid-market |
+| Help Scout | No | No | No | $50/mo flat | Email-first support, small teams |
+
+## How hard is it to self-host an Intercom alternative?
+
+Chatwoot's Docker installation is well-documented and takes 20–30 minutes for someone comfortable with a VPS. You get full control: your database, your server, your exports. The operational cost is the server itself and the time to maintain it.
+
+Krispy's self-hosting is lighter. It runs on Cloudflare Workers — no server, no Docker, no SSH. `npm run deploy` and it's live. Your conversation data lives in Cloudflare's Durable Objects. The tradeoff is a narrower feature set. [Step-by-step setup is here](/self-host-live-chat-cloudflare), and the [Telegram handoff configuration](/connect-telegram-handoff) takes another five minutes.
+
+If the thought of maintaining infrastructure is the deal-breaker, Crisp, Freshdesk Messaging, or Help Scout all have hosted plans with no server to babysit. The [zero-dollar support stack](/the-zero-dollar-support-stack) covers how to assemble a full support setup without paying for Intercom or managing a VPS.
+
+## Does switching from Intercom lose me AI features?
+
+Intercom's Fin is a good AI agent. Competing tools have closed the gap significantly in 2026. Chatwoot's AI features are available on the hosted plan. Krispy runs AI responses by default (built into Workers AI, bundled cost). Freshdesk Messaging has its Freddy AI tier. Crisp has a chatbot builder.
+
+The core difference: Intercom's AI is deeply integrated with their full CRM and ticketing context. If you're using Intercom as your CRM backbone, that context matters. If you're using it as a chat widget that a small team answers, any of the alternatives replicate that without the $300/month minimum.
+
+## FAQ
+
+### Is there a completely free Intercom alternative?
+
+Yes. Tawk.to is free with no hidden seat fees — their business model is hiring agents through their platform, which is optional. Krispy and Chatwoot are free to self-host; you pay for infrastructure (Krispy runs on Cloudflare's free tier for most small projects). Crisp has a free two-seat plan.
+
+### What's the best Intercom alternative for solo founders?
+
+For a solo founder: Krispy (self-host free on Cloudflare, Telegram handoff — reply from your phone), Crisp free tier (two seats, basic chatbot), or Tawk.to if you want a no-setup hosted option. The pattern that works: an AI bot handles the routine questions; a Telegram ping handles the rest. [Owning your conversations](/own-your-customer-conversations) without a third-party platform is the longer-term argument for self-hosting.
+
+### Can I migrate my Intercom conversations?
+
+Intercom provides a CSV export of conversations. Chatwoot has an Intercom import script. Krispy doesn't have a conversation importer (it's conversation-forward, not history-backward by design). For long-term conversation history, Chatwoot is the better destination if archival matters.
+
+### Does Chatwoot support WhatsApp and email, not just live chat?
+
+Yes. Chatwoot supports email, WhatsApp, Facebook Messenger, Twitter, and Telegram as additional inboxes alongside live chat. It's the most channel-complete open-source option in this list.
+
+### What's the best Intercom alternative for a small agency?
+
+A small agency managing chat for multiple client sites should look at Chatwoot (multi-inbox, self-host once for all clients) or Crisp (per-workspace pricing, not per-agent). Per-agent pricing compounds badly when you're supporting 5–10 properties with a 3-person team. Our direct comparison on this is in [Krispy vs Intercom](/krispy-vs-intercom).
+
+---
+
+If you're landing here from a $400 Intercom invoice: [Krispy](https://github.com/lonormaly/krispyai) is open-source, self-hosts on Cloudflare Workers in one command, and costs $0 in platform fees for most indie/small-team volumes. If you'd rather not touch a terminal, [Krispy Cloud](https://krispy.ai) is hosted, 14-day free trial, $19/month flat — no per-seat math, ever.
+
+> 🥐 **Buttr:** see you on the other side of that invoice. à bientôt. 🥐

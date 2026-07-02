@@ -1,0 +1,120 @@
+---
+title: "What You Can Self-Host Free on Cloudflare in 2026"
+description: "A practical guide to Cloudflare's free tier in 2026: 8 services you can self-host at $0, their real limits, and what needs a paid plan."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["cloudflare", "self-hosting", "free tier", "indie hackers", "edge computing"]
+type: "howto"
+---
+
+![Cloudflare free tier services overview — Workers, Pages, D1, R2, KV, and Workers AI laid out as a zero-cost infrastructure stack](/blog/self-hosting-on-cloudflare-2026-hero.png)
+
+*i deployed a whole support tool here for free. i'm a croissant. you'll be fine. — Buttr 🥐*
+
+In 2026, Cloudflare's free tier covers static sites (Pages), serverless functions (Workers at 100,000 requests/day), SQLite databases (D1 at 5 GB), object storage (R2 at 10 GB with no egress fees), and key-value storage (KV). You can run a production-grade web app, API, database, and file storage at $0 — with real limits you need to understand before you commit.
+
+## What does "free" actually mean on Cloudflare?
+
+Cloudflare's free tier is a permanent tier, not a trial. No credit card required, no 12-month expiry, no credits that run out. What you get is a hard daily or monthly quota on each service. Hit the limit and requests fail (or writes stop) until the quota resets — you never get a surprise bill. That's the deal.
+
+## What can you self-host free on Cloudflare in 2026?
+
+Here's the full picture:
+
+| Service | What it does | Free quota | Key limit |
+|---|---|---|---|
+| **Pages** | Static + SSR site hosting | Unlimited bandwidth, unlimited sites | 500 builds/month |
+| **Workers** | Serverless edge functions | 100,000 req/day | 10ms CPU per request |
+| **D1** | SQLite database at the edge | 5 GB storage, 25M row reads/day | 50K row writes/day |
+| **R2** | Object storage (S3-compatible) | 10 GB/month, 1M Class A ops/month | None on egress |
+| **KV** | Key-value store | 100K reads/day, 1K writes/day | 1 GB stored values |
+| **Workers AI** | Inference (text, image, embed) | ~10K neurons/day | Limited model selection |
+| **Cron Triggers** | Scheduled Workers | 3 scheduled jobs | — |
+| **Email Routing** | Receive + forward email | Unlimited inbound | Can't send outbound |
+
+**Pages** is the cleanest free static host on the market right now. Unlimited bandwidth, Cloudflare's CDN built in. If you're paying Vercel or Netlify for bandwidth overages on a side project, this is the move.
+
+**Workers** powers edge API endpoints. 100,000 requests/day is roughly 1 request per second sustained — enough for most indie projects, internal tools, and low-traffic production apps. The 10ms CPU limit per invocation is the real constraint; I/O-bound work (database queries, external fetches) is fine. Heavy computation is not.
+
+**D1** gives you a real relational SQLite database. The free tier includes 5 GB storage and 25 million row reads per day ([Cloudflare D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)). That covers most CRUD apps comfortably. The 50K daily write limit is where write-heavy apps (logging, analytics) bump into the ceiling first.
+
+**R2** is the sleeper. 10 GB free storage, 1 million Class A operations (writes), 10 million Class B operations (reads) — and zero egress fees, permanently ([Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/)). Compare that to AWS S3's $0.09/GB for outbound data transfer ([AWS S3 pricing](https://aws.amazon.com/s3/pricing/)). For user-uploaded files, images, and assets, R2 is the obvious call on cost alone.
+
+> 🥐 **Buttr:** aws charges you to download your own files. cloudflare doesn't. one of these pricing teams is having a normal one.
+
+## What actually requires the paid plan?
+
+Two important services have no free tier:
+
+**Durable Objects** — real-time stateful coordination: WebSockets, collaborative editing, live presence, room state. No free tier. Requires Workers Paid ($5/month minimum) plus per-usage charges.
+
+**Queues** — async job processing: background email sends, webhook retries, async pipelines. Also no free tier. Requires Workers Paid.
+
+If you need either of these, the entry point is $5/month. For most small teams that's fine; for a zero-budget side project it's worth designing around it until you need it.
+
+## Can you run a full support tool on the free tier?
+
+Yes. A complete live chat setup — AI bot, conversation history, file attachments, serverless API — fits inside the free quotas for small-to-medium traffic. That's not theoretical: Krispy runs on exactly this stack. Workers for the API, D1 for conversations, R2 for file attachments, Durable Objects for real-time state (the one paid piece), and Pages for the dashboard.
+
+If you're comparing [open-source live chat tools](/best-open-source-live-chat) and wondering whether to trust a hosted SaaS or [self-host on Cloudflare](/self-host-live-chat-cloudflare), the honest answer is that Cloudflare's free tier is production-ready for this use case. Intercom's cheapest plan starts at $29/seat/month ([Intercom pricing](https://www.intercom.com/pricing)), and it scales up from there. A detailed breakdown is at [Krispy vs Intercom](/krispy-vs-intercom) and [Krispy vs Crisp](/krispy-vs-crisp).
+
+The [zero-dollar support stack](/the-zero-dollar-support-stack) is real. When you self-host, you [own your customer conversations](/own-your-customer-conversations) — the data doesn't leave your infrastructure. That's the argument for [open source](/why-open-source) on its own, independent of cost.
+
+> 🥐 **Buttr:** $0 for your whole support infra. $99/month for intercom. no shade — i'm just reading the pricing page.
+
+## What about Workers AI — is inference actually free?
+
+Workers AI gives you access to Cloudflare's model catalog (Llama, Mistral, Whisper, image models) at the edge. The free quota is measured in "neurons" — Cloudflare's unit for inference compute — at roughly 10,000/day. That's enough for light testing and small-volume AI features, not for a production chatbot handling real traffic.
+
+For anything beyond experimentation, you'll need Workers Paid plus Workers AI usage charges, and the higher-performing models (larger Llama variants) are paywalled. Good for prototyping at zero cost; not a replacement for a dedicated AI provider at scale.
+
+## How does Cloudflare compare to other free hosting options?
+
+| Platform | Free static hosting | Free serverless | Free database | Free object storage | Egress fees |
+|---|---|---|---|---|---|
+| **Cloudflare** | ✅ Unlimited bandwidth | ✅ 100K req/day | ✅ D1, 5 GB | ✅ R2, 10 GB | ❌ None ever |
+| **Vercel** | ✅ 100 GB BW/month | ✅ 100K invocations | ❌ (add-on) | ❌ | ✅ Over 100 GB |
+| **Netlify** | ✅ 100 GB BW/month | ✅ 125K invocations | ❌ | ❌ | ✅ Over 100 GB |
+| **Fly.io** | ✅ Limited VMs | N/A | ✅ 3 GB Postgres | ❌ | ✅ Over 160 GB |
+| **Railway** | ❌ Expiring credits | N/A | ✅ Limited | ❌ | ✅ |
+
+Cloudflare wins on breadth — it's the only platform where the free tier includes static hosting, serverless, a relational database, and object storage simultaneously. The egress cost gap with AWS and other cloud providers is real money once your app has any storage-serving traffic.
+
+The honest tradeoffs: the 10ms Workers CPU limit hurts compute-heavy tasks; Durable Objects and Queues cost extra; and Cloudflare's ecosystem is less plug-and-play for teams used to AWS or GCP primitives.
+
+---
+
+## FAQ
+
+### Is Cloudflare's free tier actually free forever, or does it expire?
+
+Cloudflare's free quotas are permanent — no 12-month expiry, no trial credits. Pages, Workers, D1, R2, and KV are all on permanent free tiers with daily or monthly quotas that reset. You can run a small production app on these services indefinitely at $0. The only time you need to upgrade is when you consistently hit the daily limits or need services that have no free tier (Durable Objects, Queues).
+
+### What happens when I exceed a free tier limit on Cloudflare?
+
+Workers return HTTP 429 (Too Many Requests) until your daily quota resets at midnight UTC. D1 and KV writes fail silently — reads continue working. R2 Class A operations (writes/uploads) fail once you've hit 1M/month. You are never automatically billed for overages. You have to manually upgrade to Workers Paid to continue.
+
+### Can I run a full Next.js app on Cloudflare's free tier?
+
+Yes. Cloudflare Pages supports full-stack Next.js via the `@cloudflare/next-on-pages` adapter, including server-side rendering and API routes running as Workers. The main gotcha is the 10ms Workers CPU limit — computationally heavy server-side rendering can hit it. Most Next.js apps are I/O-bound and fit fine. Static generation (SSG) runs without any CPU concerns.
+
+### Do I need a credit card to use Cloudflare's free tier?
+
+No. You can sign up and use Pages, Workers, D1, R2, and KV without a credit card. Payment is only required if you upgrade to Workers Paid ($5/month) or purchase a domain through Cloudflare Registrar. The free tier signup is email only.
+
+### Is Krispy free to self-host on this stack?
+
+Yes. [Krispy](https://github.com/lonormaly/krispyai) is MIT-licensed and built on the Cloudflare stack described in this post. The infrastructure cost to self-host is $0 for small teams (you'll want Workers Paid at $5/month once you need Durable Objects for real-time chat state). Once deployed, [connect the Telegram handoff](/connect-telegram-handoff) so a human can step in when the bot hits its limits. More context on the full setup: [self-hosting live chat on Cloudflare](/self-host-live-chat-cloudflare).
+
+---
+
+## The bottom line
+
+Cloudflare's 2026 free tier is the most complete no-cost infrastructure stack available for indie hackers and small teams: permanent quotas, real production limits, no egress fees on storage, and no credit card required to start. Pages for your site, Workers for your API, D1 for your database, R2 for files — all permanent.
+
+The honest caveat: if you need real-time WebSocket state or background job queues, budget $5/month for Workers Paid. Everything else is genuinely free until your traffic outgrows it.
+
+Krispy is one thing you can run on this stack — open-source AI live chat that answers your visitors and taps you in on Telegram when it's a human job. [Self-host it free on GitHub](https://github.com/lonormaly/krispyai), or skip the terminal and use [Krispy Cloud](https://krispyai.com) — hosted, 14-day free trial, $19/month flat with no per-seat pricing.
+
+> 🥐 **Buttr:** took me 2 min to deploy. i'm a croissant. à bientôt 🥐

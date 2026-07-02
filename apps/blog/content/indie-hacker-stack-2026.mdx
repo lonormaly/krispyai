@@ -1,0 +1,107 @@
+---
+title: "The Indie Hacker Stack for 2026"
+description: "The complete indie hacker tech stack for 2026: 10 layers, real pricing, and which tools to self-host vs. pay for as a solo founder or small team."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["indie hacker", "tech stack", "self-hosted", "open-source", "cloudflare"]
+type: "category"
+---
+
+![A croissant wearing a tiny laptop backpack, surveying a neat stack of tool logos with a clipboard and a red pen](/blog/indie-hacker-stack-2026-hero.png)
+
+*Buttr, curating the stack: "cancelled three subscriptions. added one coffee. net savings: $400/month."*
+
+> 🥐 **Buttr:** before you subscribe to the thing — check if cloudflare already does it. answer is usually yes.
+
+The practical indie hacker tech stack for 2026 runs on Cloudflare Workers for compute, Supabase or Neon for Postgres, Resend for email, PostHog for analytics and feature flags, and self-hosted tools wherever per-seat pricing would otherwise kick in. A solo founder running a real product can operate the full stack for $0–$50 per month, depending on which services they self-host.
+
+## What does an indie hacker actually need in their stack?
+
+Every indie product needs the same ten things: somewhere to run code, a database, email delivery, web analytics, error tracking, authentication, feature flags, payments, customer support, and monitoring. Everything else is optional until it isn't. The stack debates of 2023–2024 are mostly settled: Cloudflare Workers has closed the gap on Vercel for edge functions; the free tiers on Supabase, Neon, and PostHog are genuinely useful at early scale; Stripe remains the honest baseline for payments even when the fees sting.
+
+## What is the cheapest infrastructure for an indie hacker in 2026?
+
+Cloudflare Workers' free tier gives you 100,000 requests per day and 10ms CPU time per request (source: [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)). That covers most indie apps at launch without touching a credit card. For apps that need persistent server processes, Railway's Hobby plan is $5/month ([Railway pricing](https://railway.app/pricing)) and includes a managed Postgres. Hetzner's smallest VPS (CAX11) runs €3.79/month with 2 vCPUs and 4GB RAM — plenty for a self-hosted stack.
+
+The call depends on your app's shape:
+
+- **Stateless request/response** (API, AI proxy, webhooks): Cloudflare Workers, free.
+- **Persistent server** (background jobs, WebSockets, queues): Railway or Fly.io, $5–$10/month.
+- **Self-hosted apps** (Chatwoot, PostHog, Listmonk): Hetzner or DigitalOcean, $4–$12/month.
+
+> 🥐 **Buttr:** "where should i host?" — cloudflare if it fits, hetzner if it doesn't. that's the whole flowchart.
+
+## What does the full indie hacker stack cost per month?
+
+| Layer | Tool | Free tier | Paid entry |
+|---|---|---|---|
+| Compute / edge | Cloudflare Workers | 100K req/day | $5/month |
+| Database | Supabase / Neon | 500MB–500MB Postgres | $10–$25/month |
+| Auth | Supabase Auth / Clerk | Up to 50K MAU | $25/month |
+| Email | Resend | 3,000 emails/month | $20/month |
+| Analytics | PostHog | 1M events/month | $0 self-host or $20+/month |
+| Feature flags | PostHog (bundled) / Unleash | Included above | $0 self-host |
+| Error tracking | Sentry / GlitchTip | 5K errors/month | $26/month or $0 self-host |
+| Payments | Stripe / Lemon Squeezy | No monthly fee | 2.9% + $0.30/tx |
+| Customer support | Krispy / Chatwoot | $0 self-hosted | $19/month (Krispy Cloud) |
+| Monitoring | Uptime Robot | 50 monitors free | $7/month |
+| **Solo founder total** | | **$0** | **~$20–50/month** |
+
+Resend's free tier covers 3,000 transactional emails per month (source: [Resend pricing](https://resend.com/pricing)). PostHog's self-hosted version is MIT-licensed with no event cap. Supabase's free tier gives you 500MB database storage and 2GB bandwidth (source: [Supabase pricing](https://supabase.com/pricing)). A real product at early traction can run under $30/month with light self-hosting.
+
+## What should you self-host vs. pay for?
+
+Self-host when: the per-seat pricing model would hit you within 12 months, the ops complexity is low (one Compose file or one deploy command), and the cost delta is $100+/year. Pay for managed when: the free tier covers you or the ops cost in your own time exceeds the subscription.
+
+The clearest candidates to self-host in 2026:
+
+- **Error tracking** — self-hosted GlitchTip or Sentry cuts $300+/year at near-zero ops cost. [Why open-source matters for tools you depend on](/why-open-source).
+- **Live chat and support** — [self-hosted Krispy on Cloudflare Workers costs $0](/self-host-live-chat-cloudflare), handles AI replies and Telegram handoff, and has no per-seat invoice. Add a co-founder later; the bill doesn't change. That's the [exact trap per-seat support tools set for growing teams](/own-your-customer-conversations).
+- **Analytics + feature flags** — PostHog self-hosted covers both with one deploy and no event cap.
+
+Don't bother self-hosting: transactional email at low volume (SMTP ops is not worth it; Resend's $20/month plan is cheaper than your time), auth at low MAU (Supabase Auth's free tier is real), and payments (you want Stripe's fraud and dispute tooling, full stop).
+
+> 🥐 **Buttr:** PostHog's self-hosted tier has no event cap. the managed free tier has 1M. i keep waiting for the catch. there isn't one.
+
+## Which AI tools are worth paying for as an indie hacker?
+
+Pick one API provider, use it via the official SDK, and don't over-engineer. Anthropic Claude API and OpenAI API are both production-ready. Cloudflare Workers AI is free within the free tier and adds zero cold-start latency if you're already on Workers — worth trying for classification and short-context tasks before paying per-token.
+
+For products that need AI in the support loop — auto-drafting replies, summarizing conversation history, routing to humans — [wire the AI into your support widget rather than building a separate chatbot](/connect-telegram-handoff). The AI-to-human handoff is where most indie teams drop the ball; design for it from day one.
+
+## What's the right live chat option for a solo founder?
+
+[The open-source live chat options in 2026](/best-open-source-live-chat) are better than they've ever been. Chatwoot (MIT, 22k+ GitHub stars) is the proven pick for teams that want a full multi-agent inbox and don't mind a VPS. [Krispy](https://github.com/lonormaly/krispyai) is the edge-native option — no VPS, no Postgres, runs on Cloudflare Workers, AI answers by default and hands off to a human on Telegram when it's a human job. [How it compares to Intercom is here](/krispy-vs-intercom); [vs. Crisp is here](/krispy-vs-crisp).
+
+The [full $0 support stack walkthrough](/the-zero-dollar-support-stack) shows how to combine Krispy, GitHub Issues, and a Notion FAQ into a complete support operation for under $5/month.
+
+---
+
+## FAQ
+
+### What is the best tech stack for indie hackers in 2026?
+
+Cloudflare Workers for compute, Neon or Supabase for Postgres, Resend for email, PostHog for analytics and feature flags, Stripe for payments, and self-hosted Krispy or Chatwoot for support. Total bill before paying customers: $0–$20/month. The inflection point for paying more is around $2–5K MRR, when ops time starts to outweigh the SaaS invoice.
+
+### Is Cloudflare Workers good enough for a real product?
+
+Yes, for most API-driven products and AI inference proxies. 100,000 free requests per day covers early traction. The 10ms CPU limit is the real constraint — edge logic works, heavy compute doesn't. For apps that need long-running processes, Railway or Fly.io at $5–$10/month is the right complement. Most indie products live comfortably on a Cloudflare + Railway split.
+
+### How do indie hackers handle customer support without a team?
+
+An AI layer handles the 70% of questions that have known answers; a Telegram notification handles the rest. You reply from your phone; it appears live in the chat widget. [This setup runs for $0 self-hosted on Cloudflare Workers](/self-host-live-chat-cloudflare). The design decision that matters: make the AI-to-human handoff fast and clean rather than trying to make the bot answer everything.
+
+### Should an indie hacker use Next.js or a simpler framework?
+
+Next.js is the default for React projects — Cloudflare, Vercel, and Netlify all support it. The honest tradeoff: App Router adds complexity that Hono or Astro sidesteps. For a marketing site with a few API routes, Astro + Cloudflare Workers is meaningfully simpler. For a product with auth, complex state, and frequent UI changes, Next.js pays for itself.
+
+### When does the indie hacker stack stop working?
+
+Around 5–10 team members and $10–50K MRR. Multiple people sharing one Telegram notification stops being fun; the free database tier fills up; self-hosted Sentry needs maintenance. At that point, the per-seat tools that were too expensive at solo scale become fair value. The goal isn't to avoid paying forever — it's to delay that spend until the revenue justifies it.
+
+---
+
+Krispy is the open-source support layer in this stack: AI answers your visitors, Telegram tags you in when it's a human job, no per-seat pricing ever. Self-host free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one command on Cloudflare Workers. Or skip the infrastructure with [Krispy Cloud](https://krispy.ai) — 14-day free trial, $19/month flat.
+
+> 🥐 **Buttr:** à bientôt. go ship something. 🥐
