@@ -7,6 +7,6 @@
 // metadata + JSON-LD also come from @krispy/seo — one door, no hand-rolling.
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://blog.krispy.localhost:1355";
 
-export const BLOG_NAME = "Builder's Stack Blog";
+export const BLOG_NAME = "The Krispy Blog";
 export const BLOG_DESCRIPTION =
-  "Field notes on building an AI-native monorepo — structure, SEO/GEO, and the tools that keep a repo fast as it grows. Original, first-hand, from the people who built the stack.";
+  "Field notes on AI live chat, human handoff, self-hosting, and the open tools indie builders actually use. Honest comparisons, real setup guides, first-hand from the team building Krispy.";

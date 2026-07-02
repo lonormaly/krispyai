@@ -6,3 +6,24 @@
    classes used *inside* @krispy/ui components get generated. (This app's own app/**
    files are auto-detected.) */
 @source "../../../libs/ui/src";
+
+/* Long-form article body — the one thing a Tailwind class map can't do: an "issue
+   contents" running section index. A CSS counter numbers each <h2> (01, 02, …) with a
+   mono jam numeral, giving posts the editorial spine the landing has. Scoped to
+   .blog-prose so nothing else on the page is affected. */
+.blog-prose {
+  counter-reset: h2;
+}
+.blog-prose h2 {
+  counter-increment: h2;
+}
+.blog-prose h2::before {
+  content: counter(h2, decimal-leading-zero);
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  color: var(--jam);
+}
