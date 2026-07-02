@@ -1,0 +1,179 @@
+---
+title: "The Self-Hosted Customer Support Stack (2026)"
+description: "Six open-source tools for a complete self-hosted customer support stack in 2026: live chat, help desk, knowledge base, CSAT, error tracking, and status page."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["self-hosted", "customer support", "open-source", "live chat", "help desk", "comparison"]
+type: "comparison"
+---
+
+![A croissant wearing a tiny headset, surrounded by open-source logos, calmly eating a pain au chocolat while a stack of support tickets scrolls past](/blog/self-hosted-customer-support-stack-2026-hero.png)
+
+*Buttr, reviewing the Intercom quote: "interesting line item. i don't see 'data ownership' anywhere in here."*
+
+> 🥐 **Buttr:** you can self-host the entire support stack. you could also rent it for $400/month. two very different vibes.
+
+A self-hosted customer support stack in 2026 covers six jobs: AI live chat, a shared help desk inbox, a knowledge base, CSAT surveys, error tracking, and a status page. All six tools are open-source and deployable for $0 to $20 a month in compute, on a single VPS or Cloudflare's free tier.
+
+## 1. Krispy — AI live chat with Telegram handoff
+
+**What it is:** [Open-source AI live chat](https://github.com/lonormaly/krispyai) built on Cloudflare Workers and Durable Objects. The bot answers visitors from a configurable FAQ context; when a conversation needs a human, it fires a Telegram notification. You reply from your phone and it appears live in the widget.
+
+**Key capabilities:** Workers AI for on-edge inference (no external API key required), real-time message state via Durable Objects, clean embed snippet, full conversation history per visitor, configurable system prompt.
+
+**Real free-tier limits:** Cloudflare Workers free tier — 100,000 requests/day, 10ms CPU per invocation (source: [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)). Workers AI inference is included at no cost within those limits.
+
+**Watch:** The 10ms CPU limit is the real constraint. Unusually long AI calls may approach it on slow prompts; Cloudflare's paid Workers tier ($5/month) extends CPU to 30 seconds. Krispy handles the live chat widget — if you need email and social channels in one inbox, pair it with Chatwoot (see #2).
+
+**Get started:**
+```bash
+git clone https://github.com/lonormaly/krispyai
+cd krispy && cp .env.example .env
+# add your Telegram bot token + Cloudflare account ID
+wrangler deploy
+```
+
+[Full self-hosting walkthrough](/self-host-live-chat-cloudflare) · [Krispy vs Intercom on cost and features](/krispy-vs-intercom)
+
+---
+
+## 2. Chatwoot — multi-channel help desk inbox
+
+**What it is:** Open-source customer communication platform with a real shared inbox — email, live chat, Twitter/X, Instagram, WhatsApp, and Telegram channels in one UI. MIT licensed, 22K+ GitHub stars, YC-backed team.
+
+**Key capabilities:** multi-agent inbox, canned responses, assignment rules, CSAT scores, custom contact attributes, conversation search, IMAP/SMTP email inbox, REST API, and webhook integrations.
+
+**Real free-tier limits:** No license cost. Self-host on a Hetzner CAX11 (~€3.79/month, 2 vCPUs, 4GB RAM). Cloud free tier: 1 agent, 500 conversations/month — real enough to test, but most teams self-host for unlimited agents.
+
+**Watch:** Rails backend means you need at least 2GB RAM on the VPS. It's the most ops-intensive tool on this list — plan 20–30 minutes for initial setup and occasional upgrades every few months. The tradeoff: a full multi-channel inbox with no per-seat invoice.
+
+**Get started:**
+```bash
+curl -o docker-compose.yml \
+  https://raw.githubusercontent.com/chatwoot/chatwoot/develop/docker-compose.production.yaml
+docker compose up -d
+# configure SMTP, add email and live-chat inboxes in the UI
+```
+
+---
+
+## 3. Outline — self-hosted knowledge base
+
+**What it is:** A Notion-like wiki for teams that self-host. Point customers at a public collection for FAQ; keep another collection internal for SOPs. ~28K GitHub stars.
+
+**Key capabilities:** rich Markdown editor, nested collections, full-text search, public sharing links, Google/Slack SSO, REST API, version history, read-only public access for customer-facing docs.
+
+**Real free-tier limits:** No user cap, no document cap when self-hosted. Requires Postgres and S3-compatible storage — Cloudflare R2 works (zero egress, $0.015/GB stored). Outline's cloud starts at $10/user/month; self-hosting drops that to $0.
+
+**Watch:** Outline uses the Business Source License (BUSL), not MIT — you can self-host freely, but you can't build a competing hosted service on it. For a team running their own docs, it's irrelevant. Also: exporting your content is your responsibility if you ever migrate.
+
+**Get started:** The [official self-hosting guide](https://docs.getoutline.com/s/hosting) covers Docker + Postgres + S3 in under an hour. Pair with a Cloudflare R2 bucket for file storage to keep egress cost at zero.
+
+---
+
+## 4. Formbricks — open-source CSAT and surveys
+
+**What it is:** MIT-licensed survey and feedback engine for in-product moments — post-support CSAT, NPS, churn exit surveys, feature discovery. Think Typeform without the $25/month bill or the data leaving your server.
+
+**Key capabilities:** survey builder, in-product SDK (trigger after specific events), link surveys, conditional logic, webhook and API export, analytics dashboard.
+
+**Real free-tier limits:** Cloud free tier — 250 responses/month, 3 active surveys, unlimited seats (source: [formbricks.com/pricing](https://formbricks.com/pricing)). Self-hosted: unlimited responses, unlimited surveys, Docker Compose, MIT license.
+
+**Watch:** In-product CSAT (triggered when a ticket closes, for example) requires adding the Formbricks SDK to your frontend — one `npm install` and a few lines. For link-survey CSAT delivered by email after a conversation closes, no SDK is needed at all.
+
+**Get started:**
+```bash
+git clone https://github.com/formbricks/formbricks
+docker compose -f docker-compose.yml up -d
+```
+
+> 🥐 **Buttr:** "CSAT is optional," said every founder right up until they had no idea why people were churning.
+
+---
+
+## 5. GlitchTip — error tracking that shrinks the support queue
+
+**What it is:** Open-source, Sentry-compatible error tracking. When a bug hits users before they write in, GlitchTip tells you first. Catching a NullPointerException in your Telegram at 9 PM beats triaging twelve "the thing is broken" tickets the next morning.
+
+**Key capabilities:** error grouping, stack traces, source maps, performance monitoring (beta), email and webhook alerts, projects and teams, 30-day data retention. Sentry SDK-compatible — point your existing `dsn` at your GlitchTip instance and you're done.
+
+**Real free-tier limits:** MIT licensed — self-hosted is unlimited events with no cap. Cloud free tier: 1,000 events/month (source: [glitchtip.com/pricing](https://glitchtip.com/pricing)). Runs on Docker Compose with ~512MB RAM.
+
+**Watch:** GlitchTip's performance monitoring is less mature than Sentry's. For the core use case — catching errors before they generate tickets — it does the job cleanly. If you need full APM tracing and distributed traces, Sentry's self-hosted edition is heavier but more capable.
+
+**Get started:** [GlitchTip self-hosting docs](https://glitchtip.com/documentation/install) covers Docker in under 10 minutes. Point your existing Sentry SDK `dsn` at the new host — no SDK changes required.
+
+---
+
+## 6. Upptime — status page on GitHub Actions
+
+**What it is:** A completely free, open-source uptime monitor and status page that runs on GitHub Actions. Checks your endpoints every 5 minutes, publishes a public status page on GitHub Pages, and opens a GitHub Issue when something goes down.
+
+**Key capabilities:** HTTP and TCP monitors, incident history, response-time graphs, badge embeds, scheduled maintenance notices, YAML config, zero server ops — no VPS, no database.
+
+**Real free-tier limits:** 100% free. GitHub Actions free minutes on public repos are unlimited; GitHub Pages hosting is free. Source: [github.com/upptime/upptime](https://github.com/upptime/upptime).
+
+**Watch:** Monitor checks run every 5 minutes — that's GitHub Actions' minimum cron interval, not an Upptime limitation. For on-call escalation (SMS, PagerDuty pages), pair it with BetterUptime's free tier or Opsgenie. Upptime monitors and reports; it doesn't page.
+
+**Get started:**
+```
+fork https://github.com/upptime/upptime
+edit .upptimerc.yml with your endpoints
+enable GitHub Actions + GitHub Pages in repo settings
+# status page is live in minutes
+```
+
+---
+
+## The stack together
+
+The support loop in order: **Upptime** tells customers a service is down before they write in. **Outline** answers the FAQ before they ask. **Krispy** catches the visitor who made it to the chat widget — the bot handles common questions; Telegram tags you for the rest. **Chatwoot** handles email and social channels once the team grows past one inbox. **Formbricks** measures satisfaction after a ticket closes. **GlitchTip** surfaces the bugs that would have generated the next wave of tickets.
+
+[The full case for owning your customer conversations, not just your code](/own-your-customer-conversations) · [Every open-source live chat option compared](/best-open-source-live-chat)
+
+## The honest cost
+
+| Tool | Self-host | Cloud/managed |
+|---|---|---|
+| Krispy | $0 (Cloudflare free tier) | $19/month (Krispy Cloud) |
+| Chatwoot | ~$4–8/month (VPS) | $19/month (Chatwoot Cloud) |
+| Outline | ~$4–8/month (shared VPS + R2) | $10/user/month |
+| Formbricks | ~$4–8/month (shared VPS) | $0 up to 250 responses |
+| GlitchTip | ~$4–8/month (shared VPS) | $0 up to 1K events |
+| Upptime | $0 (GitHub Actions) | $0 (GitHub Actions) |
+| **Realistic total** | **$0–12/month** (one shared VPS) | **$20–60/month** |
+
+A single Hetzner CAX11 (€3.79/month, 2 vCPUs, 4GB RAM) runs Chatwoot, Outline, Formbricks, and GlitchTip together without strain. Krispy and Upptime need no server at all. A 3–5 person team covers the full support operation for under $15/month in compute — and $0 in seat licenses.
+
+> 🥐 **Buttr:** six tools. one VPS. zero per-seat invoices. i feel nothing.
+
+---
+
+## FAQ
+
+### What is the best self-hosted customer support stack in 2026?
+
+Krispy for AI live chat, Chatwoot for the shared email and social inbox, Outline for a knowledge base, Formbricks for CSAT, GlitchTip for error tracking, and Upptime for a status page. The stack runs under $15/month on a single shared VPS. Each tool is MIT or BUSL licensed, actively maintained, and has a managed cloud option if you want to drop the ops overhead without changing tools.
+
+### Can one person actually operate a self-hosted support stack?
+
+Yes, with realistic caveats. Krispy and Upptime require near-zero maintenance — they run on Cloudflare Workers and GitHub Actions respectively. Chatwoot needs a VPS and occasional upgrades (15 minutes every few months). Outline, Formbricks, and GlitchTip are similarly low-maintenance once configured. Realistic ops overhead for the full stack: under one hour a month. If that's one thing too many, Krispy Cloud at $19/month and Chatwoot Cloud at $19/month eliminate the server entirely.
+
+### How does a self-hosted stack compare to Intercom?
+
+Self-hosting wins on cost ($10–15/month vs $74–500/month), data ownership, and no per-seat pricing as the team grows. Intercom wins on breadth — product tours, deep email campaigns, a large app ecosystem, and zero ops. For most bootstrapped products, the Intercom features you'd actually use are a shared inbox, a live chat widget, and basic automation — all covered by this stack. [Full comparison here](/krispy-vs-intercom).
+
+### Is Cloudflare Workers' free tier genuinely enough for a live chat widget?
+
+100,000 requests per day covers most SaaS products at early traction many times over. A busy support day with 200 conversations uses a few hundred Worker requests — nowhere near the cap. The real ceiling is 10ms CPU per invocation, which can be tight for unusually long AI inference calls. Cloudflare's paid Workers tier at $5/month extends that to 30 seconds. [Step-by-step self-hosting walkthrough here](/self-host-live-chat-cloudflare).
+
+### When should you stop self-hosting and pay for managed tools?
+
+When ops coordination takes more than an hour a week and team size makes per-seat pricing reasonable. A 10-person team paying $19/month for Chatwoot Cloud ($1.90/seat) is obviously correct — it's not the per-seat trap that a 2-person team at $95/seat is. The stack earns you time to figure out which tools are worth managing yourself and which ones you'd genuinely rather pay to forget about.
+
+---
+
+Self-host the full stack: [Krispy on GitHub](https://github.com/lonormaly/krispyai) — one `wrangler deploy` on Cloudflare Workers. Or skip the terminal with [Krispy Cloud](https://krispy.ai) — 14-day free trial, $19/month flat, same open-source bot.
+
+> 🥐 **Buttr:** à bientôt 🥐

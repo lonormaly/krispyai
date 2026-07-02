@@ -1,0 +1,235 @@
+---
+title: "The Best Self-Hosted Tools for 2026"
+description: "The 9 best self-hosted tools for 2026: database, auth, analytics, secrets, email, live chat, and automation — with real limits and honest gotchas."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["self-hosting", "open-source", "own-your-stack", "indie-hacker", "bootstrapping"]
+type: "comparison"
+---
+
+![A laptop on a bare desk, one terminal window open, one container healthy, zero invoices due](/blog/best-self-hosted-tools-2026-hero.png)
+
+*the face you make when your monthly bill is $6 and it's a vps. not a seat. a whole server.*
+
+> 🥐 **Buttr:** "self-hosted" is the word people use right before they spend a saturday configuring nginx. this list is the good version of that story.
+
+The best self-hosted tools for 2026 are Coolify (PaaS), Supabase (Postgres + auth + storage), Better Auth (auth library), PostHog (analytics + errors + flags), Infisical (secrets), Listmonk (email), Umami (web analytics), n8n (automation), and Krispy (AI live chat). Together they cover every layer of a production app at near-zero vendor cost — no per-seat pricing, no usage lock-in, and your data lives where you put it.
+
+## Why self-host in 2026?
+
+Three things converged: Hetzner VPS prices hit $4–6/month, Docker became table stakes, and a generation of SaaS tools started pricing like "bootstrapped" was someone else's problem. Self-hosting isn't contrarian anymore. It's the boring, sensible option — as long as the tool is genuinely maintained and not held together with shell scripts and hope.
+
+Every tool below ships production-ready Docker images, has an active community, and has a clear upgrade path when the managed version makes economic sense.
+
+---
+
+## 1. Coolify — self-hosted PaaS
+
+**What it is:** An open-source Heroku/Render replacement you run on any VPS. Point it at a GitHub repo; it builds, deploys, and terminates TLS automatically.
+
+**Key capabilities:** Git push-to-deploy, Docker + Compose deployments, Let's Encrypt SSL, built-in reverse proxy, one-click installs for Postgres, Redis, Supabase, Listmonk, n8n, and most of this list.
+
+**Real free-tier limits:** none — self-hosted is free. The Coolify Cloud managed option starts at $5/month if you'd rather not manage the host at all.
+
+**Watch:** you're responsible for OS updates, disk space, and backups. Budget 30 minutes a month. Back up your volumes.
+
+**Get started:**
+```bash
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+```
+Fresh Ubuntu 22.04 server, five minutes, and you're deploying apps from a dashboard.
+
+---
+
+## 2. Supabase — Postgres, auth, and storage
+
+**What it is:** An open-source Firebase alternative: managed Postgres plus a built-in auth layer, file storage, and realtime subscriptions.
+
+**Key capabilities:** Row-Level Security, Edge Functions (Deno), pgvector for embeddings, realtime channels, auth with 50+ social OAuth providers, storage with image transforms.
+
+**Real free-tier limits (managed cloud):** 500MB Postgres, 50k monthly active users, 1GB file storage, 2 projects — projects pause after 1 week of inactivity. Self-hosted via Docker Compose: unlimited everything.
+
+**Watch:** the self-hosted stack is about 9 containers (Postgres, GoTrue, PostgREST, Realtime, Storage, Kong, and more). Coolify has a one-click template that handles the wiring.
+
+**Get started:**
+```bash
+git clone https://github.com/supabase/supabase
+cd supabase/docker && cp .env.example .env
+docker compose up -d
+```
+
+---
+
+## 3. Better Auth — auth with no per-MAU bill
+
+**What it is:** An open-source (MIT) TypeScript auth library that lives inside your app. No third-party auth service. No user-count pricing.
+
+**Key capabilities:** email/password, 34+ social OAuth providers, passkeys/WebAuthn, magic links, phone OTP, 2FA/TOTP, API keys, organizations and teams, SSO/SAML. Works with Next.js, Hono, Nuxt, SvelteKit, and Drizzle or Prisma.
+
+**Real free-tier limits:** free, MIT, forever. Cost never scales with your user count — unlike Clerk (free to 10k MAUs) or Auth0.
+
+**Watch:** you own the auth database and security posture. Keep `BETTER_AUTH_SECRET` secret, run migrations carefully, and stay on top of releases.
+
+**Get started:**
+```bash
+bun add better-auth
+bunx @better-auth/cli generate   # generate DB schema
+```
+
+---
+
+## 4. PostHog — analytics, errors, and feature flags
+
+**What it is:** An open-source product analytics platform covering event tracking, session replay, feature flags, A/B experiments, and error tracking — in one tool.
+
+**Key capabilities:** funnels, retention, paths, arbitrary SQL queries, heatmaps, session replay with input masking, error tracking with sourcemaps, feature flags with gradual rollouts, surveys.
+
+**Real free-tier limits (managed cloud):** 1M events/month, 5,000 session replays, 1M feature-flag requests, 100k error events — all free, no expiry. Self-hosted via Docker: unlimited, but you manage a ClickHouse cluster.
+
+**Watch:** the self-hosted version requires ClickHouse, which is not trivial to operate. For most solo builders, the managed free tier is the right call until cost or privacy reasons force a move.
+
+**Get started:** `npm i posthog-js` and call `posthog.init()`. Self-host docs at [posthog.com/docs/self-host](https://posthog.com/docs/self-host).
+
+> 🥐 **Buttr:** "i'll set up self-hosted analytics this weekend" is how you end up running a ClickHouse cluster with three users and no funnel data. start managed. migrate when it costs something.
+
+---
+
+## 5. Infisical — secrets management
+
+**What it is:** An open-source secrets manager (~27k+ GitHub stars). Keeps `.env` files off your disk and out of your repos, and syncs secrets to CI, Vercel, Kubernetes, and more.
+
+**Key capabilities:** CLI secret injection, 10+ CI integrations (GitHub Actions, Vercel, Kubernetes), secret versioning, dynamic secrets, RBAC, secret rotation, point-in-time recovery.
+
+**Real free-tier limits (managed cloud):** 5 machine identities, 3 projects, 3 environments, 10 integrations, unlimited secrets. Self-hosted: unlimited everything.
+
+**Watch:** secret versioning and fine-grained RBAC require a paid cloud tier (~$18/month) or self-hosting. The free cloud plan covers most solo projects comfortably.
+
+**Get started:**
+```bash
+brew install infisical/get-cli/infisical
+infisical login && infisical init
+infisical run -- bun dev    # secrets injected at runtime, no .env file
+```
+
+---
+
+## 6. Listmonk — email lists and newsletters
+
+**What it is:** A self-hosted email marketing app that ships as a single Go binary or a Docker image. No monthly fee. You bring your own SMTP.
+
+**Key capabilities:** subscriber lists, segmentation, campaign scheduling, template editor, open/click tracking, transactional email, REST API.
+
+**Real free-tier limits:** none — Listmonk itself is free, MIT, and unlimited. Your only variable cost is the SMTP relay you wire in (Resend at 3k emails/month + 100/day free; AWS SES at $0.10/1,000 emails at volume).
+
+**Watch:** Resend's free SMTP caps at 100 emails per day — an announcement to a warm list of 400 people clears that in one send. Wire in SES before launch.
+
+**Get started:**
+```bash
+docker run -p 9000:9000 listmonk/listmonk:latest
+```
+Then configure your SMTP provider in the admin panel and import your list.
+
+---
+
+## 7. Umami — privacy-first web analytics
+
+**What it is:** A self-hosted, cookie-free alternative to Google Analytics. GDPR-compliant by design. Single dashboard, no tracking consent banner required.
+
+**Key capabilities:** pageviews, unique visitors, sessions, events, referrers, UTM parameters, device/browser/country, shareable dashboards.
+
+**Real free-tier limits (self-hosted):** none — runs on Postgres or MySQL, unlimited sites, unlimited traffic. The Umami Cloud free plan caps at 10k pageviews/month.
+
+**Watch:** Umami tracks custom events but doesn't do session replay or funnels — that's PostHog's lane. If you need both, use PostHog. If you only need traffic analytics and don't want Google in your stack, Umami covers it.
+
+**Get started:** add a Postgres database and run `docker compose up -d` using the [umami.is/docs](https://umami.is/docs) compose file. Under 10 minutes.
+
+---
+
+## 8. n8n — workflow automation
+
+**What it is:** A self-hosted workflow automation tool. Like Zapier, but running on your infra, with JavaScript/Python code nodes and 400+ integrations.
+
+**Key capabilities:** visual canvas, code nodes (JS/Python), 400+ integrations, webhooks, scheduled cron triggers, sub-workflows, AI agent nodes (GPT, Claude, Gemini).
+
+**Real free-tier limits (Community Edition, self-hosted):** unlimited workflows, unlimited executions, free. The hosted n8n Cloud starts at €20/month for 2,500 executions.
+
+**Watch:** n8n uses a Sustainable Use License — you can self-host it for internal use at no cost, but you can't resell n8n itself as a service. For internal automation, that's irrelevant.
+
+**Get started:**
+```bash
+docker run -it --rm --name n8n -p 5678:5678 \
+  -v ~/.n8n:/home/node/.n8n \
+  n8nio/n8n
+```
+
+---
+
+## 9. Krispy — AI live chat with Telegram handoff
+
+**What it is:** An [open-source AI live chat widget](/best-open-source-live-chat) that answers your visitors, then taps you in on Telegram the moment a human is needed. Deploys to Cloudflare Workers — no separate server.
+
+**Key capabilities:** AI-powered first response, live Telegram handoff, embeddable widget, conversation history, configurable persona, [works on any stack](/self-host-live-chat-cloudflare).
+
+**Real free-tier limits (self-hosted):** $0 beyond Cloudflare's free tier (100k requests/day) and your LLM API cost. Krispy Cloud is $19/month flat — no per-seat pricing, no conversation caps.
+
+**Watch:** setup requires a Cloudflare account and a Telegram bot token. The `SELF_HOSTING.md` in the repo walks it in about ten minutes. For context on how this stacks up: [Intercom's Essentials plan starts at $29/seat/month](/krispy-vs-intercom).
+
+**Get started:** `git clone https://github.com/lonormaly/krispyai` and follow the self-hosting guide. If you'd rather [own your customer conversations](/own-your-customer-conversations) without the config, [Krispy Cloud](https://krispy.ai) handles it.
+
+> 🥐 **Buttr:** "telegram handoff" sounds clever. it means your phone buzzes, you reply, it shows up live in the widget. i'm a pastry and i thought that was legitimately good.
+
+---
+
+## The stack together
+
+Coolify runs everything on a $6/month VPS you control. Supabase gives you Postgres and file storage. Better Auth handles auth without per-MAU billing. Infisical keeps secrets off disk. PostHog covers analytics and errors. Listmonk handles email campaigns via your own SMTP relay. Umami serves clean traffic analytics without Google. n8n automates the connective tissue. Krispy handles live chat.
+
+For billing: self-hosting doesn't get you out of needing a payment processor. Dodo Payments (4% + $0.40/transaction, global MoR) and Creem are the two lowest-friction options for indie builders in 2026 — neither is self-hostable, but neither charges a monthly fee before you earn.
+
+## The honest cost
+
+| Layer | Self-Hosted | Managed free tier |
+|---|---|---|
+| VPS — Hetzner CX21 | $6/mo | — |
+| PaaS (Coolify) | $0 | — |
+| Postgres + auth (Supabase) | $0 | 500MB + 50k MAUs free |
+| Auth library (Better Auth) | $0 | — |
+| Analytics + errors (PostHog) | $0 self-host | 1M events/mo free managed |
+| Secrets (Infisical) | $0 self-host | 5 identities free managed |
+| Email (Listmonk + SES) | ~$1–5/mo | Resend 3k/mo + 100/day free |
+| Web analytics (Umami) | $0 | 10k pageviews/mo free managed |
+| Automation (n8n) | $0 | — |
+| Live chat (Krispy) | $0 | Krispy Cloud $19/mo flat |
+
+Honest pre-revenue total: **$6–12/month**. That's a VPS plus email relay costs. No per-seat taxes. No usage-based surprises at month end. No vendor announcing free-tier deprecation in your launch week.
+
+---
+
+## FAQ
+
+### What's the difference between self-hosting and just using a free tier?
+
+Self-hosting means you run the software on your own infrastructure. Your data lives on your servers, not the vendor's. The tradeoff: you're responsible for updates, backups, and uptime. Managed free tiers are lower-ops but expose you to the vendor's pricing decisions. PlanetScale ended their free Hobby tier in 2024 with 30 days notice. Supabase, PostHog, Infisical, and Krispy all have robust self-hosted paths — your data can leave with you.
+
+### Which of these tools are hardest to self-host?
+
+PostHog's self-hosted version requires running ClickHouse — real infrastructure, real RAM, not a one-liner. Supabase's Docker Compose stack involves about 9 containers but Coolify's one-click template handles most of it. Better Auth, Krispy, Umami, Listmonk, Infisical, and n8n are all single-container or library installs that a developer can have running in under 30 minutes.
+
+### Do I need all nine tools on day one?
+
+No. Start with: a VPS (Coolify), Postgres (Supabase or Neon on the free managed tier), auth (Better Auth), and analytics (PostHog free cloud). That's enough to ship a real product. Add Infisical when `.env` in repos starts feeling wrong, Listmonk when you have a list to email, n8n when manual glue scripts pile up, and Krispy when visitors start asking questions you're not around to answer.
+
+### Is n8n actually free to self-host?
+
+Yes, for internal use. n8n Community Edition runs unlimited workflows and executions at no cost under the Sustainable Use License — that restriction matters only if you plan to resell n8n as a service, which nearly no one doing this is. For connecting your Supabase, PostHog, Resend, and Listmonk accounts with automated logic, it's the most capable free option in this space.
+
+### How does self-hosting Krispy compare to paying for Crisp or Intercom?
+
+[Crisp's Pro plan is €25/month for 4 seats](/krispy-vs-intercom); Intercom Essentials starts at $29/seat. Self-hosted Krispy runs on Cloudflare Workers at $0 beyond your LLM API costs (typically cents per day at early-stage volume). You get AI-first responses and Telegram handoff without the per-seat model. The tradeoff: you configure it. The setup guide is ten minutes; the savings compound every month.
+
+---
+
+Krispy is [open-source on GitHub](https://github.com/lonormaly/krispyai) — self-host it free on Cloudflare Workers with no per-seat pricing and no ops overhead beyond your own account. If you'd rather skip the config entirely, [Krispy Cloud](https://krispy.ai) is $19/month flat, 14-day trial, no seat limits.
+
+*à bientôt 🥐*

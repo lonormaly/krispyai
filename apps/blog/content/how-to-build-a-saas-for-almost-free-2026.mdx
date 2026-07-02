@@ -1,0 +1,188 @@
+---
+title: "How to Build a SaaS for Almost Free (2026 Blueprint)"
+description: "Step-by-step guide to building a SaaS for near-zero cost in 2026: 8 real tools, the order to add them, and the honest free-tier limits for each."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["saas", "free tier", "build order", "cloudflare", "bootstrapped", "2026"]
+type: "howto"
+---
+
+![A determined croissant in a builder's apron consulting a blueprint labeled "Phase 0: Validate · Phase 1: Ship · Phase 2: Get Paid" while small tool logos queue up in line behind it](/blog/how-to-build-a-saas-for-almost-free-2026-hero.png)
+
+*Buttr, issuing the blueprint: "step one: don't build. step two: deploy it anyway. there is no step three until step two is done."*
+
+> 🥐 **Buttr:** a list of free tools isn't a plan. everyone has the same parts. the sequence is the edge.
+
+In 2026, you can build a SaaS from an empty repo to a first paying user for roughly $0–$20/month before revenue arrives. The eight tools below have real, usable free tiers — and they go live in a specific order. Add auth before anything to protect, or analytics after launch, and you'll debug in the dark.
+
+## 1. Cloudflare — Deploy on day one (Phase 0)
+
+**What it is:** One edge platform for Pages (hosting Next.js/Astro from GitHub), Workers (serverless functions), R2 (S3-compatible storage, zero egress fees), D1 (serverless SQLite), Queues, and a global CDN.
+
+**Real free-tier limits:** 100,000 Worker requests per day; unlimited Pages bandwidth + 500 builds per month; 10 GB R2 with egress always free.
+
+**Watch:** 10ms CPU time per Worker is the real constraint. Heavy compute doesn't belong here — push it to a Queue.
+
+**Get started:** `npm create cloudflare@latest` → `wrangler deploy`. Or connect your GitHub repo in the Pages dashboard for auto-deploys.
+
+---
+
+## 2. PostHog — Analytics before the first user (Phase 0)
+
+**What it is:** All-in-one product platform covering analytics, session replay, feature flags, error tracking, and email Workflows — replacing four separate paid tools in one free tier.
+
+**Real free-tier limits (monthly, cloud):** 1M analytics events, 5,000 session recordings, 1M feature-flag requests, 100,000 error events, 10,000 Workflow emails. Self-hosted is MIT, no event cap.
+
+**Watch:** Email Workflows are in beta. Autocapture is noisy until tuned — name your events explicitly before the table fills with junk.
+
+**Get started:** `npm i posthog-js` → `posthog.init('<key>', { api_host: 'https://us.i.posthog.com' })`. Fire a `waitlist_joined` event on the first signup. That's the top of your funnel.
+
+---
+
+## 3. Neon — Database when the core loop needs it (Phase 1)
+
+**What it is:** Fully-managed serverless Postgres that scales to zero when idle and supports Git-style copy-on-write database branching. Acquired by Databricks in 2025. Works with Drizzle, Prisma, and Kysely.
+
+**Real free-tier limits:** 0.5 GB storage, 100 compute-hours per month, up to 10 branches.
+
+**Watch:** Scale-to-zero adds a 300ms–1s cold start after idle. An always-warm app exhausts 100 compute-hours in about a week. Use `@neondatabase/serverless` inside Cloudflare Workers — plain TCP won't reach Neon from the edge.
+
+**Get started:** Create a project at neon.tech → copy the connection string into `DATABASE_URL`. `npm i @neondatabase/serverless` for edge runtimes.
+
+---
+
+## 4. Better Auth — Auth before the first protected route (Phase 1)
+
+**What it is:** Open-source (MIT) TypeScript auth that runs inside your own app and database. ~28k+ GitHub stars. No per-MAU billing — your auth cost does not scale with users. The Auth.js maintainers joined in 2025.
+
+**Real free-tier limits:** It's a library. Free, MIT, forever. Auth0 starts at $240/month at 1,000 MAU. Better Auth is $0 until you need enterprise SSO.
+
+**Watch:** You own the schema, migrations, and security posture. Launched in 2024 — pin your version.
+
+**Get started:**
+```bash
+bun add better-auth
+bunx @better-auth/cli generate   # generate the auth schema
+# mount app/api/auth/[...all]/route.ts; set BETTER_AUTH_SECRET
+```
+
+---
+
+> 🥐 **Buttr:** better auth: MIT, zero cost, users in your database. auth0 at 1,000 users: $240/month. both numbers are real. only one is fine.
+
+---
+
+## 5. Infisical — Secrets before they go everywhere (Phase 1)
+
+**What it is:** Open-source secrets manager (~27k GitHub stars, YC-backed). Injects environment variables at runtime — no `.env` file on disk, ever.
+
+**Real free-tier limits:** Cloud free tier — 5 members/machine identities, 3 projects, 3 environments, 10 integrations. Self-host the open-source core for unlimited everything.
+
+**Watch:** Fine-grained RBAC and point-in-time recovery are paid (~$18/month) or self-hosted. The 5-identity cap is fine for a solo project.
+
+**Get started:**
+```bash
+brew install infisical/get-cli/infisical
+infisical login && infisical init
+infisical run -- bun dev   # secrets injected at runtime, not from a file
+```
+
+---
+
+## 6. Dodo Payments or Creem — Money before you get attached (Phase 2)
+
+**What it is:** A Merchant-of-Record (MoR) is the legal seller of your software. It handles VAT, GST, and sales tax across 190+ countries so you don't have to register as a tax entity everywhere a customer buys.
+
+**Two honest options:**
+- **[Dodo Payments](https://dodopayments.com/)** — 4% + $0.40/transaction. 40+ payment methods, 80+ currencies, subscriptions, hosted checkout, dunning. No monthly fee. Young company — confirm payout support for your country before committing. SWIFT payout fee of $25 applies; batch payouts to minimize it.
+- **[Creem](https://creem.io/)** — 3.5% + $0.30/transaction. MoR with global tax handling, subscriptions, hosted checkout. No monthly fee.
+
+**Watch:** Both are early-stage companies holding your revenue until payout. Verify your country is in their supported payout list before integrating.
+
+**Get started:** Sign up → KYC (usually under 24 hours) → create a product → wire a signed webhook to a Worker that flips a `plan` column in Neon.
+
+---
+
+## 7. Resend — Email when the core loop is alive (Phase 3)
+
+**What it is:** Developer-first transactional email API from the team behind React Email. Clean REST API, React Email templates, 30-day searchable send logs, open/bounce tracking.
+
+**Real free-tier limits:** 3,000 emails per month, 1 custom domain, 1,000 contacts, 30-day log retention.
+
+**Watch:** The daily cap is 100 emails, not the monthly 3,000. A modest Product Hunt spike can hit it before noon. Verify your sending domain before going to production.
+
+**Get started:** `npm i resend` → API key → verify your domain in the dashboard. Start with one email: the one you'd most regret not sending (usually "your trial ends tomorrow").
+
+---
+
+## 8. Krispy or Chatwoot — Support before strangers arrive (Phase 3)
+
+**What it is:** The customer support layer. At early traction you need something that handles visitor questions without per-seat pricing.
+
+**Two honest options:**
+- **[Krispy](https://github.com/lonormaly/krispyai)** — open-source AI live chat that runs natively on Cloudflare Workers, no VPS. The bot answers from your knowledge base; when it's a human job, a Telegram notification fires. You reply from your phone; it appears live in the widget. Self-host for $0. [Krispy Cloud](https://krispy.ai) is $19/month flat. [How it compares to Intercom](/krispy-vs-intercom). [Self-host walkthrough](/self-host-live-chat-cloudflare).
+- **[Chatwoot](https://github.com/chatwoot/chatwoot)** — MIT-licensed, 22k+ GitHub stars, full multi-agent inbox, omnichannel (email, WhatsApp, Twitter). Needs a VPS (~€4/month on Hetzner). The proven pick for team inboxes. [See all open-source options](/best-open-source-live-chat).
+
+**Watch:** Don't skip the support layer. [Owning your customer conversations](/own-your-customer-conversations) from day one captures the questions, frustrations, and feature requests that turn into your roadmap.
+
+**Get started (Krispy):** `git clone https://github.com/lonormaly/krispyai` → `wrangler deploy` → Telegram bot token → embed the one-line widget.
+
+---
+
+> 🥐 **Buttr:** the day you launch, strangers show up and ask things you didn't anticipate. set up support before then. trust me — i've seen the alternative, and it's a lot of unanswered widgets.
+
+---
+
+## The stack together
+
+The sequence is the point. Cloudflare (deploy) + PostHog (analytics) → Neon + Better Auth + Infisical (core loop) → Dodo or Creem (money) → Resend + Krispy or Chatwoot (growth loop) → ship, read the funnel, fix the biggest drop-off.
+
+**Phase 0 (Day 1):** Landing page on Cloudflare Pages + PostHog event on the first signup. Done when real traffic hits a real URL.
+
+**Phase 1 (Days 2–4):** Neon + Better Auth + Infisical + the one feature. Done when a logged-in user can do the one valuable thing start to finish.
+
+**Phase 2 (Day 5):** Dodo or Creem webhook → flip a plan column → entitlement check. Done when a real card upgrades a real account.
+
+**Phase 3 (Days 6–7):** Resend lifecycle email + Krispy or Chatwoot. One email fires on its own; a stranger can get an answer.
+
+**Phase 4 (Day 8+):** Ship loudly. Read the funnel. Fix the biggest drop-off. Repeat.
+
+## The honest cost
+
+| Layer | Tool | Free-tier ceiling | Paid entry |
+|---|---|---|---|
+| Hosting + compute + storage | Cloudflare | 100K req/day, 10 GB R2 | $5/month |
+| Analytics + errors + flags | PostHog | 1M events, 100K errors | Usage-based |
+| Database | Neon | 0.5 GB, 100 compute-hrs | $19/month |
+| Auth | Better Auth | Unlimited (library) | $0 forever |
+| Secrets | Infisical | 5 identities, 3 projects | $18/month or self-host |
+| Payments | Dodo / Creem | No monthly fee | 3.5–4% per transaction |
+| Email | Resend | 3,000/month, 100/day | $20/month |
+| Support | Krispy / Chatwoot | Self-hosted = $0 | $19/month (Krispy Cloud) |
+
+Pre-revenue total: roughly $0–$20/month — a domain plus Claude API tokens if you're building AI features. The Claude API is pay-per-token from request one; cache long prompts, use Haiku for high-volume calls, reserve Sonnet for calls that genuinely need it.
+
+## FAQ
+
+### What does it cost to build a SaaS in 2026 before you have paying users?
+
+Roughly $0–$20/month. Cloudflare (100K Worker requests/day), Neon (0.5 GB, 100 compute-hours), Better Auth ($0, a library), PostHog (1M events), and Resend (3,000 emails/month) all have real free tiers that cover a product at early traction. The main variable cost is LLM API calls if you're building AI features.
+
+### Dodo, Creem, or Stripe — which payments provider should I pick?
+
+Stripe (2.9% + $0.30) is not a Merchant of Record — EU VAT and US state sales tax are your problem. Dodo (4% + $0.40) and Creem (3.5% + $0.30) both handle global tax remittance with no monthly fee. For a global SaaS from day one, the MoR rate is worth the compliance overhead it removes. If you only sell in one country and want the simplest setup, Stripe is fine.
+
+### Can I run a database-backed SaaS entirely on Cloudflare without a VPS?
+
+Yes, for most shapes. Neon's `@neondatabase/serverless` driver works inside Workers; R2 handles file storage; D1 handles edge SQLite; Queues handle async jobs; Krispy runs natively on Workers. The 10ms CPU-per-Worker limit is the real constraint — keep handlers tight and push heavy work to a Queue.
+
+### When does "almost free" stop being free?
+
+Neon's 100 compute-hours is the first limit most products outgrow — consistent daily traffic drains it. Resend's 100 emails/day cap bites during onboarding bursts. PostHog's free tier is the most generous of the bunch. The honest signal: upgrade when managing the free tier's limits costs more of your time than the paid plan costs in money.
+
+---
+
+Krispy is the support layer in this stack: AI answers your visitors, Telegram tags you in when it's a human job, no per-seat pricing. Self-host free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one command on Cloudflare Workers. Or skip the infrastructure with [Krispy Cloud](https://krispy.ai) — $19/month flat.
+
+> 🥐 **Buttr:** à bientôt. the tools are free. the sequence is the work. go ship something. 🥐

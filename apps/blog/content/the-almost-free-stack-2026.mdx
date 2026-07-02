@@ -1,0 +1,146 @@
+---
+title: "The Almost-Free Stack: Build a SaaS in 2026 for ~$0"
+description: "7 real tools with free tiers generous enough to take a SaaS from idea to first paying users at near-zero cost in 2026 — with honest limits and watch-outs."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["free tier", "saas stack", "self-hosted", "cloudflare", "bootstrapped", "open-source"]
+type: "comparison"
+---
+
+![A croissant in a tiny hardhat reviewing blueprints labeled "Free Tier" while a price tag on the wall reads $0.00](/blog/the-almost-free-stack-2026-hero.png)
+
+*Buttr, reviewing the invoices: "cancelled the $800/month stack. replaced it with this. the product still ships."*
+
+> 🥐 **Buttr:** the number of tools trying to charge $49/month per seat for something cloudflare does for free is genuinely impressive. not in a good way.
+
+In 2026, you can host a full SaaS — compute, database, auth, email, analytics, payments, and customer support — for roughly $0 until real revenue arrives. The tools below have free tiers with specific, honest limits that cover a real product at early traction. You rarely need all seven on day one; add each layer when the product requires it.
+
+## 1. Cloudflare — Hosting, compute, and storage
+
+**What it is:** One edge platform for Pages (Git-connected Next.js/Astro hosting), Workers (serverless edge functions), R2 (S3-compatible object storage), D1 (serverless SQLite), and a global CDN with unmetered bandwidth.
+
+**Real free-tier limits:** 100,000 Worker requests per day, 10ms CPU time per request, unlimited Pages bandwidth + 500 builds per month, 10 GB R2 — with **zero egress fees** (the biggest quiet win in the stack).
+
+**Watch:** 100k/day and 10ms CPU are hard caps. Heavy compute or high-traffic apps hit both. Workers Paid starts at $5/month. D1 free tier is 5M row reads per day — enough for early products, tight for anything write-heavy.
+
+**Get started:** `npm create cloudflare@latest` scaffolds a Worker or framework app; connect a GitHub repo in Pages for auto-deploys.
+
+## 2. Neon — Serverless Postgres with branching
+
+**What it is:** Fully-managed serverless Postgres that separates storage from compute, scales to zero when idle, and supports Git-style database branches (copy-on-write, per-PR). Works with Drizzle, Prisma, and Kysely. Acquired by Databricks in 2025.
+
+**Real free-tier limits:** 0.5 GB storage, 100 compute-hours per month, up to 10 branches. Scale-to-zero means idle apps consume near-zero compute hours.
+
+**Watch:** An always-warm app exhausts the 100 compute-hours in about a week. Scale-to-zero adds a ~0.3–1 second cold-start on first query. Use the `@neondatabase/serverless` driver for edge runtimes — plain TCP from a Worker won't reach Neon without it.
+
+**Get started:** Create a project at neon.tech → copy the connection string into `DATABASE_URL`.
+
+## 3. Better Auth — Self-hosted TypeScript auth
+
+**What it is:** Open-source (MIT), framework-agnostic TypeScript auth that runs inside your own app and database. ~28k+ GitHub stars. The Auth.js (NextAuth) maintainers joined in 2025. Works with Next.js, Nuxt, Hono, and any Drizzle/Prisma schema.
+
+**Real free-tier limits:** Free forever, MIT license. **No per-MAU billing** — cost does not scale with your users (contrast Auth0 at $240/month for 1,000 MAU, or Clerk gating features behind paid plans).
+
+**Watch:** You own migrations, patching, and security posture. The project launched in 2024; the API surface is still stabilizing.
+
+**Get started:**
+```bash
+bun add better-auth
+bunx @better-auth/cli generate   # generate the auth schema
+# mount app/api/auth/[...all]/route.ts and set BETTER_AUTH_SECRET
+```
+
+## 4. Infisical — Secrets management
+
+**What it is:** Open-source secrets manager (cloud or self-hosted) for centralizing environment variables across dev, staging, and production. ~27k+ GitHub stars, YC-backed.
+
+**Real free-tier limits:** Cloud free forever — 5 members/machine identities, 3 projects, 3 environments, 10 integrations. Self-host the open-source core for unlimited everything.
+
+**Watch:** Point-in-time recovery and fine-grained RBAC are paid or self-hosted. The 5-identity cloud cap is comfortable for one founder; tight for a small team.
+
+**Get started:**
+```bash
+infisical login && infisical init
+infisical run -- bun dev   # inject secrets at runtime instead of .env
+```
+
+## 5. Resend — Transactional email
+
+**What it is:** Developer-first transactional email API from the team behind React Email. Clean REST API, React Email templates (JSX components), webhooks, 30-day searchable logs, and SPF/DKIM/DMARC setup guides.
+
+**Real free-tier limits:** 3,000 emails per month, 1 custom sending domain, 100 emails per day.
+
+**Watch:** The **100/day cap** is the real constraint — not the monthly total. A welcome email + password reset + onboarding drip can brush the ceiling if multiple users sign up the same hour. Verify a sending domain before going to production; `onboarding@resend.dev` is test-only.
+
+**Get started:** `npm i resend` → create an API key → verify your domain in the dashboard (DNS records, ~5 minutes).
+
+## 6. PostHog — Analytics, feature flags, and error tracking
+
+**What it is:** All-in-one product platform covering analytics, session replay, feature flags, A/B experiments, error tracking, and behavior-triggered email Workflows — in one free tier.
+
+**Real free-tier limits (monthly, cloud):** 1M analytics events, 5,000 session replays, 1M feature-flag requests, 100,000 error events, 10,000 Workflow emails. Self-hosted version is MIT with no event cap.
+
+**Watch:** Email Workflows are in beta on the cloud tier. Autocapture is generous but noisy — tune it early or your event table becomes unreadable. Self-hosted PostHog needs a server; Hetzner's smallest VPS (~€4/month) handles it.
+
+**Get started:** `npm i posthog-js` → `posthog.init('<key>', { api_host: 'https://us.i.posthog.com' })`. Wire up signup → activation → paid as events on day one.
+
+> 🥐 **Buttr:** posthog does analytics AND error tracking AND feature flags AND email. i've been waiting for the catch for six months. there isn't one.
+
+## 7. Krispy — AI live chat with Telegram handoff
+
+**What it is:** [Open-source AI live chat](https://github.com/lonormaly/krispyai) for solo founders. The bot answers visitors from a knowledge base; when it's a human job, it taps you on Telegram. Runs natively on Cloudflare Workers — no VPS, no Postgres needed. You reply from your phone; it appears live in the widget. You [own your conversation data](/own-your-customer-conversations) — no vendor lock-in.
+
+**Real free-tier limits:** Self-host is $0 — Cloudflare Workers free tier covers early traffic; you pay only for your own LLM API calls. [Krispy Cloud](https://krispy.ai) is $19/month flat, no per-seat tax.
+
+**Watch:** Self-hosting means you manage deployments and updates. For a heavier multi-agent inbox with a full dashboard, [Chatwoot (MIT, 22k+ stars)](https://github.com/chatwoot/chatwoot) is the proven alternative — see the [best open-source live chat comparison](/best-open-source-live-chat) for the full breakdown. Chatwoot needs a VPS. [How Krispy compares to Intercom is here](/krispy-vs-intercom).
+
+**Get started:** `git clone https://github.com/lonormaly/krispyai` → `wrangler deploy` → add your Telegram bot token. Full walkthrough at [self-host live chat on Cloudflare](/self-host-live-chat-cloudflare).
+
+> 🥐 **Buttr:** i answer your visitors while you ship features. no shade to the $800/month alternative — they have very nice enterprise decks.
+
+---
+
+## The stack together
+
+Cloudflare (hosting) → Neon (database) → Better Auth (users in your own DB) → Infisical (secrets at runtime) → Resend (transactional email) → PostHog (analytics and errors) → Krispy (support). Add each layer when the product needs it, not all on day one.
+
+## The honest cost
+
+The stack above runs at $0 pre-revenue, with three real caveats:
+
+- **LLM API calls cost money from request one.** If you're building an AI product, there is no free tier worth planning around. Cache aggressively; use smaller models for high-volume calls.
+- **Neon's compute hours run faster than expected.** An always-warm database exhausts 100 hours in about a week. Scale-to-zero is your friend until you have consistent traffic.
+- **Resend's 100 emails/day cap is tighter than it looks.** Plan your daily send budget before a welcome + drip + reset sequence surprises you on signup day.
+
+The honest number: **$0–15/month** before revenue — basically a domain (Cloudflare Registrar, at-cost) plus occasional LLM calls. Bills scale only as your users (and income) do.
+
+---
+
+## FAQ
+
+### Is this stack production-ready, or just for prototypes?
+
+Each tool here runs real production workloads. Cloudflare Workers serves billions of requests per day; Neon is backed by Databricks; Better Auth has 28k+ stars. The free tiers have hard limits — the products themselves are production-grade. You'll outgrow the free tiers well before you outgrow the tools.
+
+### What happens when I exceed the free tier?
+
+Cloudflare Workers Paid starts at $5/month. Neon Pro starts at $19/month. Resend's first paid tier is $20/month for 50k emails. PostHog charges per event above 1M at roughly $0.00031 — most early products won't reach that for months. Krispy Cloud is $19/month flat when you want to drop the self-hosted ops.
+
+### Do I need all seven tools to ship?
+
+No. Day one: Cloudflare, Neon, Better Auth. Add Resend when you need email, PostHog when you need a funnel, Infisical when you have more than two secrets, and support tooling when real users are asking real questions.
+
+### What about payments? Is there an honest near-free MoR option?
+
+Dodo Payments has no monthly fee and takes 4% + $0.40 per transaction as a Merchant of Record, handling VAT and sales tax in 190+ countries. The watch: they hold your revenue, so confirm your payout country is supported before committing. Creem is a newer MoR in the same price range worth comparing.
+
+### How does Krispy compare to Intercom or Crisp for bootstrapped founders?
+
+[Intercom scales steeply with seats and contacts](/krispy-vs-intercom). Crisp paid starts at $25/month per workspace. [Krispy self-hosted is $0](/self-host-live-chat-cloudflare), no per-seat cost ever, running on the same Cloudflare Workers infrastructure you already have. The real tradeoff: Intercom has years of polish. Krispy is built for the range where per-seat pricing hurts before you have revenue to justify it. [The full comparison is here](/krispy-vs-intercom).
+
+---
+
+*Self-host Krispy free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one `wrangler deploy` on Cloudflare Workers. Or skip the ops with [Krispy Cloud](https://krispy.ai) at $19/month flat, no per-seat tax.*
+
+> 🥐 **Buttr:** you built it. you deployed it. you spent $0. now go find your first ten users. à bientôt. 🥐

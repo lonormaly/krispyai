@@ -1,0 +1,163 @@
+---
+title: "Free Developer Tools Worth Switching To in 2026"
+description: "Eight free developer tools in 2026 with real free-tier limits — Cloudflare, Neon, Better Auth, Resend, PostHog, Infisical, Dodo, and Krispy."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["free developer tools", "tech stack", "self-hosted", "open-source", "cloudflare"]
+type: "comparison"
+---
+
+![A croissant in a tiny hard hat examining a stack of tool logos, clipboard in one hand, coffee in the other](/blog/free-developer-tools-2026-hero.png)
+
+*Buttr, auditing the stack: "eight tools. zero monthly subscriptions. one very smug croissant."*
+
+> 🥐 **Buttr:** the free tier situation in 2026 is embarrassing. embarrassing for the paid tiers, i mean.
+
+In 2026, a solo developer can run a real product on a stack that costs nothing until it has real users. Cloudflare, Neon, Better Auth, Resend, PostHog, Infisical, and a Merchant-of-Record processor cover compute, database, auth, email, analytics, secrets, and payments — each with a free tier specific enough to ship on and generous enough to stick with past launch.
+
+The tools below are chosen because the free tier uses specific numbers, not "limited," the paid upgrade is logical when you need it, and the switching cost from what you're using now is low.
+
+---
+
+## 1. Cloudflare — edge compute, storage, and CDN
+
+**What it is:** One platform for hosting, serverless functions, object storage, and a global CDN.
+
+**Key capabilities:** Pages (Git-connected hosting for Next.js/Astro), Workers (serverless edge functions), R2 (S3-compatible storage with zero egress fees), D1 (serverless SQLite), Queues, and free DDoS protection at L3–L7.
+
+**Real free-tier limits:** 100,000 Worker requests per day; unlimited Pages bandwidth and 500 builds/month; 10 GB R2, egress always free. ([Source](https://developers.cloudflare.com/workers/platform/limits/))
+
+**Watch:** The 10 ms CPU cap per Worker invocation is the real wall — not the request count. Heavy processing hits it before you expect.
+
+**Get started:** `npm create cloudflare@latest` scaffolds a Worker or Pages project. Connect GitHub in the Pages dashboard for automatic deploys.
+
+---
+
+## 2. Neon — serverless Postgres with scale-to-zero
+
+**What it is:** Fully managed Postgres that separates storage from compute — autoscales, scales to zero when idle, and supports Git-style database branching for preview environments.
+
+**Key capabilities:** Real Postgres with extensions, copy-on-write branches per pull request, serverless driver for Workers, point-in-time restore, and works with Drizzle/Prisma/Kysely.
+
+**Real free-tier limits:** 0.5 GB storage, 100 compute-hours/month. ([Source](https://neon.tech/pricing))
+
+**Watch:** Scale-to-zero means a 0.3–1 second cold start after idle. An always-warm app burns through 100 compute-hours in roughly one week.
+
+**Get started:** Create a project at neon.tech, copy the connection string into `DATABASE_URL`, install `@neondatabase/serverless` for edge runtimes.
+
+---
+
+## 3. Better Auth — self-hosted TypeScript auth
+
+**What it is:** Open-source (MIT) authentication you run inside your own app and database — email/password, 34+ social providers, passkeys, magic links, 2FA, and team/org plugins. No per-user billing, ever. ([GitHub](https://github.com/better-auth/better-auth))
+
+**Real free-tier limits:** Free forever, MIT license, unlimited monthly active users. Cost scales with your own DB and compute, not user count.
+
+**Watch:** You own the database, migrations, and security posture. The project launched in 2024 — production-ready but younger than Auth0 or Clerk.
+
+**Get started:** `bun add better-auth`, set `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL`, run `bunx @better-auth/cli generate` to scaffold the schema.
+
+---
+
+## 4. Resend — transactional email developers enjoy
+
+**What it is:** Developer-first email API from the React Email team. Clean REST, React components for templates, DKIM/DMARC setup guidance, and 30-day searchable delivery logs.
+
+**Real free-tier limits:** 3,000 emails/month, 1 custom domain, 1,000 contacts, 30-day logs. ([Source](https://resend.com/pricing))
+
+**Watch:** The **100 emails per day** cap is the real constraint — not the 3,000/month number. A password-reset burst or launch-day onboarding sequence can hit it within hours.
+
+**Get started:** `npm i resend`, create an API key, verify a sending domain via DNS, and test from `onboarding@resend.dev` during development.
+
+---
+
+## 5. PostHog — analytics, feature flags, errors, and email in one
+
+**What it is:** All-in-one product platform: web analytics, session replay, feature flags, A/B experiments, error tracking, surveys, and lifecycle email Workflows. Open-source, self-hostable. ([posthog.com](https://posthog.com))
+
+**Real free-tier limits (monthly):** 1M analytics events, 5,000 session replays, 1M feature-flag requests, 100,000 error events, 10,000 Workflow emails. ([Source](https://posthog.com/pricing))
+
+**Watch:** Email Workflows are in beta as of mid-2026. Autocapture is noisy out of the box — budget an hour to tune event filtering before trusting the dashboards.
+
+**Get started:** `npm i posthog-js`, call `posthog.init('<key>', { api_host: 'https://us.i.posthog.com' })`. First funnel event fires in under a minute.
+
+> 🥐 **Buttr:** one free tier covering analytics, feature flags, *and* error tracking. i checked for the catch. there isn't one.
+
+---
+
+## 6. Infisical — open-source secrets management
+
+**What it is:** Open-source secrets manager with a CLI that injects secrets at runtime so `.env` files never live on disk. ~27k GitHub stars, YC-backed. ([infisical.com](https://infisical.com))
+
+**Real free-tier limits:** Cloud free forever — 5 members/machine identities, 3 projects, 3 environments, 10 integrations. Self-host the open-source core for unlimited everything. ([Source](https://infisical.com/pricing))
+
+**Watch:** Versioning, point-in-time recovery, and fine-grained RBAC are on the paid cloud tier (~$18/month) or available when you self-host.
+
+**Get started:** `brew install infisical/get-cli/infisical && infisical login && infisical init`, then replace `bun dev` with `infisical run -- bun dev`.
+
+---
+
+## 7. Dodo Payments or Creem — Merchant-of-Record billing
+
+**What it is:** A Merchant-of-Record processor handles global VAT/sales tax in 190+ countries and pays you out via one entity. No monthly fee — you pay only when you earn.
+
+**Real free-tier limits:** No monthly fee. Dodo starts at **4% + $0.40 per transaction** — cheaper than Lemon Squeezy (5% + $0.50). ([Source](https://dodopayments.com/pricing)). Creem is a lightweight MoR alternative worth comparing for lower-volume products. ([creem.io](https://creem.io))
+
+**Watch:** Dodo is a relatively young company that holds your revenue in custody. Verify payout support and timelines for your country before committing.
+
+**Get started:** Sign up + KYC (usually under one business day), create a product in the dashboard, add payout bank details, then integrate a hosted checkout link or the REST API with a signed fulfillment webhook.
+
+---
+
+## 8. Krispy — open-source AI live chat with Telegram handoff
+
+**What it is:** Open-source AI chat widget that answers your visitors and taps you in via Telegram when it's a human job — no per-seat pricing, no separate inbox subscription, runs on Cloudflare Workers. ([github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai))
+
+**Real free-tier limits:** Self-host on Cloudflare Workers for $0 — the Workers free tier covers the traffic. Krispy Cloud is $19/month flat, no per-seat charge. ([Self-host walkthrough](/self-host-live-chat-cloudflare))
+
+**Watch:** Self-hosting means you own the Workers deployment and configuration. The AI replies consume Workers AI credits — free within the Workers free tier at low volume.
+
+**Get started:** Clone the repo, set your Telegram bot token and AI provider key, `wrangler deploy`. Widget embeds with one `<script>` tag. [How it compares to Intercom is here](/krispy-vs-intercom); [vs. Crisp is here](/krispy-vs-crisp).
+
+> 🥐 **Buttr:** i answer your visitors. you get a telegram ping for the hard ones. you reply from your phone. that's it.
+
+---
+
+## The stack together
+
+**Compute** (Cloudflare) → **database** (Neon) → **auth** (Better Auth) → **email** (Resend) → **analytics + flags + errors** (PostHog) → **secrets** (Infisical) → **payments** (Dodo) → **support** (Krispy).
+
+Pre-revenue this runs at **$0–$20/month** — basically a domain plus AI API usage if your product calls Claude or OpenAI. The main variable costs that appear first: Neon compute once you need an always-warm DB ($19/month Launch plan), Resend once your onboarding sequence bursts past 100/day ($20/month Pro), and AI tokens from request one. Everything else stays free past several thousand monthly users.
+
+You can [own your customer conversations](/own-your-customer-conversations), your auth, your secrets, and your analytics with no subscription in sight. The tools that used to cost $200/month before your first paying user are gone in 2026.
+
+---
+
+## FAQ
+
+### Are these free tiers real, or marketing?
+
+The limits here come from each tool's pricing page as of July 2026. Neon's 100 compute-hour/month cap is real and runs out faster than it sounds for an always-warm app. Resend's 100 emails/day cap catches people more often than the 3,000/month number. PostHog's 1M events/month is genuinely generous for early-stage traction.
+
+### What's the catch with Better Auth vs. Clerk or Auth0?
+
+You own the database and security posture — auth tables live in your own Postgres with no per-MAU vendor cost. For one product and one team that's a feature. For enterprise SSO across many apps with SCIM provisioning, a managed provider earns its fee.
+
+### Why Dodo or Creem over Stripe?
+
+Stripe is not a Merchant of Record — you're the legal seller, responsible for VAT and sales tax in every country. Dodo and Creem handle that compliance on your behalf. The trade is roughly 1.5–2% higher fees for complete global tax coverage. If you only sell in one jurisdiction and you've handled your registration, Stripe is simpler and cheaper per transaction.
+
+### How does Krispy fit if I already have a Chatwoot inbox?
+
+Different problems. Chatwoot is a full multi-agent shared inbox — right for teams routing tickets across several people. Krispy is AI-first and Telegram-native — right for a solo founder or small team where support happens on a phone. [The comparison is here](/best-open-source-live-chat). If you have more than three people handling support, Chatwoot's agent routing is worth the VPS.
+
+### When does this stack stop being enough?
+
+Around 5–10 team members and $10–50K MRR. Multiple people sharing one Telegram notification stops being fun; the Neon free tier fills up; self-hosted PostHog needs maintenance. The free tiers are designed for "idea to first paying users" — which is exactly when they matter most.
+
+---
+
+Self-host Krispy free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one `wrangler deploy` on Cloudflare Workers. Or skip the config with [Krispy Cloud](https://krispy.ai), $19/month flat, no per-seat invoice ever.
+
+> 🥐 **Buttr:** à bientôt. go ship something. 🥐

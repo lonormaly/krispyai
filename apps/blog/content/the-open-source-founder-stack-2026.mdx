@@ -1,0 +1,166 @@
+---
+title: "The Open-Source Founder Stack (2026)"
+description: "Six open-source or free tools that cover auth, database, payments, email, analytics, and live chat for a real product — with their actual free-tier numbers."
+date: "2026-07-03"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+tags: ["open-source", "founder stack", "self-hosted", "free tier", "bootstrapped"]
+type: "comparison"
+---
+
+![A croissant in a tiny beret standing at a whiteboard with six tool logos circled in red and forty-one crossed out](/blog/the-open-source-founder-stack-2026-hero.png)
+
+*Buttr, wrapping up the audit: "started with 47 tabs. ended with six tools. closed 41 tabs. best productivity session of 2026."*
+
+> 🥐 **Buttr:** someone will tell you to add auth0, sentry, and intercom "just to start." that someone has never seen a $400 invoice after month two.
+
+In 2026, a solo founder can run a real product — auth, database, transactional email, analytics, payments, and customer support — on open-source or near-free tools for under $20/month before revenue. Every tool below has a genuine free tier, a clear upgrade path, and no per-seat pricing that bites you later.
+
+## 1. Auth — Better Auth
+
+**What it is:** An open-source (MIT), TypeScript auth library that runs inside your own app and writes users into your own database. No managed service, no MAU bill.
+
+Better Auth covers email/password, 34+ social OAuth providers, magic links, passkeys, OTP, 2FA, and API keys. Plugins add organizations, SSO/SAML, and SCIM. Because it's a library, the cost never scales with user count — Auth0 charges for monthly active users; Better Auth doesn't know what a monthly active user is.
+
+**Real free-tier limits:** No limits. MIT-licensed software; zero per-MAU charge, forever.
+
+**Watch:** You own the schema, migrations, and security posture. It's a young project (2024); the Auth.js team joined in 2025 and is moving fast, but the ecosystem is smaller than NextAuth's.
+
+**Get started:**
+```bash
+bun add better-auth
+bunx @better-auth/cli generate   # generate the auth schema
+# set BETTER_AUTH_SECRET + BETTER_AUTH_URL
+# mount app/api/auth/[...all]/route.ts
+```
+
+## 2. Database — Neon
+
+**What it is:** Fully managed serverless Postgres with scale-to-zero, Git-style branching, and an edge-compatible driver that works on Cloudflare Workers.
+
+Neon is real Postgres with extensions — not a compatible substitute. Instant copy-on-write branches give you per-PR preview databases: branch for staging, branch for that risky migration, delete it when done. Works with Drizzle, Prisma, and Kysely without adapters.
+
+**Real free-tier limits:** 0.5 GB storage, 100 compute-hours per month, ~10 branches per project, 6-hour point-in-time restore. An app that idles most of the day stays well under the compute cap.
+
+**Watch:** Scale-to-zero adds 0.3–1 second cold start on the first query after idle. An always-on background worker or hot API will burn 100 compute-hours in about a week. Budget the $19/month Launch plan if that's your shape.
+
+**Get started:**
+```bash
+# create a project at neon.tech → copy DATABASE_URL
+npm i @neondatabase/serverless   # edge/Workers runtime driver
+# create a `dev` branch for migrations; never migrate against `main` directly
+```
+
+## 3. Payments — Creem
+
+**What it is:** A developer-first Merchant-of-Record (MoR) billing platform. Creem is the legal seller on every transaction, remitting VAT, GST, and sales tax across 190+ countries. No tax lawyer required.
+
+Creem handles subscriptions, one-time payments, usage billing, license keys, hosted checkout, and webhooks. No monthly platform fee — you pay only when you earn.
+
+**Real free-tier limits:** No monthly fee. **3.9% + $0.30 per transaction.** Revenue below a few thousand dollars per month stays in the noise budget.
+
+**Watch:** Creem is a newer MoR (alongside Dodo and Polar). MoR providers hold your revenue between collection and payout — vet their payout support for your country before wiring in your business logic.
+
+**Get started:** Sign up → KYC (usually under 24 hours) → create a product in the dashboard → embed a hosted checkout link or call the REST API → webhook on `payment.succeeded` to flip the user's plan in your database.
+
+> 🥐 **Buttr:** Creem, Dodo, Polar — all "not Paddle, not Lemon Squeezy." all cheaper. pick one; they're basically the same until you hit a payout edge case. the edge case is your country.
+
+## 4. Email — Resend
+
+**What it is:** Developer-first transactional email from the team behind React Email. Clean REST API, React-component templates, deliverability defaults that work, and 30-day searchable logs.
+
+Resend covers transactional sends (welcome, receipts, resets), broadcast emails, basic automations, and audience lists. Templates are React components with hot reload — you write them in your editor and ship them with the rest of your code.
+
+**Real free-tier limits:** 3,000 emails per month, 1 custom sending domain, 1,000 audience contacts, 30-day logs. The real limit: **100 emails per day** hard cap. A launch burst of 500 emails hits it before you touch the monthly ceiling.
+
+**Watch:** The 100/day cap surprises people. Stage sends in batches or budget for the $20/month Pro plan at any bursty moment. A verified sending domain is required for production.
+
+**Get started:**
+```bash
+npm i resend
+# get an API key; add DNS records to verify your domain
+# import { Resend } from 'resend'; await resend.emails.send({ from, to, subject, react })
+```
+
+## 5. Analytics — PostHog
+
+**What it is:** One platform for product analytics, session replay, feature flags, A/B experiments, error tracking, and lifecycle email. One SDK, one dashboard, one integration instead of four.
+
+The part most founders miss: PostHog does error tracking — which means you can skip a separate Sentry at launch entirely. Funnels, retention charts, SQL-against-your-events, real session recordings, gradual rollouts, and behavior-triggered email are all in one place.
+
+**Real free-tier limits (per month):** 1M analytics events, 5,000 session replays, 1M feature-flag requests, 100,000 error events, 10,000 Workflow emails. The self-hosted MIT version has no event cap.
+
+**Watch:** Autocapture is powerful and noisy until you add a property allowlist. Session replays with `maskAllInputs` off will record passwords — enable masking before shipping to production.
+
+**Get started:**
+```bash
+npm i posthog-js
+# posthog.init('<project_key>', { api_host: 'https://us.i.posthog.com' })
+# posthog.capture('signup_completed', { plan: 'free' })
+```
+
+> 🥐 **Buttr:** 1M events. session replay. feature flags. error tracking. free. i keep looking for the asterisk. the asterisk is "autocapture is noisy." that's the whole thing.
+
+## 6. Live Chat — Krispy (and its open-source siblings)
+
+**What it is:** An open-source AI live chat widget that answers visitors automatically and taps a human in on Telegram when the question needs a real person.
+
+[The open-source live chat field](/best-open-source-live-chat) has two honest options in 2026. **Chatwoot** (MIT, 22k+ GitHub stars) is the full multi-agent inbox with routing and assignment — it needs a VPS. **Krispy** (MIT) runs entirely on Cloudflare Workers with no VPS, no Postgres, AI-first with Telegram handoff. [How it compares to Intercom](/krispy-vs-intercom) mostly comes down to whether you'd rather pay $99/month or $0. [The self-host walkthrough on Cloudflare is here](/self-host-live-chat-cloudflare).
+
+For a solo founder: you reply in Telegram and it appears live in the widget. No per-seat invoice when a co-founder joins. [Why owning your customer conversations matters long-term](/own-your-customer-conversations) is worth reading before you commit either way.
+
+**Real free-tier limits:** Self-hosted Krispy has no conversation cap. Krispy Cloud is $19/month flat — no per-seat, no per-conversation metering.
+
+**Watch:** The AI layer requires an LLM API key (OpenAI or Anthropic), billed pay-per-token. On a chatty widget with a verbose system prompt, this accumulates faster than you'd expect. Keep the system prompt tight.
+
+**Get started:** `npx create-krispy-app` — or deploy from [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai). One Cloudflare Workers deploy, one Telegram bot token.
+
+---
+
+## The stack together
+
+Better Auth → Neon → Creem → Resend → PostHog → Krispy. Auth and database first. Payments when you're ready to charge. Email for the first transactional flow. Analytics from day one — you want the data before you need it. Live chat when real visitors start asking questions. Wire each layer in as the product demands it; you don't need all six before launch.
+
+## The honest cost
+
+| Layer | Tool | Free tier | When you pay |
+|---|---|---|---|
+| Auth | Better Auth | Unlimited (library) | Never |
+| Database | Neon | 0.5 GB / 100 compute-hrs/mo | $19/mo when compute fills |
+| Payments | Creem | No monthly fee | 3.9% + $0.30/transaction |
+| Email | Resend | 3,000/mo · 100/day | $20/mo Pro at any burst |
+| Analytics | PostHog | 1M events/mo | $0 self-host; $20+ managed |
+| Live chat | Krispy | $0 self-hosted | $19/mo Cloud (skip the infra) |
+| **Total** | | **$0** | **~$20–40/mo** |
+
+A product at early traction, a few hundred users, some transactional email, and one founder on Telegram runs this for under $20/month. The bill only grows when your users and revenue do.
+
+---
+
+## FAQ
+
+### What does "open-source" actually mean for this stack?
+
+Better Auth and Krispy are MIT-licensed — read every line, fork them, run them without a vendor. PostHog is MIT for self-hosted; the managed cloud uses a different license but your data is always portable. Resend and Neon are managed services with open-source SDKs; Creem is closed-source MoR. The practical definition here: no lock-in, low switching cost, and you own your data everywhere that matters.
+
+### How does Better Auth compare to Clerk or Auth0 on cost?
+
+Clerk starts at $25/month for up to 10,000 MAU; Auth0 similar. Better Auth costs nothing regardless of MAU — it's a library in your codebase. The tradeoff: you manage the schema, migrations, and security posture yourself. At 0–50K users, Better Auth is almost always cheaper and less locked-in. At 100K+ users, the time cost of managing it yourself starts to compete with the per-MAU fee.
+
+### Is Neon's free tier enough to launch on?
+
+For most early products, yes. 0.5 GB fits several thousand rows of typical SaaS data; 100 compute-hours/month covers an app that idles at night. The cold start (0.3–1 second after idle) is the main gotcha — a latency-sensitive API or always-on worker will burn compute hours fast. If that's your shape, price the $19/month Launch plan into your budget from day one.
+
+### Can I really run support from Telegram?
+
+Yes. Krispy routes visitor messages to a Telegram bot; you reply and it appears in the widget in real time. The AI handles the 60–70% of questions with known answers, so what reaches Telegram is already filtered. When you have two or more people handling support and need routing and assignment, look at [multi-agent options](/best-open-source-live-chat) or migrate to Chatwoot's team inbox.
+
+### What about secrets management?
+
+Add Infisical. The managed cloud free tier covers 5 machine identities and 3 projects — enough for a solo product. Self-hosted open-source is unlimited. It injects secrets at runtime (`infisical run -- bun dev`) so there's no `.env` on disk and no secrets in git history. If you're already on Cloudflare Workers, `wrangler secret put` is also solid and free.
+
+---
+
+Krispy is the open-source live chat layer in this stack: AI answers your visitors, Telegram tags you in when it's a human job, no per-seat pricing ever. Self-host free at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) — one Cloudflare Workers deploy. Or skip the infra with [Krispy Cloud](https://krispy.ai) at $19/month flat.
+
+> 🥐 **Buttr:** à bientôt. the stack is ready. your excuse isn't. 🥐
