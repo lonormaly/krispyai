@@ -1,35 +1,42 @@
 ---
-title: "The best open-source live chat alternatives in 2026"
-description: "The honest rundown of open-source live chat tools in 2026 — what each one costs, who owns the data, and when Krispy fits better than the rest."
+title: "Best Open-Source Live Chat Tools in 2026"
+description: "The 6 best open-source live chat tools in 2026 — MIT license, self-host cost, built-in AI, and Telegram handoff compared honestly."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "comparison"
 tags: ["live-chat", "open-source", "self-hosted", "comparison", "customer-support"]
 ---
 
-Most teams land on a paid live chat platform the same way: a free trial that became a habit, a Slack message that went "what is this $340 invoice?", and a slow realization that three years of customer conversations sit in a database they don't control.
+![Six open-source live chat tools lined up side by side, a croissant taking notes at the end](/blog/best-open-source-live-chat-hero.png)
 
-That's the real reason to look at open-source live chat in 2026. Not ideology. Just: who owns the data, who controls the cost, and what happens when you want to leave.
+*Buttr, somewhere in a Cloudflare datacenter, auditing per-seat pricing.*
 
-## What "open-source" actually means here
+> 🥐 **Buttr:** i read the $340 Intercom invoice too. that's what started all this.
+
+The best free, open-source live chat tools in 2026 are **Krispy** and **Chatwoot** — both MIT-licensed, genuinely self-hostable, and free at zero seats. Chatwoot is the mature multi-channel inbox. Krispy is the edge-native option with AI replies and Telegram handoff built in, no extra API keys required.
+
+Most teams end up on a paid chat platform the same way: a free trial that became a habit, a Slack message that went "what is this $340 invoice?", and a slow realization that three years of customer conversations live in a database they don't control. That's the real reason to look at open-source live chat in 2026. Not ideology — just: who owns the data, who controls the cost, and what happens when you want to leave.
+
+## What does "open source" actually mean for live chat?
 
 Worth a quick calibration before the list. Some products call themselves open source but publish source-available code with licenses that ban commercial self-hosting. Others are genuinely MIT. A few are free-tier SaaS wearing an open-source hat.
 
-**Chatwoot** is the benchmark — genuinely MIT-licensed, multi-channel, proven in production across thousands of installs. No AI built-in; you'd wire your own. If you're weighing the two side by side, [we've done that comparison in detail](/krispy-vs-chatwoot).
+**Chatwoot** is the benchmark — genuinely MIT-licensed, multi-channel, and proven in production across thousands of installs. With over 22,000 GitHub stars as of mid-2026 ([github.com/chatwoot/chatwoot](https://github.com/chatwoot/chatwoot)), it's the most-referenced open-source chat project by a wide margin. No AI built-in; you'd wire your own provider. If you're weighing the two side by side, [we compared Krispy and Chatwoot feature by feature](/krispy-vs-chatwoot).
 
-**Rocket.Chat** is the enterprise sibling: open-source community edition, rich feature set, but it wants a real server, MongoDB, and Redis. Better suited to a support team of 10 than a solo founder shipping at midnight.
+**Rocket.Chat** is the enterprise sibling: open-source community edition, rich feature set, but it needs a real server, MongoDB, and Redis. Better suited to a support team of 10 than a solo founder shipping at midnight.
 
 **Papercups** was a clean Elixir-based option that never quite reached escape velocity. The hosted cloud shut down; the self-hosted project is quiet. Worth a fork if you love Elixir, otherwise skip it.
 
-**Tawk.to** is free SaaS, not open source — you can't self-host it or read the code. [The trade-off is business-model shaped](/krispy-vs-tawk): they give you the widget for free and monetize through agent outsourcing and upsells. Your conversation history lives on their servers.
+**Tawk.to** is free SaaS, not open source — you can't self-host it or audit the code. [The tradeoff is business-model shaped](/krispy-vs-tawk): they give you the widget for free and monetize through agent outsourcing. Your conversation history lives on their infrastructure.
 
-**Crisp** is similarly not open source. The Community plan is free and partially self-hostable but strips most of the features that make Crisp worth using. Paid plans run $25–$95/seat/month. [We compared them directly here](/krispy-vs-crisp).
+**Crisp** is similarly not open source. The Community plan is partially self-hostable but strips most of the features that justify using Crisp in the first place. Paid plans run $25–$95/seat/month. [We compared them directly here](/krispy-vs-crisp).
 
-**Intercom** is fully closed, $74–$139/seat/month for plans with real AI. Powerful, obviously. [The cost math compounds fast](/krispy-vs-intercom) once you have more than a couple of seats.
+**Intercom** is fully closed. Plans with real AI (Fin) run $74–$139/seat/month, per [Intercom's public pricing page](https://www.intercom.com/pricing). Powerful, obviously. [The seat-count math compounds fast](/krispy-vs-intercom) once you have more than two agents.
 
-## The honest comparison
+## How do these tools compare across the things that matter?
 
-| Tool | Open source? | Self-hostable | AI built-in | Human handoff to your phone | Per-seat cost |
+| Tool | Open source? | Self-hostable | AI built-in | Human handoff to phone | Per-seat cost |
 |---|---|---|---|---|---|
 | **Krispy** | Yes (MIT) | Yes — Cloudflare Workers | Yes (Workers AI, no key) | Yes — Telegram | $0 self-host |
 | Chatwoot | Yes (MIT) | Yes — any VPS | No (bring your own) | Mobile app | $0 self-host / $19+ cloud |
@@ -38,29 +45,44 @@ Worth a quick calibration before the list. Some products call themselves open so
 | Intercom | No | No | Yes (Fin, GPT-based) | Mobile app | $74–$139/seat |
 | Tawk.to | No | No | Beta | Mobile app | $0 (data trade-off) |
 
-## Where Krispy fits
+**Who each is best for:**
+- **Krispy** — solo founders and small teams already on Cloudflare who want AI and Telegram handoff without a second invoice.
+- **Chatwoot** — teams of 3–10 who need multi-agent routing, mature integrations, and a proven production record.
+- **Rocket.Chat** — enterprises that need SSO, compliance, and are willing to run the full stack.
+- **Crisp / Intercom** — teams with budget who want a polished hosted product; count your seats before committing.
+- **Tawk.to** — zero-ops widget, with the understanding that your conversation data isn't yours.
 
-Krispy is the newcomer — but it's the only one built natively for Cloudflare Workers. That has a concrete implication: it runs at the edge, no server to provision. The deploy is one command:
+> 🥐 **Buttr:** the "data trade-off" row is doing a lot of work. just saying.
+
+## How does Krispy's Telegram handoff actually work?
+
+When a visitor needs a real person, Krispy pings your Telegram — not a mobile app to learn, not an email digest with a 20-minute lag. You reply in Telegram, and the visitor sees it live in the widget. It's the only tool in this list where your "inbox" is a chat app you already have open.
+
+The deploy is one command on Cloudflare Workers:
 
 ```bash
 npx wrangler deploy
 ```
 
-AI replies come from Cloudflare Workers AI. No OpenAI key, no separate AI invoice sitting next to the chat invoice. It just works from day one, which matters when you're still figuring out whether you need live chat at all.
+AI replies come from Cloudflare Workers AI, which includes 10,000 free inference requests per day on the free plan ([Cloudflare Workers AI pricing docs](https://developers.cloudflare.com/workers-ai/platform/pricing/)). No OpenAI key, no separate AI invoice — it works from day one, which matters when you're still figuring out whether you need live chat at all.
 
-The other thing Krispy does differently is the human handoff channel. When a visitor needs a real person, Krispy pings your Telegram — not a mobile app to learn, not an email digest with a 20-minute lag. You reply in Telegram, the visitor sees it on the widget. [We wrote about the reasoning behind that choice](/own-your-customer-conversations) if you want the full argument.
+[We wrote about the reasoning behind the Telegram-first handoff](/own-your-customer-conversations) if you want the full argument.
 
-The honest ceiling: Krispy is newer. If you need a proven multi-agent inbox with SLA timers, CSAT scoring, and integrations into 30 CRMs, Chatwoot is the safer bet today. If you want the smallest possible stack, edge-native AI, and Telegram as your inbox, Krispy is the right tool.
+**The honest ceiling:** Krispy is newer. If you need a proven multi-agent inbox with SLA timers, CSAT scoring, and integrations into 30 CRMs, Chatwoot is the safer bet today. If you want the smallest possible stack, edge-native AI, and Telegram as your inbox, Krispy is the right tool.
 
-## Which one to pick
+![Buttr reading the comparison table, nodding slowly](/blog/buttr-reading.png)
+
+## Which open-source live chat tool should you pick?
 
 - **Solo founder, Cloudflare already in the stack** → Krispy
 - **Team of 3–10, need multi-agent routing and mature integrations** → Chatwoot
-- **Enterprise, need SSO and compliance features** → Rocket.Chat Community
-- **Want a free widget with zero ops, fine with the trade-off** → Tawk.to
-- **Budget for it, want a polished product** → Intercom or Crisp — just know your seat count before you commit
+- **Enterprise, need SSO and compliance** → Rocket.Chat Community
+- **Want a free widget with zero ops, fine with the data trade-off** → Tawk.to
+- **Budget for it, want a polished hosted product** → Intercom or Crisp — just know your seat count first
 
-Self-host Krispy and you'll have a working chat widget with AI and Telegram handoff in the time it takes to finish a coffee 🥐. If you'd rather skip the infra entirely, [Krispy Cloud](https://krispy.ai) has a free tier — no card required, same AI and Telegram handoff, just hosted. And if you want to see how it's built or contribute, [star the repo on GitHub](https://github.com/krispyai/krispy) — it's the fastest way to follow along as we ship.
+Self-host Krispy and you'll have a working chat widget with AI and Telegram handoff in under 15 minutes. If you'd rather skip the infrastructure entirely, [Krispy Cloud](https://krispy.ai) runs a 14-day free trial at $19/mo flat — no per-seat fees, same AI and Telegram handoff, just hosted. Either way, [star the repo on GitHub](https://github.com/lonormaly/krispyai) to follow along as we ship.
+
+> 🥐 **Buttr:** à bientôt. the free tier awaits.
 
 ---
 
@@ -68,20 +90,20 @@ Self-host Krispy and you'll have a working chat widget with AI and Telegram hand
 
 ### What is the best free open-source live chat in 2026?
 
-Chatwoot and Krispy are the two strongest free, genuinely MIT-licensed options. Chatwoot is more mature with broader channel integrations. Krispy is lighter, edge-native, and includes AI replies and Telegram handoff without any additional setup. Both are free to self-host with no per-seat fees.
+Chatwoot and Krispy are the two strongest free, genuinely MIT-licensed options in 2026. Chatwoot is more mature with broader channel integrations and over 22,000 GitHub stars. Krispy is lighter, edge-native, and includes AI replies and Telegram handoff without any additional API keys or setup. Both are free to self-host with no per-seat fees.
 
 ### Is Tawk.to actually open source?
 
-No. Tawk.to is free SaaS — you can't self-host it or audit the source. The business model is agent outsourcing: the widget is free because they sell human support agents as an upsell, and your conversation data lives on their infrastructure.
+No. Tawk.to is free SaaS — you can't self-host it or audit the source code. The business model is agent outsourcing: the widget is free because they sell human support agents as an upsell, and your conversation history lives on their infrastructure. If data ownership matters, Chatwoot or Krispy are the cleaner alternatives.
 
 ### Can I self-host Intercom or Crisp?
 
-Intercom is closed-source with no self-hosting option. Crisp has a Community edition you can self-host, but it removes most of the features that justify using Crisp in the first place. If full-featured self-hosting matters, Chatwoot or Krispy are cleaner choices.
+Intercom is closed-source with no self-hosting option. Crisp has a Community edition you can self-host, but it removes most of the features that make Crisp worth using — including advanced automation and integrations. If full-featured self-hosting matters to you, Chatwoot or Krispy are the cleaner choices.
 
 ### How hard is it to deploy Krispy on Cloudflare Workers?
 
-Straightforward if you're comfortable with a terminal. Clone the repo, set your Telegram bot token and chat ID as environment variables, run `npx wrangler deploy`. Workers AI is wired in automatically — no external API key needed. The README has the full walkthrough.
+Straightforward if you're comfortable with a terminal. Clone the repo, set your Telegram bot token and chat ID as environment variables, then run `npx wrangler deploy`. Cloudflare Workers AI is wired in automatically — no external API key needed, and the free tier covers 10,000 requests per day ([Cloudflare Workers AI pricing docs](https://developers.cloudflare.com/workers-ai/platform/pricing/)). The README has the full walkthrough.
 
 ### Does open-source live chat support AI replies in 2026?
 
-Chatwoot and Rocket.Chat support AI via plugins or webhooks — you bring your own provider and key. Krispy has AI replies built in via Cloudflare Workers AI, so there's no separate key or billing to set up. Intercom's Fin AI is the most polished paid option, but it's priced accordingly.
+Chatwoot and Rocket.Chat support AI via plugins or webhooks — you bring your own provider and key. Krispy has AI replies built in via Cloudflare Workers AI, so there's no separate key or billing to configure. Intercom's Fin AI is the most polished paid option, but at $74–$139/seat/month it's priced accordingly.

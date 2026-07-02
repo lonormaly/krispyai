@@ -1,76 +1,90 @@
 ---
 title: "Krispy vs Chatwoot: which open-source live chat fits you?"
-description: "Both are open-source and self-hostable. One runs on Rails + Redis + a VPS. The other deploys to Cloudflare in one command. Here's the honest breakdown."
+description: "Krispy and Chatwoot are both MIT-licensed. Chatwoot self-hosting costs $60–120/mo in infra. Krispy runs on Cloudflare Workers for $0, with AI built in."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
 tags: ["chatwoot", "open-source", "self-host", "cloudflare", "comparison"]
+type: "comparison"
 ---
 
-Both tools let you own your chat data. The real question is what you want to own alongside it: a mature multi-channel support platform backed by a full Rails stack, or a leaner AI-first widget that runs on Cloudflare and pings you on Telegram when a visitor needs a human. That's the actual fork in the road.
+![Krispy croissant mascot faces off against Chatwoot's robot on a laptop screen](/blog/krispy-vs-chatwoot-hero.png)
 
-## What Chatwoot is good at
+*Buttr studied the competition, counted the Sidekiq workers, and quietly deployed to the edge.*
 
-Chatwoot is a real product and it earns its reputation. You get a shared team inbox, email, WhatsApp, Facebook Messenger, Twitter DMs, and API channels — all routing into one web dashboard your whole support team logs into. Labels, canned responses, SLAs, CSAT surveys. It's been in production for years and it shows.
+> 🥐 **Buttr:** no shade — Chatwoot's legit. i'm just free, serverless, and already answering the chat. you do you.
 
-If you're running a five-person support team that lives in a browser tab and handles volume across multiple channels, Chatwoot is a serious option. The self-hosted MIT version is genuinely free and the community is active.
+Krispy and Chatwoot are both MIT-licensed, open-source live chat tools you can self-host without paying a vendor. The meaningful difference is the stack: Chatwoot needs Rails, Postgres, Redis, and Sidekiq on a VPS; Krispy deploys to Cloudflare Workers in one command and runs AI-first by default, pinging you on Telegram when a visitor needs a human.
 
-## What Chatwoot costs to run
+## What is Chatwoot, and who is it for?
 
-Here's where the comparison gets concrete. Chatwoot self-hosting isn't just a binary — it's a stack:
+Chatwoot is a mature, multi-channel support platform with a shared team inbox that routes email, WhatsApp, Facebook Messenger, Twitter DMs, and web chat into a single web dashboard. Labels, canned responses, SLAs, CSAT surveys — the full support-team toolkit. It has been in production for years and the community is active. The self-hosted MIT version is genuinely free.
 
-- A Ruby on Rails app
+If you're running a five-person support team that lives in a browser tab and handles volume across multiple channels, Chatwoot is a serious option. The breadth is real, and Krispy doesn't come close on that dimension.
+
+## What does Chatwoot cost to self-host in 2026?
+
+Self-hosting Chatwoot means running a full application stack:
+
+- Ruby on Rails app
 - Sidekiq workers (background jobs)
 - Redis
 - PostgreSQL
 
-A production-grade setup on a single $40/mo VPS is workable for light traffic, but you'll want managed Postgres ($15–25/mo) and at least a second node for reliability as you grow. Realistically, you're looking at **$60–120/mo** before any cloud support tier. Chatwoot Cloud starts at $19 per seat per month — five agents is $95/mo.
+[Chatwoot's own deployment requirements](https://www.chatwoot.com/docs/self-hosted/deployment/requirements) specify a minimum of **2 GB RAM** to run the stack comfortably. A production-grade setup on a $40/mo VPS is workable for light traffic, but add managed Postgres ($15–25/mo) and headroom for growth and you're realistically at **$60–120/mo in infrastructure** before any support tier. Chatwoot Cloud starts at **$19 per seat per month** — five agents is $95/mo (see the [Chatwoot pricing page](https://www.chatwoot.com/pricing)).
 
-Krispy self-hosted on Cloudflare Workers costs $0. The free tier covers most small and mid-sized sites comfortably, and Workers AI (the built-in inference that powers Krispy's bot) is included. You deploy once:
+Krispy self-hosted on Cloudflare Workers costs $0. [Cloudflare's free tier](https://developers.cloudflare.com/workers/platform/pricing/) includes 100,000 Worker requests per day and Workers AI inference at no additional charge. You deploy once:
 
 ```bash
 npx wrangler deploy
 ```
 
-That's it. No server to patch, no Redis to babysit, no Sidekiq queue to monitor.
+No server to patch. No Redis to babysit. No Sidekiq queue to monitor.
 
-We go deeper on the infrastructure side in [Self-host live chat on Cloudflare for free](/self-host-live-chat-cloudflare) if you want the full walkthrough.
+> 🥐 **Buttr:** $60–120 a month for a chat widget is a lot of croissants. just saying.
 
-## The AI and handoff story
+For the full infrastructure walkthrough, see [how to self-host live chat on Cloudflare Workers for free](/self-host-live-chat-cloudflare).
 
-Chatwoot doesn't ship with AI. There are community integrations and webhooks you can wire to OpenAI yourself, but it's not built in — you're assembling the pieces.
+## Does Krispy have AI built in, and how does the Telegram handoff work?
 
-Krispy's bot runs on Cloudflare Workers AI, which means no OpenAI API key, no usage bill from a third-party model provider, and no cold starts in a Lambda somewhere. The model runs at the edge, collocated with your Worker. When the bot hits its limit — a question it can't answer, a visitor who explicitly asks for a human — it hands off to Telegram. Your phone buzzes, you pick up the conversation, you close the ticket. That handoff is native, not a webhook you wire yourself.
+Chatwoot does not ship with AI. There are community integrations and webhook patterns you can wire to OpenAI yourself, but it is not built in — you are assembling pieces.
 
-This is a narrower feature surface than Chatwoot's shared inbox. It's designed for a solo founder or a small team where one person is the support function. If you need five agents triaging queues in a web dashboard, Chatwoot is the right pick.
+Krispy's bot runs on Cloudflare Workers AI — no OpenAI API key, no third-party model bill, no cold-start Lambda. The model runs at the edge, collocated with your Worker. When the bot hits its limit — a question it cannot answer, or a visitor who explicitly asks for a person — it sends a Telegram notification. You reply from your phone and the response shows up live in the chat widget. That handoff is native, not a webhook you wire yourself.
 
-## Side-by-side
+This is a narrower feature surface than Chatwoot's shared inbox. It is designed for a solo founder or a small team where one person is the support function. If you need five agents triaging queues in a web dashboard, Chatwoot is the right pick.
+
+## Krispy vs Chatwoot: side-by-side comparison
 
 | | **Krispy** | **Chatwoot** |
 |---|---|---|
 | License | MIT | MIT |
 | Self-host infrastructure | Cloudflare Workers (serverless) | Rails + Postgres + Redis + Sidekiq |
-| AI assistant built in | Yes (Workers AI, no key) | No — bring your own integration |
-| Human handoff to your phone | Telegram native | Web inbox; mobile app available |
-| Multi-channel (email, social) | No — web chat only | Yes |
-| Per-seat cloud cost | Free tier on Krispy Cloud | $19/seat/mo |
-| Self-hosted cost | $0 | ~$60–120/mo infra |
+| AI assistant built in | Yes — Workers AI, no API key needed | No — wire your own integration |
+| Human handoff to your phone | Telegram, native | Web inbox; mobile app available |
+| Multi-channel (email, social DMs) | No — web chat only | Yes |
+| Per-seat cloud cost | Free tier on Krispy Cloud | $19/seat/month |
+| Self-hosted infra cost | $0 | ~$60–120/month |
+| Minimum RAM to self-host | None (serverless) | 2 GB RAM |
 
-Neither tool is universally better. Chatwoot wins on channel breadth and team features. Krispy wins on operational simplicity, built-in AI, and running cost.
+**Chatwoot is best for:** A dedicated support team handling volume across email, WhatsApp, and social — comfortable running a backend and willing to pay for the infrastructure or the cloud seats.
 
-## When to pick Chatwoot
+**Krispy is best for:** A solo founder or small team that wants AI handling first contact automatically, no server to manage, and a Telegram ping when a conversation needs a human.
 
-Pick Chatwoot if you need to centralize email + social + chat into one team inbox, your support load justifies dedicated agents, and you're comfortable running a small backend. It's a proven platform and the free self-hosted tier is genuinely usable.
+## When should you pick Chatwoot?
 
-## When to pick Krispy 🥐
+Pick Chatwoot when you need to centralize email, social, and chat into one team inbox, your support load justifies dedicated agents, and you are comfortable running a small backend. The self-hosted MIT version is genuinely usable and the community is large. The multi-channel breadth is a real advantage Krispy cannot match.
 
-Pick Krispy if you want AI handling first contact automatically, you don't want to manage a server, and you or a small team are the humans behind the chat. The whole pitch is: let the bot cook until it can't, then Telegram you. It's also a fair comparison point if you're evaluating [Krispy vs Intercom](/krispy-vs-intercom) — the gap in cost and lock-in is even wider there.
+## When should you pick Krispy?
 
-If you want more context on how Krispy fits against the full landscape, [the best open-source live chat alternatives in 2026](/best-open-source-live-chat) lays out the field.
+Pick Krispy when you want AI handling first contact automatically, you do not want to manage a server, and you or a small team are the humans behind the chat. The whole premise is: let the bot cook until it cannot, then Telegram you.
+
+If you are also evaluating hosted support platforms, the cost and lock-in gap widens further — the [Krispy vs Intercom comparison](/krispy-vs-intercom) covers that ground. For the full field, [the best open-source live chat alternatives in 2026](/best-open-source-live-chat) lays out every meaningful option.
+
+> 🥐 **Buttr:** took me one command to deploy. and i'm a croissant. you'll be fine.
 
 ---
 
-Self-host Krispy by starring the [GitHub repo](https://github.com/krispyai/krispy) — the README covers the Cloudflare deploy in under ten minutes. If you'd rather skip the infra entirely, Krispy Cloud has a free tier that doesn't need a credit card.
+Self-host Krispy by starring the [Krispy open-source repo on GitHub](https://github.com/lonormaly/krispyai) — the README covers the Cloudflare deploy in under ten minutes. If you would rather skip the infra entirely, [Krispy Cloud](https://krispy.ai) has a 14-day free trial at $19/month flat, no credit card required.
 
 ---
 
@@ -78,20 +92,20 @@ Self-host Krispy by starring the [GitHub repo](https://github.com/krispyai/krisp
 
 ### Is Krispy a drop-in replacement for Chatwoot?
 
-Not a drop-in, no. Krispy is narrower: web chat only, no email or social channels, and human handoff goes to Telegram rather than a web inbox. If you rely on Chatwoot's multi-channel routing or shared team queues, you'd lose those. If you mainly use Chatwoot for a chat widget and a bot, Krispy covers that ground with less overhead.
+No. Krispy covers a narrower surface: web chat only, no email or social channels, and human handoff goes to Telegram rather than a web inbox. If you rely on Chatwoot's multi-channel routing or shared team queues, you would lose those. If you mainly use Chatwoot for a website chat widget and want AI answering first contact, Krispy covers that ground with significantly less infrastructure overhead.
 
-### Can I self-host Krispy without any cloud account at all?
+### Can I self-host Krispy without a paid cloud account?
 
-You need a Cloudflare account, but the free plan is enough for most sites. Workers, KV, and Workers AI inference all fall within the free tier limits — no credit card required to deploy. Compare that to Chatwoot, which needs a VPS with at least 2 GB RAM to run Rails and Sidekiq comfortably.
+You need a Cloudflare account, but the free plan is enough for most sites. Workers, KV, and Workers AI inference all fall within Cloudflare's free tier limits — no credit card required to deploy. Compare that to Chatwoot, which needs a VPS with at least 2 GB RAM to run Rails and Sidekiq comfortably, plus Postgres.
 
 ### Does Chatwoot run on Cloudflare Workers?
 
-No. Chatwoot is a Ruby on Rails application and requires a traditional server environment (VPS or container) with Postgres, Redis, and Sidekiq. It's not designed for serverless edge runtimes. Krispy is built specifically for Workers from the ground up.
+No. Chatwoot is a Ruby on Rails application and requires a traditional server environment — VPS or container — with Postgres, Redis, and Sidekiq. It is not designed for serverless edge runtimes. Krispy is built specifically for Cloudflare Workers from the ground up.
 
 ### What AI model does Krispy use, and can I swap it?
 
-Krispy defaults to a model available on Cloudflare Workers AI — you don't configure a key or pay a third-party provider. The model runs at the edge alongside your Worker. You can swap the model by changing one config value; the full list of supported Workers AI text models is in the Cloudflare docs.
+Krispy defaults to a text model available on Cloudflare Workers AI. You do not configure an API key or pay a third-party provider — the model runs at the edge alongside your Worker. You can swap the model by changing one config value; the full list of supported models is in the [Cloudflare Workers AI model catalog](https://developers.cloudflare.com/workers-ai/models/).
 
-### Is Krispy suitable if I already use Chatwoot and just want an AI layer?
+### What if I already use Chatwoot and just want an AI layer on top?
 
-Krispy isn't a plugin for Chatwoot — it's a separate widget. If your team is already set up in Chatwoot's inbox and you just want AI on top, the easier path is wiring Chatwoot's agent bot webhooks to an LLM. Krispy makes more sense as an alternative if you're starting fresh or the Chatwoot stack feels heavier than what your use case justifies.
+Krispy is not a plugin for Chatwoot — it is a separate widget. If your team is already set up in Chatwoot's inbox and you just want AI on top, the easier path is wiring Chatwoot's agent bot webhooks to an LLM. Krispy makes more sense as a replacement if you are starting fresh, or if the Chatwoot infrastructure feels heavier than your use case justifies.

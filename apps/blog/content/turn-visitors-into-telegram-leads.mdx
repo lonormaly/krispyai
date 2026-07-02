@@ -1,35 +1,30 @@
 ---
 title: "Turn site visitors into Telegram leads"
-description: "Every visitor who chats is a potential lead. Here's how Krispy routes those conversations straight to Telegram — free to self-host, no SaaS tax."
+description: "Krispy's AI answers visitors 24/7, pre-qualifies them, and routes real leads to Telegram in seconds — 2-command setup, free on Cloudflare Workers."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "story"
 tags: ["lead capture", "telegram", "live chat", "self-hosted", "conversions"]
 ---
 
-Most "lead capture" advice assumes you have someone watching a dashboard. If you're building a side project or a small product, you don't — you're also writing the code, posting about it, and occasionally sleeping.
+> 🥐 **Buttr:** a visitor lands at 2am, types "does this integrate with Notion?", and leaves. you find out about it never. that's where i come in.
 
-Here's what actually happens: a visitor lands on your site at 11pm, reads your pricing page, and types "does this integrate with Notion?" Nobody answers. They close the tab. You find out about it never.
+Krispy's AI answers your visitors around the clock, qualifies their intent, and fires a Telegram notification — with the full conversation thread, word for word — the moment a chat is worth your time. You reply from your phone; the visitor sees your response live in the chat widget. Setup takes two shell commands and costs $0 to self-host.
 
-That's not a conversion problem. It's a presence problem. The visitor was there, had a real question, and you had no idea.
+## How does the Telegram lead capture loop work?
 
-Krispy fixes this without requiring you to staff a chat shift. The AI handles the conversation while you're away — answers what it knows, keeps the visitor engaged — and when something worth your attention happens, you get a Telegram message with the full thread. You reply from your phone. The visitor sees your response in the chat widget. You never opened a dashboard.
+When a visitor opens the chat widget, Krispy's AI takes the first turn. It answers from the context you've given it (your docs, your FAQ, a system prompt), keeps the visitor engaged, and can ask qualifying questions before you ever see the thread.
 
-## How the lead capture loop works
+When something worth a human happens — the visitor asks for you directly, mentions pricing, or hits a question the AI can't answer — Krispy fires a Telegram notification with the full conversation attached. No summary, no paraphrase: the real exchange, in order.
 
-When a visitor starts a chat, Krispy's AI takes the first turn. It answers from the context you gave it (your docs, your FAQ, a system prompt), qualifies the visitor if you set it up to, and keeps things moving.
+You reply in Telegram. Your reply appears in the widget on your site in seconds. The visitor doesn't know you were on a bus; they just got an answer.
 
-When the conversation reaches a point worth a human — the visitor asks for you directly, mentions pricing, or hits a question the AI can't answer — Krispy fires a Telegram notification with the entire thread attached. No summary, no paraphrase: the real conversation, word for word.
+The [full configuration of Krispy's human handoff triggers](/connect-telegram-handoff) covers how to tune what counts as "worth a human" and how to take over from the AI mid-conversation. The short version: you control when you appear, and the AI covers the gaps. Every conversation is logged regardless — even if you never reply, you have a record of who visited, what they asked, and how the AI handled it. That's your lead list.
 
-You reply in Telegram. That reply appears in the widget on your site in seconds. The visitor doesn't know you were on your phone on a bus; they just got an answer.
+## How do I connect Krispy to Telegram?
 
-The [full mechanics of the human handoff](/connect-telegram-handoff) are covered separately, including how to configure what triggers a notification and how to take over from the AI mid-conversation. The short version: you're in control of when you appear, and the AI covers the gaps.
-
-Every conversation is logged. Even if you don't reply, you have a record of who visited, what they asked, and how the AI responded. That's your lead list.
-
-## Setting it up
-
-If you want to run this yourself, you need two things: Krispy deployed to Cloudflare Workers, and a Telegram bot connected to it. The [5-minute deploy guide](/add-live-chat-in-5-minutes) covers the Cloudflare side. Here's the Telegram piece.
+You need two things: Krispy deployed to Cloudflare Workers and a Telegram bot connected to it. The [5-minute Cloudflare deploy guide](/add-live-chat-in-5-minutes) covers the Workers side. Here's the Telegram piece.
 
 Create a bot with BotFather — `/newbot`, follow the prompts, copy the token. Then:
 
@@ -41,19 +36,32 @@ wrangler secret put TELEGRAM_CHAT_ID
 # your personal Telegram user ID, or a group/channel ID
 ```
 
-That's the integration. Krispy uses the bot token to send conversation threads to your chat and to relay your replies back to the widget.
+That's the integration. Krispy uses the bot token to send conversation threads to your Telegram chat and relay your replies back to the widget in real time.
 
-If you're running multiple projects, give each one its own Telegram group. Add your bot to each group, grab the group's chat ID with `/getUpdates`, and set it per deployment. Leads from each site land in their own stream.
+Running multiple projects? Give each one its own Telegram group. Add the bot to each group, grab the group chat ID with `/getUpdates`, and set it per deployment. Leads from each site land in their own stream — no cross-contamination.
 
-## The cost math
+> 🥐 **Buttr:** took me 2 minutes to wire up. i'm a croissant. you'll be fine.
 
-Standard live chat for a small site: Intercom starts around $74/month. Crisp runs $25–95/month. Both charge per seat, which is a pricing model built for teams, not for the setup [indie hackers and solo founders actually work in](/live-chat-for-indie-hackers).
+## What does Krispy cost compared to Intercom or Crisp?
 
-Krispy on Cloudflare Workers AI: $0. Cloudflare's free tier covers real traffic. You pay nothing until you're past the point where a $25/month tool would have made sense anyway.
+Standard live chat for a small site: Intercom's Essentials plan starts around $74/month ([Intercom pricing](https://www.intercom.com/pricing)). Crisp runs $25–95/month depending on the plan ([Crisp pricing](https://crisp.chat/en/pricing/)). Both charge per seat — a pricing model built for support teams, not for [indie hackers and solo founders working alone](/live-chat-for-indie-hackers).
 
-## Pre-qualifying visitors automatically
+Krispy on Cloudflare Workers runs on the free tier, which covers **100,000 requests per day at $0** ([Cloudflare Workers pricing](https://workers.cloudflare.com/#plans)). You pay nothing until you're well past the scale where a $25/month tool would have paid for itself.
 
-Here's where this gets useful beyond just "chat widget that texts me." You can configure Krispy's system prompt to collect information before the handoff, so every lead that hits your Telegram comes with context.
+| | **Krispy** | **Intercom Essentials** | **Crisp Pro** |
+|---|---|---|---|
+| Monthly cost | $0 self-hosted / $19 Cloud | ~$74/seat | $25–95/mo |
+| Open source | ✓ | ✗ | ✗ |
+| Self-hostable | ✓ | ✗ | ✗ |
+| AI built-in | ✓ | Add-on | Add-on |
+| Telegram handoff | ✓ | ✗ | ✗ |
+| Per-seat pricing | None | Yes | Yes (team plans) |
+
+Intercom is the right choice if you need a full support suite with tickets, CRM, and analytics — it's genuinely good at that job. Krispy is the right choice if you want AI-first coverage with Telegram handoff and no monthly subscription while you're still figuring out whether your product has traction.
+
+## How do I pre-qualify leads before the Telegram handoff?
+
+This is where Krispy does something standard chat tools don't make easy: you can configure the AI to collect information before routing to you, so every lead that hits Telegram already has context attached.
 
 Example system prompt addition:
 
@@ -62,35 +70,42 @@ Before routing to a human, ask the visitor:
 1. What they're trying to build or solve
 2. Whether they're a solo founder or part of a team
 
-Include their answers in the handoff summary.
+Include their answers in the handoff notification.
 ```
 
-Now every Telegram notification reads something like: "Building an internal tool for a 4-person agency, wants to know about white-labeling." You know what to say before you type a word. The AI did the first-pass qualification; you do the close.
+Every Telegram notification becomes: "Building an internal tool for a 4-person agency, wants to know about white-labeling." You know what to say before you type a word. The AI handled the qualification; you do the close.
 
-## One honest CTA
+![Buttr reads the pre-qualified lead summary](/blog/buttr-reading.png)
+*buttr already briefed you. just show up.*
 
-Krispy is open-source. [Star the repo](https://github.com/krispyai/krispy), clone it, deploy to your own Cloudflare account. If you'd rather not manage infra, Krispy Cloud has a free tier that handles the deploy — same bot, no server to maintain.
+Asking for email inside the conversation — "what email should I use to follow up?" — converts better than a form field because it sits naturally in chat. The visitor's answer lands in the thread you receive in Telegram and stays in Krispy's conversation log as a durable record. There's no built-in CRM push, but the thread is searchable and exportable.
+
+## How do I get started?
+
+Krispy is open source. [Star the repo on GitHub](https://github.com/lonormaly/krispyai), clone it, and deploy to your own Cloudflare account — the [5-minute setup guide](/add-live-chat-in-5-minutes) walks through the whole thing. If you'd rather skip the terminal, Krispy Cloud runs the same bot with a 14-day free trial at $19/month flat — no per seat, no surprises.
+
+> 🥐 **Buttr:** star the repo. or don't — i'll still be here answering your visitors either way. à bientôt 🥐
 
 ---
 
 ## FAQ
 
-**How does Krispy route visitor chats to Telegram?**
+### How does Krispy route visitor chats to Telegram?
 
-Krispy connects via a Telegram bot you create with BotFather. When a visitor chats on your site, the conversation is forwarded to your Telegram chat ID. You reply in Telegram; Krispy sends your reply back to the widget in real time. Setup takes about five minutes and requires two `wrangler secret put` commands.
+Krispy connects via a Telegram bot you create with BotFather. When a visitor chats on your site, the full conversation is forwarded to your `TELEGRAM_CHAT_ID`. You reply in Telegram; Krispy sends your reply back to the widget in real time. Setup requires two `wrangler secret put` commands and takes about five minutes. The [full handoff configuration guide](/connect-telegram-handoff) covers trigger tuning and how to take over from the AI mid-conversation.
 
-**Can I capture a visitor's email through the chat widget?**
+### Can I capture a visitor's email through the chat widget?
 
-Yes — configure Krispy's AI to ask for it during the conversation. "What email should I use to follow up?" sits naturally in a chat context and converts better than a form field. The visitor's answer is part of the thread you receive in Telegram. There's no built-in CRM push, but the thread is a durable record you can act on.
+Yes — configure Krispy's AI to ask for it during the conversation. "What email should I use to follow up?" sits naturally in a chat context and converts better than a standalone form field. The visitor's answer is included in the thread you receive in Telegram and stored in Krispy's conversation log. There's no built-in CRM push, but the thread is a durable record you can act on or export.
 
-**What if I miss the Telegram notification?**
+### What if I miss the Telegram notification?
 
-The conversation stays in Krispy's database. You can reply later — the visitor will see your response if they return to the site. The AI continues fielding new messages in the meantime, so the conversation doesn't go cold just because you were slow.
+The conversation stays in Krispy's database. You can reply later — the visitor sees your response if they return to the site. The AI continues fielding new messages in the meantime, so the conversation doesn't go cold while you're slow. Every chat, replied to or not, is logged and searchable from your Krispy dashboard.
 
-**Does this work across multiple sites?**
+### Does Krispy work across multiple sites?
 
-Yes. Deploy Krispy once per site, point each deployment at a different `TELEGRAM_CHAT_ID` — your own Telegram, a group per project, a channel for a team. Each site's leads land in their own stream.
+Yes. Deploy Krispy once per site and point each deployment at a different `TELEGRAM_CHAT_ID` — your personal Telegram, a group per project, or a shared team channel. Each site's leads arrive in their own stream with no cross-contamination. See the [multi-site deploy section of the setup guide](/add-live-chat-in-5-minutes) for the specifics.
 
-**What triggers the Telegram notification — every message or only some?**
+### What triggers the Telegram notification — every message or just some?
 
-By default, Krispy notifies you when a visitor asks for a human or when the conversation has enough signal to be worth your time. You can tune this: notify on every new conversation (noisier, useful early on) or hold until the AI decides a handoff is warranted (quieter, better at scale). The threshold lives in your system prompt config.
+By default, Krispy notifies you when a visitor explicitly asks for a human or when the conversation has enough intent signal to be worth your time. You can adjust this in your system prompt config: notify on every new conversation (noisier, useful when you first launch) or hold until the AI decides a handoff is warranted (quieter, better at scale). The threshold lives entirely in your system prompt — no code change required.

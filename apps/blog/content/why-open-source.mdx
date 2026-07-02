@@ -1,41 +1,42 @@
 ---
 title: "Why we made Krispy open source"
-description: "We built Krispy in the open because trust shouldn't require a sales call. Here's the honest story behind the decision."
+description: "Krispy is open source so you can read the code before you trust it with customer conversations. Self-host in 3 commands for $0, or use Krispy Cloud."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "story"
 tags: ["open-source", "build-in-public", "self-hosting", "transparency", "live-chat"]
 ---
 
-The question we get most often isn't "how does Krispy work?" It's "can I see how Krispy works?"
+![The Krispy source code open in an editor next to a cup of coffee](/blog/why-open-source-hero.png)
 
-That's the right question. You're about to put a chat widget on your site. It handles customer conversations — some of them sensitive. It relays messages to a Telegram bot you control. It may hold context about users long enough to hand off to a human. Before you run any of that in production, you should be able to read the code, not take our word for it.
+*Buttr, auditing the codebase before approving the deploy. thorough little guy.*
 
-So we made it open source. Not as a growth tactic. Because it's the only honest answer to the question.
+> 🥐 **Buttr:** you're about to put a chat widget on your site. it reads customer messages. "trust us" is not a data model. luckily, you don't have to.
 
-## The trust problem with closed live chat
+Krispy is open source because a live chat widget handles customer conversations — sometimes sensitive ones — and "trust us" doesn't cut it. When the code is public, you can read the implementation, self-host on Cloudflare's free tier for near-zero cost, and know exactly what happens to your visitors' data.
+
+## Why does open source matter for a live chat widget specifically?
 
 Most live chat tools are black boxes with a monthly invoice. You paste a `<script>` tag, messages start flowing, and you have no idea what's happening on the server handling them. You're trusting a vendor's privacy policy, their infrastructure uptime, and their pricing decisions — indefinitely.
 
-We wrote about this dynamic in more depth in [the case for self-hosted chat](/own-your-customer-conversations). The short version: when a closed SaaS hosts your customer conversations, you're renting a channel, not owning a relationship.
+When a customer asks "does this tool store my visitors' messages?" you have two answers: "yes, on a server we control" (honest), or "I'm not sure" (also honest, for a closed tool). Open source gives you a third: run it yourself and nothing leaves your Cloudflare account.
 
-Open source breaks that arrangement. When the code is public, "trust us" becomes "check for yourself."
+We wrote about this in more depth in [why self-hosted chat gives you ownership that rented SaaS can't](/own-your-customer-conversations). Short version: renting a channel isn't owning a relationship.
 
-## What "trust by inspection" actually means in practice
+## How does the Telegram handoff actually work?
 
-Here's something concrete. Krispy's human handoff — the part where a conversation escalates from the AI to a real person on Telegram — is powered by Cloudflare Durable Objects. Each active conversation is a single DO instance. There's no polling, no queued background job that might drop a message. The WebSocket connection to your support agent and the widget on your visitor's screen are both held by the same tiny stateful process.
+Here's something concrete. Krispy's human handoff — the part where a conversation escalates from the AI to a real person on Telegram — is powered by Cloudflare Durable Objects. Each active conversation is a single DO instance. There's no polling, no queued background job that might drop a message. The WebSocket connection to your Telegram and the widget on your visitor's screen are both held by the same stateful process.
 
-You don't have to believe us. You can read it: the full implementation is in the repo, and we wrote up how we designed it in [how we built live human takeover with Cloudflare Durable Objects](/how-we-built-live-takeover-durable-objects).
-
-When a customer asks "does Krispy store my visitors' messages?" we don't point them to a privacy FAQ. We say: run it yourself and nothing leaves your Cloudflare account. The data model is in the repo. The query that reads conversation history is right there.
+You don't have to believe us. You can read it — and we wrote up the full design in [how we built live human handoff with Durable Objects](/how-we-built-live-takeover-durable-objects).
 
 Trust by inspection: the answer is a file path, not a promise.
 
-## The cost math
+## What does self-hosting Krispy actually cost?
 
-There's a practical reason too, and we're not going to pretend there isn't.
+There's a practical reason we went open source, and we're not going to pretend there isn't.
 
-Live chat for a small business on Intercom runs $90–$400/month depending on seat count and features. Crisp is cheaper but still $95+/month at the plan level where you get an AI assistant and team inboxes. Tawk.to is free but the model is "we show ads to your visitors or you pay to remove them."
+Intercom's AI assistant features start at $29/seat/month on their cheapest plan; teams with shared inboxes typically pay $90–$400/month depending on seat count ([Intercom pricing](https://www.intercom.com/pricing)). Crisp charges $95+/month at the plan level that includes an AI assistant and team inboxes ([Crisp pricing](https://crisp.chat/en/pricing/)). Tawk.to is free but the model is "we show ads to your visitors, or you pay to remove them."
 
 Krispy's self-hosted path:
 
@@ -45,31 +46,37 @@ cd my-krispy
 wrangler deploy
 ```
 
-Workers AI is included in Cloudflare's free tier for reasonable volumes. Your Telegram bot is free. The Durable Objects that power live handoff cost fractions of a cent per active conversation. For most small teams, the bill rounds to $0.
+Cloudflare Workers AI is included in the free tier for reasonable volumes — 100,000 Worker requests per day at no cost ([Cloudflare Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)). Your Telegram bot is free. Durable Objects bill by request and storage at fractions of a cent per active conversation. For most small teams, the bill rounds to $0.
 
-We also have Krispy Cloud — a hosted version with a free tier for people who want the product without managing infrastructure. But the self-hosted path is real, not a footnote.
+> 🥐 **Buttr:** intercom's great at being intercom. i'm just free. no shade — just math.
 
-## Building in public keeps us honest
+We also have Krispy Cloud — $19/month flat, no per-seat tax — for teams that want the product without managing infrastructure. But the self-hosted path is real, not a footnote.
+
+## How does building in public keep the codebase honest?
 
 There's a less obvious reason we chose open source: it's harder to cut corners when the corners are visible.
 
-When you ship a closed product, bad decisions are private. You can skip input sanitization, silently log things you shouldn't, quietly tighten rate limits and hope nobody notices. Open source doesn't guarantee you don't make those mistakes — but it means someone can catch them and file an issue. Or a PR.
+When you ship a closed product, bad decisions are private. You can skip input sanitization, silently log things you shouldn't, quietly tighten rate limits and hope nobody notices. Open source doesn't guarantee you won't make those mistakes — but it means someone can catch them and file an issue. Or a PR.
 
 We've had contributors catch a session leak we missed. A community member spotted that we weren't stripping query parameters from a logging call that could have leaked token values. These things get fixed faster when people can read the diff.
 
-The [comparison between Krispy and other open-source options](/best-open-source-live-chat) applies the same standard: show the tradeoffs, name the constraints, don't pretend the category is simpler than it is.
+![Buttr reading carefully](/blog/buttr-reading.png)
 
-## What we gave up
+[How Krispy compares to other open-source live chat tools](/best-open-source-live-chat) applies the same standard: show the tradeoffs, name the constraints, don't pretend the category is simpler than it is.
+
+## What did we give up by going open source?
 
 Open source isn't free (for us). Competitors can read the code. Anyone can deploy it without telling us. A large company could white-label it and we'd have no idea.
 
 We're fine with that. The MIT license means what it says. If you're self-hosting and something breaks, file an issue. If you fix it yourself, open a PR. That's the whole social contract.
 
-## The actual CTA 🥐
+---
 
-If you want to try it: [star the repo on GitHub](https://github.com/krispyai/krispy) and follow the five-minute deploy guide. If you'd rather skip the infra entirely, Krispy Cloud has a free tier — same product, we handle the Workers.
+> 🥐 **Buttr:** read the code. then decide. that's genuinely the whole pitch.
 
-Either way, the code is there. Read it before you decide.
+## Try it
+
+[Star the repo on GitHub](https://github.com/krispyai/krispy) and follow the five-minute deploy guide. If you'd rather skip the infra: Krispy Cloud is $19/month flat, 14-day free trial, same code — we handle the Workers. Either way, the code is there. Read it before you decide.
 
 ---
 
@@ -77,20 +84,20 @@ Either way, the code is there. Read it before you decide.
 
 ### Why does open source matter for a chat widget specifically?
 
-A chat widget has access to what your visitors type — including support questions, order details, sometimes payment context. Closed-source tools ask you to trust their data handling. Open source lets you read it. For anything touching customer conversations, that's not a nice-to-have.
+A chat widget handles what your visitors type — support questions, order details, sometimes payment context. Closed-source tools ask you to trust their data handling on faith. Open source lets you read the implementation and, if you want, run the whole thing on your own Cloudflare account so no conversation data ever leaves it. For anything touching customer conversations, that's not a nice-to-have.
 
 ### Can I really self-host Krispy for free?
 
-For most small teams, yes. Cloudflare Workers and Workers AI have generous free tiers. Durable Objects (which power live handoff) bill by request and storage at very low rates. A team handling a few hundred conversations a month should see a near-zero bill. High-volume deployments will incur real Cloudflare costs — check their pricing page for specifics.
+For most small teams, yes. Cloudflare Workers and Workers AI include generous free tiers — 100,000 requests per day at no cost. Durable Objects, which power the live Telegram handoff, bill by request and storage at very low rates. A team handling a few hundred conversations a month should see a near-zero bill. High-volume deployments will incur real Cloudflare costs — check [their pricing page](https://developers.cloudflare.com/workers/platform/pricing/) for specifics.
 
 ### What does "build in public" actually give users?
 
-It means the project's decisions, tradeoffs, and bugs are visible. You can see commit history, read issues, watch what gets fixed and what gets deferred. It's a form of accountability that a private roadmap doc can't replicate. You can also contribute — which means the tool gets better in the directions real users care about.
+Commit history, open issues, and public diffs. You can see what gets fixed and what gets deferred — and you can contribute. That's a form of accountability a private roadmap doc can't replicate. It also means the project improves in the directions real users care about, not just the ones the team guesses at.
 
 ### Is the open-source version missing features compared to Krispy Cloud?
 
-No. Krispy Cloud runs the same code as the public repo, deployed on our Cloudflare account. The difference is operational: we manage the infrastructure, updates, and uptime. You trade that control for convenience. There's no feature gating between the two.
+No. Krispy Cloud runs the same code as the public repo, deployed on our Cloudflare account. The difference is operational: we manage infrastructure, updates, and uptime. You trade that control for convenience at $19/month flat. There's no feature gating between the two.
 
 ### If anyone can fork Krispy, what's your business model?
 
-Krispy Cloud — the hosted version — is how we keep the lights on. Some teams want the product without running Cloudflare infrastructure, and we charge for that. It's the same model as Plausible, Gitea, Mattermost, and a dozen other open-core or hosted-open-source products. The code stays open either way.
+Krispy Cloud — the hosted version — is how we keep the lights on. Some teams want the product without running Cloudflare infrastructure, and we charge a flat $19/month for that. It's the same model as Plausible, Gitea, and Mattermost. The code stays open either way.

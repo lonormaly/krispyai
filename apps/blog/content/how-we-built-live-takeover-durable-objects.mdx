@@ -1,29 +1,34 @@
 ---
-title: "How we built live human takeover with Cloudflare Durable Objects"
+title: "How we built live takeover with Cloudflare Durable Objects"
 description: "The architecture behind Krispy's live chat handoff: one Durable Object per session, persistent WebSocket, zero dropped messages when a human takes over."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "story"
 tags: ["cloudflare", "durable-objects", "websocket", "architecture", "live-chat"]
 ---
 
-The hardest moment in a live chat handoff isn't the Telegram notification or the human typing a reply. It's the split second when control transfers — the AI mid-sentence, the visitor mid-wait, a WebSocket that still has to stay open and coherent while "who's answering this?" switches underneath it.
+![Diagram of a WebSocket session rooted in a Cloudflare Durable Object, with control flipping from bot to human mid-conversation](/blog/how-we-built-live-takeover-durable-objects-hero.png)
 
-We hit that building Krispy. The answer: one Cloudflare Durable Object per conversation. Here's why, and what the code looks like.
+*Buttr spent two croissant-minutes figuring this out. the WebSocket never closed. you'll be fine.*
 
-## Why a normal Worker isn't enough
+> 🥐 **Buttr:** the hardest part of handing off a chat isn't the Telegram ping. it's that one millisecond where both the bot and the human think they're in charge. we fixed it. with a flag.
 
-A Cloudflare Worker is stateless and may run anywhere on the edge. That's great for throughput and terrible for live chat, where you need:
+Krispy handles bot-to-human handoff by assigning one Cloudflare Durable Object to every conversation. That object owns the WebSocket connection, stores the message history, and holds a `mode` field — `"bot"` or `"human"` — that determines who answers. When a human takes over, the flag flips, the socket stays open, and the visitor never sees a gap.
+
+## Why isn't a stateless Cloudflare Worker enough for live chat?
+
+A Cloudflare Worker is stateless and may run on any edge node on any request — great for throughput, wrong for live chat. A persistent conversation needs three things at once:
 
 - One canonical message list, in order, for the conversation's lifetime
-- A WebSocket alive for minutes, not milliseconds
+- A WebSocket open for minutes, not milliseconds
 - Exactly-once delivery on handoff — no race between the last bot reply and the first human reply
 
-KV has no serialized execution. D1 has no long-lived WebSocket. Queues need somewhere to hold the socket. Durable Objects give you all three: a single-instance object that runs serially, owns the WebSocket connection, and keeps message state in local Hibernation-friendly storage.
+KV has no serialized execution. D1 has no long-lived WebSocket. Queues need somewhere to hold the socket. Durable Objects give you all three in one primitive: a single-instance, serially-executing object that owns the WebSocket and keeps state in local Hibernation-friendly storage. ([Cloudflare's Durable Objects docs](https://developers.cloudflare.com/durable-objects/) cover the full consistency guarantees.)
 
-## The session object
+## How does one Durable Object per conversation work?
 
-Every conversation in Krispy maps to one DO instance, keyed by session ID:
+Every conversation in Krispy maps to one DO instance, keyed by session ID. The Worker entry point routes every request there:
 
 ```typescript
 // In your Cloudflare Worker entry point
@@ -38,7 +43,7 @@ export default {
 };
 ```
 
-The DO itself accepts the WebSocket upgrade from the visitor's browser and holds it open:
+The DO accepts the WebSocket upgrade from the visitor's browser and holds it open:
 
 ```typescript
 export class ChatSession implements DurableObject {
@@ -66,9 +71,9 @@ export class ChatSession implements DurableObject {
 }
 ```
 
-That `mode` field is the whole handoff in a nutshell. When it's `"bot"`, incoming visitor messages go to Workers AI and replies come back through the same socket. When it flips to `"human"`, incoming messages forward to Telegram and replies come back through the Telegram webhook — same socket, same session object, different message path.
+That `mode` field is the entire handoff in a nutshell. When it's `"bot"`, incoming visitor messages go to Workers AI. When it flips to `"human"`, they forward to Telegram. Same socket. Same session object. Different message path.
 
-## The handoff flip
+## How does the bot-to-human handoff flip actually work?
 
 The takeover trigger can be visitor-initiated, keyword-matched, or a confidence threshold the AI doesn't clear. In all three cases the DO does the same thing:
 
@@ -87,46 +92,52 @@ private async triggerHandoff() {
 }
 ```
 
-The visitor sees the connecting message immediately. The WebSocket never closes. When the human replies in Telegram, the bot webhook POSTs to `/api/telegram`, which resolves the same DO stub by session ID and broadcasts back through `this.sessions`. [The Telegram relay is its own piece](/connect-telegram-handoff) — just a fetch to the DO's REST handler.
+The visitor sees the connecting message immediately. The WebSocket never closes. When the human replies in Telegram, the bot webhook POSTs to `/api/telegram`, which resolves the same DO stub by session ID and broadcasts back through `this.sessions`. The [Telegram relay and incoming webhook wiring](/connect-telegram-handoff) is its own piece — just a fetch to the DO's REST handler.
 
-From the visitor's perspective: nothing happened. One WebSocket, one thread. AI was answering, now a human is. No reconnect, no blank state. That's the promise [the bot-to-human transition](/bot-to-human-without-dropping-the-ball) has to keep, and DOs are what let us keep it.
+From the visitor's perspective: nothing changed. One WebSocket, one thread. AI was answering, now a human is. No reconnect, no blank state. That's the guarantee the [bot-to-human transition without dropped messages](/bot-to-human-without-dropping-the-ball) has to keep — and Durable Objects are what let us keep it.
 
-## What Hibernation does for you
+![Buttr the croissant mascot, thinking](/blog/buttr-thinking.png)
 
-Long-lived WebSocket connections cost money if the object is always active. Cloudflare's WebSocket Hibernation API lets the DO sleep between messages and wake only when one arrives — you pay for compute time, not wall-clock time. For a support widget where messages arrive in bursts with quiet stretches between them, Hibernation turns an expensive always-on connection into something that costs almost nothing. Swap `addEventListener` for `webSocketMessage` / `webSocketClose` and the runtime handles sleep/wake transparently.
+> 🥐 **Buttr:** "connecting you to a human" is what it says. what it means is: same WebSocket, flipped flag, one Telegram ping. the visitor has no idea. neither do i, honestly, and i've been doing this for weeks.
 
-## The cost math
+## What does WebSocket Hibernation do to your bill?
 
-Running this on Cloudflare's free tier: Durable Objects give you 1 million requests and 1,000 GB-seconds of compute per month before you pay anything. A typical support conversation — 20 messages, 5 minutes open — uses around 20 DO requests and a few seconds of compute. You'd need roughly 50,000 conversations a month before you hit the paid tier, which starts at $0.15 per million requests.
+Long-lived WebSocket connections cost money if the Durable Object stays active between messages. Cloudflare's WebSocket Hibernation API lets the DO sleep between messages and wake only when one arrives — you pay for compute time, not wall-clock time. For a support widget where messages arrive in bursts with quiet stretches in between, Hibernation turns an expensive always-on connection into something that costs almost nothing. Swap `addEventListener` for `webSocketMessage` / `webSocketClose` and the runtime handles sleep and wake transparently.
 
-Compare that to Intercom or Crisp at $100–400/month for a team. [The full self-hosting breakdown](/self-host-live-chat-cloudflare) has the exact numbers, but the short answer is: for most indie projects and small teams, it's $0.
+## What does this architecture actually cost to run?
+
+Cloudflare Durable Objects are free up to 1 million requests and 1,000 GB-seconds of compute per month ([Cloudflare Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)). A typical support conversation — 20 messages, 5 minutes open — uses roughly 20 DO requests and a few seconds of compute. You'd need around 50,000 conversations per month before hitting the paid tier, which starts at $0.15 per million requests.
+
+Compare that to [Intercom's Starter plan](https://www.intercom.com/pricing), which runs $29 per seat per month and scales fast with team size, or Crisp at $25–95/month for a team. The [full self-hosting cost breakdown on Cloudflare](/self-host-live-chat-cloudflare) has exact numbers, but for most indie projects and small teams, the infrastructure bill is $0.
+
+> 🥐 **Buttr:** no shade — i'm just free.
 
 ## Ship it yourself
 
-Krispy is open source. The `ChatSession` class lives in `apps/worker/src/session.ts` if you want to dig into the DO implementation. Star the repo on GitHub — it's the clearest signal to keep building this in the open.
+Krispy is open source. The `ChatSession` class lives in `apps/worker/src/session.ts` — read every line, fork it, own it. Star the repo at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) if you find this useful; it's the clearest signal to keep building this in the open.
 
-If you'd rather skip the infra entirely, Krispy Cloud has a free tier — same architecture, hosted for you, no Wrangler required.
+If you'd rather skip the Wrangler setup entirely, [Krispy Cloud](https://krispyai.com) is the hosted version — same architecture, 14-day free trial, $19/month flat.
 
 ---
 
 ## FAQ
 
-### Why use a Durable Object instead of a database + pub/sub for WebSocket state?
+### Why use a Durable Object instead of a database and pub/sub for WebSocket state?
 
-A database gives you durability but not serialized execution — two requests can race. Pub/sub gives you fan-out but not a persistent socket. A DO bundles all three in one primitive: it's a single-threaded object that owns the connection, serializes writes, and stores state locally. For a conversation with two active participants, that's the right unit of isolation.
+A database gives you durability but not serialized execution — two requests can race on the same row. Pub/sub gives you fan-out but not a persistent socket you can hold open. A Durable Object bundles all three: it's a single-threaded object that owns the WebSocket connection, serializes writes, and stores state locally. For a two-participant conversation where message order and exactly-once delivery matter, that's the right unit of isolation.
 
-### How does the WebSocket survive when the DO migrates between Cloudflare locations?
+### How does the WebSocket survive when the Durable Object migrates between Cloudflare locations?
 
-It doesn't — migration closes open connections. In practice Cloudflare pins a DO to its first location for the object's lifetime, so mid-session migration is rare. If it does happen, the widget reconnects automatically and re-fetches history from DO storage. The visitor sees a brief reconnect, not lost messages.
+It doesn't — migration closes open connections. In practice Cloudflare pins a DO to its first location for the object's lifetime, so mid-session migration is rare. If it happens, the widget reconnects automatically and re-fetches history from DO storage. The visitor sees a brief reconnect, not lost messages.
 
-### Can one Durable Object handle multiple visitors in the same conversation?
+### Can one Durable Object handle multiple viewers in the same conversation?
 
-Yes. The `this.sessions` array holds every open WebSocket for that session. An admin preview tab, a Telegram relay, and the original visitor can all be connected to the same DO simultaneously. The `broadcast` helper fans out to all of them.
+Yes. The `this.sessions` array holds every open WebSocket for that session — an admin preview tab, the Telegram relay, and the original visitor can all connect to the same DO simultaneously. The `broadcast` helper fans out to all of them.
 
-### How do you prevent the DO from accumulating stale sessions forever?
+### How do you prevent the Durable Object from accumulating stale sessions forever?
 
-Each closed WebSocket is filtered out of `this.sessions` in the `close` event listener. Conversations past a configurable inactivity window (default: 24 hours) are deleted via `ctx.storage.deleteAll()` in an alarm. Cloudflare DO alarms are essentially a free cron-per-object — no external scheduler needed.
+Each closed WebSocket is filtered out of `this.sessions` in the `close` event listener. Conversations past a configurable inactivity window (default: 24 hours) are deleted via `ctx.storage.deleteAll()` in a Durable Object alarm. DO alarms act as a free per-object cron — no external scheduler needed.
 
-### Does this architecture work with Cloudflare's free plan?
+### Does this architecture work on Cloudflare's free plan?
 
-Yes, for reasonable traffic. The free tier covers 1 million DO requests and 1,000 object-hours per month. A mid-traffic support widget — a few hundred conversations per day — fits comfortably. Once you exceed it, pricing is $0.15/million requests, which is still far below any hosted live chat SaaS.
+Yes, for reasonable traffic. The free tier covers 1 million DO requests and 1,000 object-hours per month. A mid-traffic support widget — a few hundred conversations per day — fits comfortably. Once you exceed it, pricing is $0.15/million requests, still far below any hosted live chat SaaS.

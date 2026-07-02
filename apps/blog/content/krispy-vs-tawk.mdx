@@ -1,27 +1,32 @@
 ---
 title: "Krispy vs Tawk.to: free live chat without the catch"
-description: "Tawk.to is free until it isn't — forced branding, AI behind a paywall, data you can't fully own. Here's how Krispy compares as an open-source alternative."
+description: "Tawk.to is free but charges $19/mo to remove its branding and locks AI behind a paid add-on. Krispy is MIT-licensed, self-hosted on Cloudflare, AI included."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "comparison"
 tags: ["comparison", "live-chat", "open-source", "tawk-to", "self-host"]
 ---
 
-Tawk.to's pitch is hard to argue with on paper: fully functional live chat, forever free. No trial, no credit card. Just paste the widget script and go. Thousands of small teams pick it for exactly that reason, and it works. But "free" in live chat software almost always means someone else is getting something out of the deal — and with tawk.to, the catches are specific enough to be worth knowing before you embed their script.
+![Krispy's croissant bot and the tawk.to owl having a very civil disagreement about what "free" means](/blog/krispy-vs-tawk-hero.png)
 
-## What "free" actually costs you
+*Buttr showed up for a free chat option. found a badge invoice. not his favourite plot twist.*
 
-The tawk.to widget ships with a "Powered by tawk.to" badge by default. Removing it costs $19/month. That's the first catch: your users see their branding on your product until you pay.
+> 🥐 **Buttr:** no shade — i'm just free. actually free. badge and all.
 
-The second catch shows up when you want AI. Tawk.to's AI Assist — the feature that drafts replies and answers questions automatically — is a paid add-on. So the thing that makes live chat worth having in 2026 isn't included in the free plan.
+Tawk.to and Krispy are both free live chat options for your site, but they get there differently. Tawk.to is closed-source SaaS — free to start, $19/month to remove its badge, and AI behind a paid add-on. Krispy is MIT-licensed, self-hosted on Cloudflare Workers, and ships with AI and no forced branding.
 
-The third catch is structural: tawk.to is closed-source SaaS. Your conversation history, customer data, and chat transcripts live on their servers. You can export, but you can't run it yourself, audit the code, or leave cleanly.
+## What does "free" actually cost you with tawk.to?
 
-None of this is buried in fine print. It's their business model, and a reasonable one. But if you're evaluating free live chat, you should know what's in the box.
+Tawk.to's free tier is real — no trial, no credit card, paste the widget script and go. But three things cost extra once you're in.
 
-## How Krispy compares
+**Widget branding.** The tawk.to widget ships with a "Powered by tawk.to" badge by default. Removing it costs $19 per agent per month ([tawk.to pricing](https://www.tawk.to/pricing/)). Most people discover this after the widget is already live in production.
 
-Krispy starts from a different premise. The software is open source, and the default deployment runs on Cloudflare Workers — so you self-host at zero marginal cost. The AI is Workers AI, which means no separate API key to purchase. When the bot can't handle something and hands off to a human, the message goes to Telegram — your phone, the one you already have open.
+**AI.** AI Assist — the feature that drafts replies and answers questions from your knowledge base automatically — is a paid add-on. In 2026, the thing that makes live chat worth running is not included in the free plan.
+
+**Data portability.** Tawk.to is closed-source SaaS. Your conversation history and customer data live on their servers. You can export transcripts, but you can't run it yourself, audit the code, or leave cleanly. That's a reasonable business model — it's just worth knowing before you build on it.
+
+## How does Krispy compare to tawk.to?
 
 | | **Krispy** | **Tawk.to** |
 |---|---|---|
@@ -29,14 +34,27 @@ Krispy starts from a different premise. The software is open source, and the def
 | **Self-host** | Yes — Cloudflare Workers | No |
 | **AI built-in** | Yes — Workers AI, no key required | Paid add-on |
 | **Human handoff to phone** | Yes — Telegram | Yes — tawk.to mobile app |
-| **Widget branding** | None | "Powered by tawk.to" (remove = $19/mo) |
-| **Per-seat cost** | $0 self-hosted · free tier on Krispy Cloud | $0 basic · $19/mo per agent for AI + no-badge |
+| **Widget branding** | None | "Powered by tawk.to" — remove for $19/agent/mo |
+| **Per-seat cost** | $0 self-hosted · free tier on Krispy Cloud | $0 basic · $19/agent/mo for AI + no badge |
+| **Best for** | Solo founders, small teams, open-source stacks | Teams needing multi-agent queue routing |
 
-The honest comparison: tawk.to's mobile app for human agents is polished and has been through years of iteration. Krispy's Telegram handoff is lighter — no queue routing, no internal inbox, no read receipts between agents. If you're managing five agents juggling parallel conversations, tawk.to (or [Crisp, which we compared separately](/krispy-vs-crisp)) might be the more appropriate choice. If you're a solo founder or a small team that wants to own the stack and reply from Telegram like a normal person, the calculus flips.
+Krispy deploys to your own Cloudflare account. The Workers free tier covers 100,000 requests per day ([Cloudflare plans](https://www.cloudflare.com/plans/)) — enough headroom for most small-to-medium products at zero cost. Workers AI includes a free inference quota ([Cloudflare AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)), so the bot runs without a separate API key or model subscription.
 
-## Deploying Krispy takes one command
+The honest gap: tawk.to's mobile app for human agents is more polished. It has queue routing, shift scheduling, and an internal inbox with agent notes. Krispy's Telegram handoff is lighter — no routing queue, no read-receipts between agents. If you're managing five agents juggling parallel conversations, tawk.to (or [Crisp, which we compared in detail](/krispy-vs-crisp)) may fit better. If you're a solo founder or a two-person team, the complexity you're skipping is the point.
 
-After cloning the repo and setting two secrets, the full deploy is:
+> 🥐 **Buttr:** tawk.to's agent inbox is genuinely good. just — they charge $19 to take their name off your chat widget. different philosophy.
+
+## How does the Telegram handoff work?
+
+When Krispy's AI can't answer — or a visitor explicitly asks for a human — Krispy sends a Telegram message to your configured chat ID. You reply in Telegram and the response appears live in the widget. The visitor sees your message; they don't see the Telegram layer.
+
+Tawk.to routes the same handoff to their mobile app, which has proper agent-side tooling: internal notes, conversation assignment, and read receipts between agents. Krispy's approach trades those inbox features for zero new infrastructure — you're already in Telegram.
+
+For teams that need multi-agent routing, [the best open-source live chat alternatives in 2026](/best-open-source-live-chat) covers options with more capability there. For everyone else, replying from a Telegram notification is fast enough to feel human.
+
+## How do you deploy Krispy in one command?
+
+Clone the repo, set two secrets, and deploy:
 
 ```bash
 wrangler secret put TELEGRAM_BOT_TOKEN
@@ -44,21 +62,23 @@ wrangler secret put TELEGRAM_CHAT_ID
 npx wrangler deploy
 ```
 
-That's it. There's no third-party account to configure, no dashboard to navigate, no badge to pay to remove. The Worker that runs your chat widget is your Worker, on your Cloudflare account, subject to Cloudflare's free tier — which covers tens of millions of requests a day for most products.
+That's the full setup. No third-party dashboard to configure, no badge to pay to remove, no per-seat pricing as your team grows. The Worker runs on your Cloudflare account — the code is yours to read, fork, and audit. Tawk.to has been operating since 2013 and the product is stable; there's no question they've shipped more features over time. But the deployment model is the difference: their infrastructure, their code, their terms.
 
-If you'd rather not manage infrastructure at all, [Krispy Cloud](https://krispy.ai) has a free tier. Same widget, same Telegram handoff, same zero forced branding — just hosted.
+If you'd rather skip the terminal, [Krispy Cloud](https://krispy.ai) has a free tier — same widget, same Telegram handoff, same zero forced branding, hosted.
 
-## When tawk.to is the right call
+> 🥐 **Buttr:** took me one `wrangler deploy`. i'm a croissant. you'll be fine.
 
-If your team is large enough to need queue routing, shift scheduling, and a shared inbox with internal notes — tawk.to is genuinely good at that. It's been around since 2013, the product is stable, and $19/month per agent is less than what most teams spend on Slack. There's no shame in paying for a tool that fits.
+## When is tawk.to the right choice?
 
-Where it stops fitting: if you're building a product on open-source principles, if you want conversation data on infrastructure you control, or if you're already reading [the best open-source live chat alternatives in 2026](/best-open-source-live-chat) and want something you can fork. Closed-source SaaS isn't an architecture choice you can undo later.
+If your team needs queue routing, shift scheduling, and a shared inbox with internal notes across multiple agents, tawk.to is genuinely good at that. It has been around since 2013, the product is mature, and $19 per agent per month is less than most teams spend on Slack. The mobile app is well-built. There is no shame in paying for a tool that fits.
 
-The reason Krispy exists at all comes from that ceiling. We kept hitting it — paid plans, hosted data, branding we didn't own. The full version is in [why we made Krispy open source](/why-open-source), but the short version is: we built the thing we wanted to use.
+Where it stops fitting: if you're building on open-source principles, if you want conversation data on infrastructure you control, or if the badge-removal fee is the first thing you'd have to expense. Closed-source SaaS also isn't an architecture decision you can reverse without migrating data.
+
+Krispy exists because we kept hitting that ceiling — paid plans, hosted data, branding we didn't own. The full story is in [why we made Krispy open source](/why-open-source), but the short version is we built the thing we wanted to use.
 
 ---
 
-🥐 Self-host it — star the [Krispy GitHub repo](https://github.com/krispy-ai/krispy) and let the bot cook. Or try [Krispy Cloud](https://krispy.ai) free if you'd rather skip the Wrangler step entirely.
+Self-host it — star the repo at [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai) and let the bot handle the first shift. Or try [Krispy Cloud](https://krispy.ai) free for 14 days if you'd rather skip Wrangler entirely ($19/mo flat after that — yes, same as tawk.to's badge fee, except it includes everything).
 
 ---
 
@@ -66,20 +86,20 @@ The reason Krispy exists at all comes from that ceiling. We kept hitting it — 
 
 ### Is there a free live chat alternative to tawk.to that doesn't show a powered-by badge?
 
-Yes. Krispy is open source and self-hostable on Cloudflare Workers — no badge, no vendor branding, no per-seat charge. Krispy Cloud's free tier is also badge-free. With tawk.to, removing the "Powered by tawk.to" badge costs $19 per agent per month, which is the main thing people discover after they've already embedded the widget.
+Yes. Krispy is open source (MIT) and self-hostable on Cloudflare Workers — no badge, no vendor branding, no per-seat charge on any plan. Krispy Cloud's free tier is also badge-free. With tawk.to, removing the "Powered by tawk.to" badge costs $19 per agent per month ([tawk.to pricing](https://www.tawk.to/pricing/)). This is the most common thing teams discover after they've already embedded the widget in production. Krispy has no badge by design.
 
-### Does tawk.to have AI built into its free plan?
+### Does tawk.to include AI in its free plan?
 
-No. AI Assist is a paid add-on for tawk.to, not included in the free tier. Krispy bundles Workers AI out of the box — the bot can answer questions automatically without a separate API key or paid subscription.
+No. Tawk.to's AI Assist is a paid add-on, not included in the free tier. Krispy bundles Cloudflare Workers AI out of the box — the bot answers questions automatically without a separate API key or model subscription. The Workers AI free inference quota ([Cloudflare AI pricing docs](https://developers.cloudflare.com/workers-ai/platform/pricing/)) covers most small-to-medium products at zero cost.
 
 ### Can I self-host tawk.to on my own servers?
 
-No. Tawk.to is closed-source SaaS with no self-hosted option. Krispy is MIT-licensed and designed to run on Cloudflare Workers. You own the deployment, the data stays in your account, and the code is auditable.
+No. Tawk.to is closed-source SaaS with no self-hosted option. Krispy is MIT-licensed and built to run on Cloudflare Workers — you own the deployment, conversation data stays in your Cloudflare account, and the full source is auditable on GitHub. If you need a self-hosted option with more agent tooling, see [the best open-source live chat alternatives in 2026](/best-open-source-live-chat).
 
 ### How does Krispy's human handoff work compared to tawk.to's?
 
-When Krispy's AI can't answer — or a user asks to speak to a person — Krispy routes the conversation to a Telegram message. You reply in Telegram and the customer sees your reply in the chat widget. Tawk.to's handoff routes to their own mobile app, which has a more fully-featured agent inbox. Krispy's Telegram approach trades inbox features for zero new tools to install.
+When Krispy's AI can't answer — or a visitor asks to speak to a person — Krispy sends a Telegram message to your configured chat. You reply in Telegram and the visitor sees your message live in the widget. Tawk.to routes the same handoff to their own mobile app, which has a fully-featured agent inbox with queue routing, internal notes, and read receipts between agents. Krispy's Telegram approach is simpler and trades inbox features for zero new tools to install.
 
 ### Is Krispy actually free, or is there a catch like tawk.to?
 
-Self-hosted Krispy is genuinely free. Cloudflare Workers' free tier handles millions of requests per day, and Workers AI has its own free quota. For most small-to-medium products, the real cost is zero. Krispy Cloud has a free tier too. The project is MIT-licensed — you can read the source, fork it, and run it however you like.
+Self-hosted Krispy is genuinely free. Cloudflare Workers' free tier covers 100,000 requests per day, and Workers AI includes a free inference quota for the bot. For most small-to-medium products, the real cost is zero — no badge fee, no per-seat pricing, no AI add-on. Krispy Cloud has a 14-day free trial and is $19/month flat after that. The code is MIT-licensed: read it, fork it, run it however you like.

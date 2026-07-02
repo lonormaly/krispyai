@@ -1,73 +1,45 @@
 ---
-title: "Krispy vs Crisp: an open live chat you actually own"
-description: "Crisp is polished and pricey. Krispy is free to self-host, open-source, and ships AI replies out of the box. Here is what the switch actually looks like."
+title: "Krispy vs Crisp: Open-Source Live Chat Compared"
+description: "Crisp starts at $25/seat/month and charges separately for AI. Krispy is MIT-licensed, self-hosts free on Cloudflare, and ships with AI replies built in."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "comparison"
 tags: ["crisp alternative", "open source", "self-hosted chat", "live chat", "comparison"]
 ---
 
-We have nothing against Crisp. It is a good product. The problem is that at some point
-you open the billing page, do the math on seats plus the AI add-on, and realize you are
-paying somewhere between $100 and $400 a month for a widget that sits on your site and
-a database full of your customer conversations that you cannot take with you.
+![Krispy versus Crisp — open-source live chat alternatives compared](/blog/krispy-vs-crisp-hero.png)
 
-That is the itch Krispy exists to scratch.
+*Buttr spent three minutes running the numbers. Said "no contest" and went back to sleep.*
 
-## What Krispy actually is
+> 🥐 **Buttr:** crisp is great at being crisp. i'm just free.
 
-Krispy is an open-source live chat with a built-in AI layer that runs on Cloudflare
-Workers AI — no third-party API key required. When a visitor asks something, the bot
-answers from your knowledge base. When it cannot, or when the visitor wants a real human,
-the conversation hands off to Telegram so the team member nearest their phone can pick
-it up. The whole thing self-hosts on Cloudflare's free tier.
+Crisp is a mature live chat platform — polished, well-integrated, and priced at $25–95 per seat per month plus a separate AI add-on. Krispy is MIT-licensed, self-hosts on Cloudflare's free tier in one command, and ships AI replies out of the box with no extra billing relationship.
 
-You can also skip the infra entirely and use Krispy Cloud, which has a free tier for
-small teams who want the same stack without running `wrangler deploy`.
-
-## How the two compare
+## How do Krispy and Crisp compare head-to-head?
 
 | | **Krispy** | **Crisp** |
 |---|---|---|
 | Open-source | Yes (MIT) | No |
 | Self-hostable | Yes — Cloudflare Workers | No |
-| AI replies built-in | Yes — Workers AI, no key | Add-on ($, separate plan) |
-| Human handoff to your phone | Yes — Telegram | Inbox (web/app only) |
-| Per-seat cost | $0 to self-host | $25–95/seat/mo |
-| Data ownership | Your infra, your data | Crisp's servers |
+| AI replies built-in | Yes — Workers AI, no key needed | Add-on, separate plan |
+| Human handoff channel | Telegram (reply from your phone) | Web inbox + mobile app |
+| Per-seat cost | $0 to self-host | $25–95/seat/month ([Crisp pricing](https://crisp.chat/en/pricing/)) |
+| Data ownership | Your Cloudflare account | Crisp's servers |
 
-The per-seat cost line is the obvious one. But the data ownership row changes your risk
-profile. Crisp's terms let you export conversations, but the database lives on their
-servers. Outage? You feel it. Moving? You negotiate an export. With Krispy, the data is
-wherever you deployed it.
+**Best for Krispy:** founders and small teams who want to own their data and keep costs near zero, and already live in Telegram.
 
-## Spinning up Krispy takes one command
+**Best for Crisp:** teams that need a polished multi-agent inbox, CRM integrations (HubSpot, Slack), and are comfortable paying per seat for a complete support suite.
 
-```bash
-npx create-krispy-app my-chat
-cd my-chat
-wrangler deploy
-```
+The per-seat line is the obvious differentiator, but data ownership changes your risk profile. Crisp lets you export conversations as JSON, but the database lives on their infrastructure — outages hit you and migrations require their cooperation. With Krispy, conversations sit in your own Cloudflare KV namespace. There's nothing to negotiate.
 
-That deploys the Workers API, creates the KV namespace for your knowledge base, and
-wires the Telegram webhook in one shot. The widget script drops into your site as a
-single `<script>` tag. There is no server to babysit — Cloudflare handles scaling,
-cold starts, and the edge routing.
+## How does Krispy's AI work without an OpenAI key?
 
-For a direct comparison of how this model stacks up against a heavier incumbent,
-[Krispy vs Intercom](/krispy-vs-intercom) goes deeper on the infrastructure trade-offs.
+Krispy's AI layer runs on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), which is bundled into the Workers free tier at up to 10,000 inference requests per day — enough to answer every inbound question for most small and mid-size products at zero marginal cost.
 
-## The AI layer: what "no key required" actually means
+Crisp's AI features run on OpenAI under the hood. That adds a third billing relationship: Crisp subscription, OpenAI account, and a usage cap to monitor. It's a fine setup, but it's a different cost structure.
 
-Crisp's AI features run on OpenAI under the hood. That is a fine choice, but it means
-you need an OpenAI account, a usage cap, and a separate billing relationship on top
-of your Crisp subscription. Krispy's AI runs on Workers AI (Cloudflare's inference
-platform), which is included in the Workers free tier up to 10,000 neurons per day.
-For most small to mid-size products that is enough to answer every inbound question
-with zero marginal cost.
-
-The model Krispy ships with is `@cf/meta/llama-3-8b-instruct`. You can swap it to
-any model in the Workers AI catalog by changing one line in `krispy.config.ts`:
+Krispy ships with `@cf/meta/llama-3-8b-instruct` and lets you swap to any model in the Workers AI catalog with one line:
 
 ```ts
 // krispy.config.ts
@@ -76,77 +48,70 @@ export default {
 };
 ```
 
-If you want a longer read on why the self-hosted model is worth it beyond the cost
-angle, [own your customer conversations](/own-your-customer-conversations) makes the
-case.
+Beyond the free cap, Cloudflare's pay-as-you-go rate applies — roughly $0.01 per 1,000 requests ([Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)). For a fuller look at why self-hosted inference is worth it beyond the cost angle, [why you should own your customer conversations](/own-your-customer-conversations) makes the case.
 
-## The handoff: why Telegram
+## How does the Telegram handoff work in Krispy?
 
-Crisp has a polished inbox — desktop, mobile app, email notifications. It works well
-if your team lives in that tab. Most small teams do not. They are in Slack, or iMessage,
-or in Telegram with their co-founders already.
+When a visitor asks something the bot can't answer — or asks for a human — Krispy sends a Telegram message to whoever is on call. That person replies in Telegram. The reply appears live in the chat widget on the visitor's screen.
 
-Krispy bets on Telegram because it is where the humans already are. When a visitor
-escalates, a Telegram bot pings the on-call person directly. They reply in Telegram and
-the message appears in the chat widget on your site. No app to install, no context switch.
+No app to install. No context switch. Your team is already on Telegram; the bot taps them in.
 
-It is not as polished as Crisp's inbox. If your team needs assignment queues, canned
-responses, and first-reply analytics, Krispy is not there yet — and we will say so
-plainly. For a founder who wants to know the moment a visitor asks "how do I pay" and
-respond from their phone, it is exactly right.
+Crisp's handoff model is a polished web inbox with a dedicated mobile app, assignment queues, and first-reply time analytics. That's meaningfully better if your team runs support as a dedicated function with SLAs. For a founder handling ten visitor questions a day from their phone, Telegram is the faster path.
 
-## What you give up
+> 🥐 **Buttr:** i've been routing chats to phones since before "omnichannel" was a word. you're welcome.
 
-Fair is fair. Crisp has years of UI polish, a mobile app, integrations with HubSpot and
-Slack, and a team that works on it full-time. Krispy is newer and scrappier.
+## How do you spin up Krispy?
 
-The things Krispy does not have today:
+```bash
+npx create-krispy-app my-chat
+cd my-chat
+wrangler deploy
+```
 
-- A dedicated mobile app (Telegram is the handoff; there is no Krispy mobile)
-- A visual inbox with assignment and tagging
+That deploys the Workers API, creates the KV namespace for your knowledge base, and wires the Telegram webhook in one shot. The widget drops into your site as a single `<script>` tag. Cloudflare handles scaling, cold starts, and edge routing — there is no server to babysit.
+
+For a direct look at how this infrastructure model stacks up against a heavier alternative, [Krispy vs Intercom: infrastructure trade-offs explained](/krispy-vs-intercom) goes deeper on the numbers.
+
+## What do you give up switching from Crisp to Krispy?
+
+Fair accounting: Crisp has years of UI polish, a dedicated mobile app, HubSpot and Slack integrations, canned responses, and a full team behind it. Krispy is newer and scrappier.
+
+What Krispy doesn't have today:
+
+- A dedicated mobile app (Telegram is the handoff; there's no Krispy-native mobile)
+- A visual inbox with agent assignment and conversation tagging
 - Pre-built CRM integrations
 
-If those gaps are dealbreakers, Crisp or one of the other options in
-[the best open-source live chat alternatives in 2026](/best-open-source-live-chat)
-might suit your situation better. There is no shame in that.
+If those are dealbreakers, Crisp — or one of the other options in [the best open-source live chat tools in 2026](/best-open-source-live-chat) — might fit better. That's a genuine recommendation, not a polite brush-off.
 
-## The honest CTA
+> 🥐 **Buttr:** i respect Crisp. i'm just $400/mo cheaper.
 
-If the comparison table above looks good to you, star the repo and try the deploy:
-[github.com/krispyai/krispy](https://github.com/krispyai/krispy). If you would rather
-not manage infra at all, Krispy Cloud's free tier covers up to 500 conversations a month
-— no card required, same open stack.
+## Which should you choose: Krispy or Crisp?
+
+If the table above looks good, star the repo and deploy: [github.com/lonormaly/krispyai](https://github.com/lonormaly/krispyai). If you'd rather skip the infrastructure entirely, [Krispy Cloud](https://krispy.chat) has a 14-day free trial at $19/month flat — same open-source stack, no card required to start.
+
+![Decorative croissant divider](/blog/divider-croissants.png)
 
 ---
 
 ## FAQ
 
-### Is Krispy a real Crisp alternative or just a side project?
+### Is Krispy a serious Crisp alternative or just a side project?
 
-Krispy is MIT-licensed, runs on Cloudflare's global edge, and handles AI replies, human
-handoff via Telegram, and a self-hosted knowledge base. Whether it fits depends on how
-much you value inbox UX versus data ownership and cost — both are real trade-offs.
+Krispy is MIT-licensed, runs on Cloudflare's global edge network, and handles AI replies, human handoff via Telegram, and a self-hosted knowledge base. It's actively maintained and production-grade for small teams. Whether it fits depends on how much you value data ownership and near-zero cost versus a polished multi-agent inbox — both are real trade-offs, and Crisp genuinely wins on the inbox side.
 
-### Can I migrate my Crisp conversation history to Krispy?
+### How do I migrate my Crisp conversation history to Krispy?
 
-Crisp lets you export conversations as JSON. Krispy has an importer that loads that
-export into your KV namespace so your support history moves with you. Not a one-click
-wizard yet, but a documented script — no manual copy-paste.
+Crisp lets you export your conversation history as JSON from the dashboard. Krispy includes an import script that loads that export into your Cloudflare KV namespace so your support history moves with you. It's not a one-click wizard yet — it's a documented script — but there's no manual copy-paste involved.
 
-### Do I need to pay for AI features when self-hosting?
+### Do I pay for AI features when self-hosting Krispy?
 
-No. Krispy runs on Cloudflare Workers AI, included in the free tier up to 10,000
-inference requests per day. No OpenAI key, no separate AI billing. Beyond the free cap,
-Cloudflare's pay-as-you-go applies — roughly $0.01 per 1,000 requests.
+No. Krispy uses Cloudflare Workers AI, included in the Workers free tier for up to 10,000 inference requests per day ([Cloudflare Workers AI docs](https://developers.cloudflare.com/workers-ai/platform/pricing/)). No OpenAI key, no separate AI billing. Beyond the free cap, Cloudflare's pay-as-you-go rate applies — roughly $0.01 per 1,000 requests — so costs scale with actual usage, not with team headcount.
 
 ### Who owns my chat data when I self-host Krispy?
 
-You do, completely. Conversations are stored in Cloudflare KV under your own account.
-Krispy (the project) never receives, processes, or stores any of your visitor data.
-Your Cloudflare account, your data, your terms.
+You do, completely. Conversations are stored in Cloudflare KV under your own Cloudflare account. Krispy — the project and the company — never receives, processes, or stores any of your visitor data. You can also migrate away at any time with no export friction: the data was always yours. Your account, your data, your terms.
 
-### Is there a hosted version if I don't want to run infrastructure?
+### Is there a hosted version for teams that don't want to manage infrastructure?
 
-Yes — Krispy Cloud. It runs the same open-source stack and has a free tier for up to
-500 conversations per month. The code powering it is the same repo you can deploy
-yourself, so you are never locked in: export your data and self-host any time.
+Yes — Krispy Cloud. It runs the same open-source stack with a 14-day free trial and costs $19/month flat after that — no per-seat pricing. The code powering it is the same repo you can deploy yourself, so you're never locked in: export your data and self-host whenever you want.

@@ -1,39 +1,40 @@
 ---
 title: "The $0 support stack for solo founders"
-description: "Real tools that cover AI chat, bug tracking, docs, and email follow-up for solo founders — total monthly cost: $0."
+description: "Solo founders can cover AI chat, human handoff, bug tracking, and docs for $0/month with self-hosted Krispy, GitHub Issues, and Cloudflare Workers."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "story"
 tags: ["solo founder", "support tools", "self-hosted", "open-source", "live chat"]
 ---
 
-The month you hit $400 MRR is a good month. The month the Intercom invoice lands for $95 is when you do the math: twenty-four percent of revenue, gone to a chat widget.
+![A croissant sitting smugly next to a $0 invoice and a Telegram notification](/blog/the-zero-dollar-support-stack-hero.png)
 
-Nobody mentions this on the free trial. Support is a real need, $29/month sounds fine, and then AI features are add-ons and seats multiply and suddenly you're paying for a 40-person support team's tooling while you answer tickets yourself at 11 pm.
+*Buttr, reviewing the Intercom invoice: "interesting. that's a lot of zeros in the wrong direction."*
 
-You don't need that stack. Here's one that covers the same ground for nothing.
+> 🥐 **Buttr:** the Intercom bill came. i did the math so you don't have to. the answer is: no.
 
-## What a support operation actually has to do
+A solo founder at under $3K MRR can run a complete support operation — AI chat, human handoff, bug tracking, docs, and uptime monitoring — for $0/month. Self-hosted Krispy handles the chat and Telegram handoff on Cloudflare's free tier. GitHub Issues covers bugs. A Notion doc absorbs 60% of repeat questions. Total monthly cost: $0.
 
-Five jobs. That's it.
+## What does a solo founder's support stack actually need to do?
 
-1. Answer common questions when you're not available
-2. Route the edge cases and real conversations to a human
+Five jobs. That's it:
+
+1. Answer common questions when you're not around
+2. Route edge cases to a human (you) fast
 3. Capture leads who had a question but never wrote in
-4. Let people report bugs and search for existing answers
-5. Know when something is broken before users assume it's permanent
+4. Let users report bugs and search for existing answers
+5. Tell you when something is broken before users assume it's permanent
 
-A $400/month enterprise plan does all five, plus seventeen screens you'll never open. What follows covers each job with free tools.
+A $400/month enterprise plan covers all five — plus seventeen dashboards you will never open. Each job below has a free alternative.
 
-## The stack, piece by piece
+## How does AI chat and Telegram handoff work for $0?
 
-### AI live chat — $0
+AI-powered live chat with human handoff used to cost real money. Intercom's Essential plan starts at $39/seat/month (source: [intercom.com/pricing](https://www.intercom.com/pricing)); Crisp's team plan runs $95/month. Self-hosted Krispy covers the same core loop — bot answers, human takes over, bot resumes — for nothing.
 
-This one used to cost the most. A widget that handles the queue at 2 am and hands off to a real person when something needs judgment was a minimum $74/month on Intercom or $95/month on Crisp's team plan.
+Krispy runs on Cloudflare Workers. Cloudflare's free tier gives you 100,000 Worker requests per day and 10ms CPU time per request (source: [Cloudflare Workers limits](https://developers.cloudflare.com/workers/platform/limits/)). For a chat widget on a side project, that is large headroom. Krispy also uses Workers AI for inference, so there is no separate OpenAI key or per-token bill. When a visitor needs a human, Krispy fires a Telegram notification. You reply in Telegram; it appears live in the widget.
 
-Self-hosted Krispy changes that to zero. It runs on Cloudflare Workers, uses Workers AI for inference — no OpenAI key, no per-token inference bill — and sends a Telegram message when a visitor needs a human. You reply in Telegram; they see it in the widget. The bot steps aside while you're active and resumes when you're done.
-
-[Setting it up on Cloudflare](/self-host-live-chat-cloudflare) takes one command after cloning:
+[Setting Krispy up on Cloudflare](/self-host-live-chat-cloudflare) takes one command after cloning:
 
 ```bash
 git clone https://github.com/krispyai/krispy
@@ -42,57 +43,49 @@ cp .env.example .env   # add your Telegram bot token + Cloudflare account ID
 wrangler deploy
 ```
 
-🥐 Widget is live. Handoff works. You own the data.
+Widget live. Handoff working. You own the data. If you ever outgrow the free limits, Cloudflare's paid Workers plan is $5/month — still not $95.
 
-Cloudflare's free tier gives you 100,000 Worker requests per day. Most indie projects never leave it. The paid plan, if you ever do, is $5/month — still not $95.
+> 🥐 **Buttr:** took me 2 min. and i'm a croissant. you'll be fine.
 
-### Email collection — $0 to start
+## What covers email, bugs, docs, and uptime?
 
-Buttondown's free tier covers 100 subscribers. Mailchimp's covers 500. Pick one and move. You're not running drip sequences yet; you need somewhere to put the email address of the person who asked a useful question and deserves a follow-up when you ship the fix.
+**Email collection — $0 to start.** Buttondown's free tier handles up to 100 subscribers; Mailchimp's covers 500. You do not need drip sequences yet. You need somewhere to put the email address of the person who asked a useful question and deserves a follow-up when you ship the fix.
 
-### Bug reports and feature requests — $0
+**Bug reports and feature requests — $0.** GitHub Issues is free for public and private repositories on GitHub's free plan (source: [github.com/pricing](https://github.com/pricing)) and already has search, labels, and cross-references. A public repo lets users find existing answers before they write in — which cuts duplicate questions without you touching anything. Add a short `CONTRIBUTING.md` pointing to Issues and you have triage for free. Linear's free tier works if your project is closed-source.
 
-If your project is on GitHub, you already have a ticket queue. A public repo lets users search before they write in — which cuts duplicate questions without you touching anything. Add a short `CONTRIBUTING.md` that says where bugs go, and you have triage for free.
+**Documentation — $0.** A three-page Notion doc or GitHub wiki catches 60% of support volume at most small projects. Write it once; it works while you sleep. Link it from your site footer and from the bot's first message so people find it before they type.
 
-Not open-source? Linear's free tier and GitHub Issues both work.
+**Status page — $0.** Upptime (GitHub Actions, fully free) and Instatus's free tier both work. When something is down, users check the status page before writing in. Five minutes to configure; saves hours of "is this down for you too?" threads.
 
-### Documentation — $0
+## What does the honest cost math look like?
 
-A three-page Notion doc or GitHub wiki catches 60% of support volume at most small projects. Write it once; it works while you sleep. Link it from your site footer and from the bot's first message so people find it before they type.
+| Tool | What it does | Monthly cost |
+|---|---|---|
+| Self-hosted Krispy | AI chat + Telegram handoff | $0 |
+| Cloudflare Workers | Hosting (100K requests/day free) | $0 |
+| Buttondown | Email, up to 100 subscribers | $0 |
+| GitHub Issues | Bug tracking + feature requests | $0 |
+| Notion or GitHub wiki | Documentation | $0 |
+| Upptime | Status page | $0 |
+| **Total** | | **$0** |
 
-### Status page — $0
+The [per-seat pricing model used by enterprise support vendors](/why-per-seat-pricing-hurts-solo-founders) was designed for procurement teams counting headcount, not for one person doing five jobs. At $74–400/month for a typical paid stack, you are buying a pricing structure that was never built for you.
 
-Upptime (GitHub Actions, fully free) and Instatus's free tier both work. When something's down, users check the status page before they write in. Five minutes to configure; saves hours of "is this down for you too?" threads.
+## What do you actually give up with this stack?
 
-## The honest cost math
+**One inbox.** With this stack, conversations arrive through Telegram, bugs through GitHub, and email through Buttondown — three places instead of one. That is a real coordination cost.
 
-| Tool | Monthly cost |
-|---|---|
-| Self-hosted Krispy (AI chat + Telegram handoff) | $0 |
-| Cloudflare Workers (hosting) | $0 |
-| Buttondown (email, up to 100 subscribers) | $0 |
-| GitHub Issues (bug tracking) | $0 |
-| Notion or GitHub wiki (docs) | $0 |
-| Upptime (status page) | $0 |
-| **Total** | **$0** |
+You also give up automatic CSAT reporting, SLA tracking, and conversation tagging. If you need those today, you are probably past the stage where "free" is the binding constraint.
 
-The [per-seat pricing model](/why-per-seat-pricing-hurts-solo-founders) was designed for procurement teams counting headcount, not for solo founders doing five jobs. At $74–400/month for a typical paid stack, you're buying a pricing model that was never built for you in the first place.
+Self-hosting means you are the operator. When Krispy ships an update, you pull it and redeploy — one `wrangler deploy`, about 30 seconds. If you would rather not think about it, **Krispy Cloud** runs the same AI chat and Telegram handoff with a 14-day free trial at $19/month flat — same open-source codebase, managed for you.
 
-## What you give up
+> 🥐 **Buttr:** three places instead of one. i said what i said. still zero dollars though.
 
-One inbox. With this stack, conversations come through Telegram, bugs through GitHub, email through Buttondown. Three places instead of one.
+## When should a solo founder start paying for support tools?
 
-You also give up automatic CSAT reporting, SLA tracking, and conversation tagging. If you need those right now, you're probably past the stage where "free" is the binding constraint.
+When the coordination cost of checking Telegram, GitHub, and email takes more than 3–4 hours a week of active management. Not before.
 
-And self-hosting means you're the operator. When Krispy ships an update, you pull it and redeploy. That's 30 seconds — `wrangler deploy` — but it exists. If you'd rather not think about it, **Krispy Cloud** has a free tier that runs the same AI chat and Telegram handoff without the ops. Same open-source codebase, managed for you.
-
-## When to add a seat to the budget
-
-When the coordination cost of checking three places takes more time than a $30–50/month unified inbox would save — that's the signal. Not before.
-
-[Most indie projects take longer to outgrow this stack than they expect](/live-chat-for-indie-hackers). Free tier headroom is real, the Telegram handoff is fast once you're used to it, and the only invoice at the end of the month is the one you sent.
-
-If you want to give it a try, [star the GitHub repo](https://github.com/krispyai/krispy) — it helps other builders find it. And if running infra is one thing too many right now, Krispy Cloud's free tier is one script tag away.
+[Most indie projects take longer to outgrow this stack than they expect](/live-chat-for-indie-hackers). Cloudflare's free tier headroom is real. The Telegram handoff is fast once you are used to it. Adding a VA or co-founder to your Telegram bot or group costs zero — there is no seat, no invoice delta. That is exactly the [per-seat trap that enterprise support pricing creates](/why-per-seat-pricing-hurts-solo-founders): one part-time helper should not double your bill.
 
 ---
 
@@ -100,20 +93,26 @@ If you want to give it a try, [star the GitHub repo](https://github.com/krispyai
 
 ### Can a solo founder actually run real support for $0?
 
-Yes, for most at under $2–3K MRR. Self-hosted Krispy covers AI chat and human handoff at zero cost. GitHub Issues handles bugs. A Notion FAQ catches the repeat questions. Cloudflare's free tier handles 100,000 Worker requests per day, which is more headroom than most indie projects will ever use. The stack holds up to 30–60 conversations a month without strain.
+Yes, for most founders at under $2–3K MRR. Self-hosted Krispy covers AI chat and human handoff at zero cost. GitHub Issues handles bug tracking. A Notion FAQ absorbs repeat questions before they become tickets. Cloudflare's free tier handles 100,000 Worker requests per day — more headroom than most indie projects will ever use. The stack holds up comfortably through 30–60 active support conversations a month without strain.
 
-### What's the actual catch with Cloudflare's free tier?
+### What's the actual catch with Cloudflare Workers' free tier?
 
-The limit is 100,000 requests per day and 10ms CPU time per request. For a chat widget on a side project, that's enormous headroom. Very long AI inference calls may occasionally need the $5/month paid tier, which extends CPU time to 30 seconds per invocation. In practice, most Krispy conversations stay well inside the free limits.
+The limits are 100,000 requests per day and 10ms CPU time per request (per Cloudflare's public Workers documentation). For a chat widget on a side project, that is large headroom. Very long AI inference calls may occasionally push against the CPU limit; Cloudflare's $5/month paid tier extends that to 30 seconds per invocation. In practice, most Krispy conversations stay well inside the free limits.
 
-### Is Telegram a reasonable support channel, not just a workaround?
+### How does the Telegram handoff actually work?
 
-It's the right channel for solo builders. Push beats pull: instead of an inbox you have to remember to check, Krispy sends the conversation directly to your phone with a take-over button. You're already on Telegram. You reply from wherever you are; the visitor sees it in the widget within seconds. Most handoff conversations close in under two minutes.
+When a visitor's message needs a human, Krispy sends a Telegram notification — to you, or to a Telegram group if you have a small team. The notification includes the full conversation context. You reply in Telegram; it appears live in the visitor's chat widget within seconds. Krispy steps aside while you are active and resumes automatically when you go quiet. Most handoff conversations close in under two minutes.
 
 ### What happens when I bring in a VA or co-founder?
 
-Nothing changes on the bill. Adding someone to your Telegram bot or group costs zero — there's no seat, no invoice delta. This is exactly the [per-seat trap](/why-per-seat-pricing-hurts-solo-founders) the $0 stack sidesteps: adding one part-time helper doubles your bill only on tools that invented that pricing model.
+Nothing changes on the bill. Add them to your Telegram bot or group for zero — there is no seat, no invoice delta. This is exactly the per-seat trap that a $0 stack sidesteps: adding one part-time helper doubles your bill only on tools that invented that pricing model.
 
 ### When should I actually pay for a support tool?
 
-When juggling Telegram, GitHub, and email takes more than 3–4 hours a week of active coordination. At that point, a $30–50/month unified inbox pays for itself in reclaimed focus. Below that threshold, and especially while you're still finding your product's support shape, the $0 stack wins every time.
+When managing Telegram, GitHub, and email takes more than 3–4 hours a week of active coordination. At that point, a $30–50/month unified inbox pays for itself in reclaimed focus. Below that threshold — especially while you are still learning the shape of your product's support load — the $0 stack wins every time.
+
+---
+
+If you want to try it: [star the Krispy GitHub repo](https://github.com/krispyai/krispy) — it helps other builders find it. And if running infrastructure is one thing too many right now, [Krispy Cloud](https://krispy.ai) is a 14-day free trial, $19/month flat after that — same bot, no terminal required.
+
+> 🥐 **Buttr:** à bientôt 🥐

@@ -1,25 +1,25 @@
 ---
-title: "Bring your own AI: CF Workers AI vs OpenAI vs Anthropic"
-description: "Krispy lets you swap in any AI model. Here's the honest comparison — cost, setup, and when to upgrade from the free Workers AI default."
+title: "How to Choose an AI Model for Krispy Live Chat"
+description: "Krispy runs on Workers AI (free), OpenAI, or Anthropic. Cost breakdown, side-by-side table, and the 2-minute config change — pick your model and go."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "howto"
 tags: ["workers-ai", "openai", "anthropic", "live-chat", "self-hosting"]
 ---
 
-Most chat platforms pick the AI for you. You get whatever model the vendor bundled, at whatever margin they added, and the line item shows up in a subscription bill somewhere between "seats" and "AI add-on." You're not choosing the model — you're choosing the product tier.
+> 🥐 **Buttr:** most chat platforms pick the model for you. krispy doesn't. you're welcome.
 
-Krispy is different because it's open-source. The AI layer is a config line. Which means the question is actually yours to answer: Workers AI, OpenAI, or Anthropic — and when does each one make sense?
+Krispy supports three AI providers out of the box: Cloudflare Workers AI (free, no API key required), OpenAI, and Anthropic. You switch between them with two environment variables. For most projects, Workers AI is the right starting point — upgrade to OpenAI or Anthropic only when you hit a concrete limitation.
 
-## The short version
+![Buttr reading the AI model docs](/blog/buttr-reading.png)
+*Buttr doing the model research so you don't have to.*
 
-If you're already [deploying Krispy on Cloudflare](/self-host-live-chat-cloudflare), start with Workers AI. It's the default, it costs nothing, and it requires no extra API key. If you hit a real capability gap — tone, context length, domain-specific reasoning — swap to OpenAI or Anthropic in five minutes. You're not locked into anything.
+## Does Krispy have a free built-in AI option?
 
-Here's the full picture.
+Yes — Cloudflare Workers AI is the default. Because Krispy is designed to [deploy on Cloudflare Workers](/self-host-live-chat-cloudflare), the `AI` binding runs inside the same runtime. No external API call, no separate bill, no key to rotate.
 
-## Cloudflare Workers AI: the zero-friction starting point
-
-Workers AI runs inside the same Cloudflare runtime as the rest of Krispy. No external API call, no separate bill, no key to rotate. The `AI` binding is declared in `wrangler.toml` and that's it.
+Configure it in two places:
 
 ```toml
 # wrangler.toml
@@ -32,13 +32,13 @@ AI_PROVIDER=workers
 AI_MODEL=@cf/meta/llama-3.1-8b-instruct
 ```
 
-Deploy, and your chat bot is running Llama 3.1 on Cloudflare's edge for free. The free tier covers 10,000 neurons per day — enough for a support widget on most indie projects without ever paying a dollar in inference.
+Cloudflare's free tier covers 10,000 neurons per day at no cost ([Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)). That's enough for a support widget on most indie projects without ever paying for inference. The [5-minute Krispy setup guide](/add-live-chat-in-5-minutes) uses Workers AI as the default precisely because there's no API key step.
 
-**Where it wins:** latency is low (same network hop as your Worker), data stays inside Cloudflare's infrastructure, and there's nothing to configure. The [5-minute setup guide](/add-live-chat-in-5-minutes) uses Workers AI as the default specifically because you can get a working bot without touching a single API key.
+**Where Workers AI works well:** latency is low (same network as your Worker), user messages stay inside Cloudflare's infrastructure, and Llama 3.1 8B handles greetings, FAQs, and triage cleanly.
 
-**Where it's limited:** the model catalog is smaller than the big providers. Llama 3.1 8B is good — it handles FAQs, greetings, and triage cleanly — but it will occasionally struggle with nuanced reasoning, very long conversations, or answers that require careful tone. If your chat bot is representing a brand that cares about voice, you'll feel the edges.
+**Where it falls short:** the model catalog is smaller than the big providers. On nuanced reasoning, very long conversations, or replies where brand voice matters, you'll start to feel the edges.
 
-## OpenAI: the reliable workhorse
+## When should I switch to OpenAI?
 
 If your team already has an OpenAI key, the switch is two lines:
 
@@ -48,17 +48,17 @@ AI_MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-...
 ```
 
-**The cost math:** GPT-4o-mini runs around $0.15 per million input tokens and $0.60 per million output tokens. A typical chat exchange — a greeting, a few turns of Q&A, maybe a handoff message — is roughly 2,000–4,000 tokens total. That's less than $0.001 per conversation. Even at 20,000 conversations a month you're looking at under $20 in inference.
+**The cost math:** GPT-4o-mini costs $0.15 per million input tokens and $0.60 per million output tokens ([OpenAI pricing](https://openai.com/api/pricing/)). A typical chat exchange — a greeting, a few turns of Q&A, maybe a handoff message — runs 2,000–4,000 tokens total. That's under $0.001 per conversation. At 20,000 conversations a month, you're looking at $10–20 in inference.
 
-GPT-4o is roughly 30× more expensive per token. For a live chat widget, that's rarely justified — use 4o-mini unless you can point to specific failures that a smarter model would fix.
+GPT-4o is roughly 30× more expensive per token. For a live chat widget, that's rarely justified — use GPT-4o-mini unless you can point to specific failures a smarter model would fix.
 
-**Where OpenAI wins:** the widest API ecosystem. Function calling, structured outputs, vision, and the most battle-tested rate limits at scale. If you need the bot to call your own APIs mid-conversation, OpenAI's function-calling interface is the easiest to wire up.
+**Where OpenAI wins:** the broadest API ecosystem. Function calling, structured outputs, vision, and the most battle-tested rate limits at scale. If you need the bot to call your own APIs mid-conversation, OpenAI's function-calling interface is the easiest to wire up.
 
-**The honest trade-off:** you're dependent on their pricing and uptime. Krispy's config model means you can swap providers in an afternoon — but that's still a real migration, not zero cost.
+**The honest trade-off:** you're dependent on their pricing and uptime. Krispy's config model means you can switch providers in an afternoon — but that's still a real migration, not zero cost.
 
-## Anthropic: when tone is the constraint
+## When does Anthropic (Claude) make sense?
 
-Claude tends to land differently than GPT in one specific way: it follows detailed instructions more precisely and hedges less on things it's uncertain about. For a live chat bot that's representing a brand — one where a hallucinated answer or a weirdly casual response causes actual damage — that reliability is worth paying for.
+Claude follows detailed instructions more precisely and hedges less on things it's uncertain about. For a live chat bot representing a brand — where a hallucinated answer or an off-tone reply causes real damage — that reliability is worth paying for.
 
 ```env
 AI_PROVIDER=anthropic
@@ -66,49 +66,60 @@ AI_MODEL=claude-haiku-4-5
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Claude Haiku is the fastest and cheapest Claude model. Pricing is roughly $0.80 per million input tokens and $4 per million output tokens — more expensive than GPT-4o-mini, still cheap in absolute terms for chat volumes. A month of 20,000 conversations probably costs $25–60 depending on your average turn length.
+Claude Haiku is the fastest and cheapest Claude model. Pricing is $0.80 per million input tokens and $4 per million output tokens ([Anthropic pricing](https://www.anthropic.com/pricing)). At 20,000 conversations a month, expect $25–60 depending on average turn length.
 
-**Where Anthropic wins:** instruction fidelity on detailed prompts. If you've put real effort into your Krispy system prompt — brand voice, escalation rules, what the bot should never say — Claude is more likely to honor all of it across a long conversation, without drifting or padding.
+> 🥐 **Buttr:** claude actually reads your system prompt. all of it. including the part you wrote at 1am.
 
-## Side by side
+**Where Anthropic wins:** instruction fidelity on complex prompts. If you've put real effort into your Krispy system prompt — brand voice, escalation rules, hard limits on what the bot should never say — Claude is more likely to honor all of it across a long conversation without drifting or padding.
 
-| | Workers AI | OpenAI (mini) | Anthropic (Haiku) |
+## Workers AI vs OpenAI vs Anthropic: side by side
+
+| | Workers AI | OpenAI (GPT-4o-mini) | Anthropic (Claude Haiku) |
 |---|---|---|---|
 | Cost at low volume | Free | ~$0 | ~$0 |
 | Cost at 20K chats/mo | Free (likely) | ~$10–20 | ~$25–60 |
-| API key needed | No | Yes | Yes |
-| Data leaves Cloudflare | No | Yes | Yes |
+| API key required | No | Yes | Yes |
+| Data stays in Cloudflare | Yes | No | No |
 | Model variety | Moderate | High | Moderate |
 | Instruction fidelity | Good | Good | Very good |
+| Best for | Zero-config default | Ecosystem + function calling | Brand voice + complex prompts |
 
-## The practical call
+## Which AI model should I actually use?
 
-Start with Workers AI. It's already wired into Krispy, it costs nothing, and it's fast. Upgrade when you run into a real problem — not in anticipation of one.
+Start with Workers AI. It's already wired into Krispy, costs nothing, and handles routine chat — greetings, FAQs, triage — cleanly. Upgrade only when you hit a concrete gap, not in anticipation of one.
 
-If you upgrade, default to OpenAI GPT-4o-mini. It's cheap, the API is mature, and most chat use cases don't need more. Move to Claude Haiku if you have a complex system prompt, a brand-voice requirement, or users asking questions that require careful, specific answers.
+If you upgrade, default to **GPT-4o-mini**. It's cheap, the API is mature, and most live chat use cases don't need more. Move to **Claude Haiku** when your system prompt is complex and you need the bot to hold detailed instructions across a long conversation.
 
-GPT-4o and Claude Sonnet are there for edge cases — not defaults.
+GPT-4o and Claude Sonnet are edge cases, not defaults.
+
+> 🥐 **Buttr:** changing providers is 2 env vars and a redeploy. the hard question is: are you actually hitting a limit yet?
+
+The real leverage isn't the model tier — it's a clear system prompt paired with the [Telegram human handoff](/live-chat-telegram-handoff) that catches whatever the AI misses. Let the bot handle volume; let humans handle the hard stuff.
 
 ---
 
-If you'd rather skip the infra entirely, [Krispy Cloud](https://krispy.ai) runs the same stack with a free tier included. But if you want the control — and the ability to point the AI at exactly the model your use case needs — give the repo a ⭐ at [github.com/krispyai/krispy](https://github.com/krispyai/krispy) and deploy it yourself. 🥐
+If you'd rather skip the infra entirely, [Krispy Cloud](https://krispy.ai) runs the same stack with a 14-day free trial, starting at $19/mo flat. If you want the control — and the ability to point the AI at exactly the model your use case needs — star the repo at [github.com/krispyai/krispy](https://github.com/krispyai/krispy) and deploy it yourself. 🥐
 
 ---
 
 ## FAQ
 
-**Can I use a different model, like Gemini or Mistral, with Krispy?**
+**Can I use a different model — Gemini, Mistral, or a local Ollama model — with Krispy?**
 
-Yes. If your provider exposes an OpenAI-compatible API — Mistral, Groq, Together AI, and local Ollama all do — point `AI_PROVIDER=openai` at a custom base URL. Native adapters for additional providers are on the roadmap; PRs are open.
+Yes. Any provider that exposes an OpenAI-compatible API works today: Mistral, Groq, Together AI, and local Ollama all qualify. Point `AI_PROVIDER=openai` at a custom `AI_BASE_URL` and you're done. Native adapters for additional providers are on the roadmap; PRs are open.
 
 **Does switching AI models mid-production break anything for active users?**
 
-No. The model config is environment-level — change `AI_MODEL` and redeploy. Krispy's human-in-the-loop design keeps conversation context in your Telegram thread, not inside the model, so there's no session state to migrate. Existing conversations continue normally.
+No. The model config is environment-level — update `AI_MODEL` and redeploy. Krispy's design keeps conversation context in your Telegram thread, not inside the model, so there's no session state to migrate. In-flight conversations continue normally without any disruption to active users.
 
 **Is Workers AI reliable enough for a production chat widget?**
 
-For most projects, yes. Llama 3.1 8B handles routine chat cleanly. Where it occasionally falls short is on multi-step reasoning or very specific domain knowledge — which is where a well-written system prompt and the Telegram handoff matter more than the model tier. Let the AI handle volume; let humans handle the hard stuff.
+For most projects, yes. Llama 3.1 8B handles routine chat cleanly. Where it occasionally falls short is multi-step reasoning or precise domain knowledge — which is where a well-written system prompt and the Telegram handoff matter more than the model tier. Let the AI handle volume; let humans handle the hard stuff.
 
-**Does Krispy send my users' messages to Anthropic or OpenAI?**
+**Does Krispy send my users' messages to OpenAI or Anthropic?**
 
-Only if you configure one of those providers. With Workers AI, messages stay within Cloudflare's network. With OpenAI or Anthropic, messages go to their API under your account's data processing terms — review those agreements if you handle EU user data or have strict privacy requirements.
+Only if you configure one of those providers. With Workers AI, messages stay within Cloudflare's network. With OpenAI or Anthropic, messages are processed by their API under your account's data processing terms — review those agreements if you handle EU user data or have strict privacy requirements.
+
+**How do I keep AI inference costs predictable as traffic grows?**
+
+Start with Workers AI (free tier). If you upgrade, GPT-4o-mini is easy to model: roughly $0.001 per conversation, so 10,000 conversations ≈ $10. Set a hard monthly spend cap in your provider's dashboard and monitor token usage there. With Workers AI you have no inference bill to manage at all until you hit the free-tier ceiling.

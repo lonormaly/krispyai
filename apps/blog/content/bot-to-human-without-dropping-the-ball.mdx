@@ -1,79 +1,87 @@
 ---
 title: "From bot to human without dropping the conversation"
-description: "How to hand off a live chat from bot to human without losing context — and why most platforms accidentally make visitors start over."
+description: "Most chat platforms drop context when a bot hands off to a human. Krispy keeps the full transcript in one place — no restarts, no repeated questions."
 date: "2026-07-02"
-updatedAt: "2026-07-02"
-author: "The Krispy team"
+updatedAt: "2026-07-03"
+author: "Shai Snir"
+type: "story"
 tags: ["handoff", "live-chat", "human-in-the-loop", "ux", "open-source"]
 ---
 
-There's a specific kind of frustration that's different from just "bad support." It's when you've spent three messages explaining your situation to a bot, the bot finally agrees it can't help — and then an agent pops in with: "Hi! How can I help you today?"
+> 🥐 **Buttr:** i've handled hundreds of these. the moment it gets real, i hand it to a human. quietly. nobody has to know.
 
-You start over. Everything you said to the bot is gone.
+When a bot escalates a live chat to a human agent, the visitor should never have to repeat themselves. The key is a shared conversation object that both the bot and the agent write to — so when the human steps in, they step into the same thread, with the full transcript already there. This post explains how that works in Krispy.
 
-That's not a handoff. That's a restart with extra steps. [Understanding why the model exists helps](/what-is-human-in-the-loop-live-chat), but this post is about preventing the restart.
+## What causes context loss during a chat handoff?
 
-## Where context actually lives (and where it disappears)
+The context-loss problem is structural. In a typical live chat setup, the bot holds state in session memory — short-lived, scoped to the request, maybe logged somewhere. When the bot escalates, the "handoff" is usually: fire a notification, open a new ticket, attach whatever summary the bot produced. The agent gets a paragraph summary at best, nothing at worst.
 
-When a conversation happens in a typical live chat setup, the bot holds state in memory — short-lived, session-scoped, maybe logged somewhere. When the bot escalates, the "handoff" is often just: fire a notification to an agent, open a new ticket, attach whatever summary the bot managed to produce.
+According to [Zendesk's 2023 CX Trends Report](https://www.zendesk.com/customer-experience-trends/), 70% of customers expect agents to have context from previous interactions — yet most handoff implementations structurally guarantee the opposite. The friction isn't accidental; the architecture produces it.
 
-The visitor waits. The agent starts fresh. The friction is structural, not accidental.
+Understanding [why the human-in-the-loop model exists at all](/what-is-human-in-the-loop-live-chat) is useful context here, but this post is about preventing the restart.
 
-Krispy takes a different approach. There's a single Cloudflare Durable Object per conversation that owns the entire thread — bot messages, visitor messages, agent replies — as a continuous ordered log. Nothing is summarized, nothing discarded. When an agent steps in, they step *into* the same object. So does the visitor's widget. One source of truth, two participants.
+## How does Krispy keep the full transcript across the handoff?
 
-The [full architectural reasoning behind using a Durable Object here](/how-we-built-live-takeover-durable-objects) goes deeper than this post — but the practical upshot is simple: you can't drop context when the whole conversation lives in one place.
+Krispy uses a single [Cloudflare Durable Object](https://developers.cloudflare.com/durable-objects/) per conversation — one stateful object that owns the entire thread: bot messages, visitor messages, agent replies, all in order. There's no summary pass, no context window to fall off. When an agent steps in, they step into the same object the bot was writing to.
 
-## What the visitor experiences
+One source of truth, two participants. You can't lose context when the conversation never splits.
 
-From the visitor's side, nothing visual should announce the handoff. The chat continues in the same window, the same thread. No loading spinner, no "connecting you to an agent" interstitial that signals the previous conversation is now in the past.
+The [full reasoning behind the Durable Object design](/how-we-built-live-takeover-durable-objects) covers the tradeoffs in more depth. The practical upshot: the architecture makes a context-dropping handoff structurally impossible. Cloudflare Durable Objects are included in the Workers free tier up to 100,000 requests per day, per [Cloudflare's pricing page](https://developers.cloudflare.com/workers/platform/pricing/) — no added cost on top of Krispy's self-hosted zero.
 
-What they do see: the next message arrives with a different name and the reply pattern changes — less instant, more considered. That's enough. Visitors know they're talking to a human because the responses feel human, not because a banner told them.
+## What does the visitor experience during a handoff?
 
-What they *don't* need to do: repeat themselves. The agent already read the transcript.
+From the visitor's side, nothing visual should announce the handoff. The chat continues in the same window, the same thread. No "connecting you to an agent" interstitial, no loading state that signals the previous conversation is now in the past.
 
-## What the agent experiences
+What they see: the next message arrives with a different name, and the reply pattern changes — less instant, more considered. That's enough. Visitors know they're talking to a human because the responses feel human, not because a banner told them.
 
-[Krispy routes handoffs to Telegram](/connect-telegram-handoff). When a handoff triggers, a notification arrives in your Telegram — or your team's group chat — with the visitor's last message, the full prior conversation, and a prompt to reply.
+What they don't have to do: repeat themselves. The agent already read the transcript.
 
-Replying to that Telegram message routes your answer back to the visitor's widget. No dashboard to open, no new tab to switch to.
+## How does the Telegram handoff work?
 
-The setup takes about two minutes, once:
+![Buttr reading through a chat transcript before the human agent replies](/blog/buttr-reading.png)
+*the transcript. already read it. you're welcome.*
+
+[Krispy routes handoffs to Telegram](/connect-telegram-handoff). When a handoff triggers, a notification arrives in your Telegram — or your team's group chat — with the visitor's last message and the full prior conversation. You read the thread, you reply. That reply routes back to the visitor's widget. No dashboard to open, no new tab.
+
+The setup is two env vars, configured once:
 
 ```sh
 wrangler secret put TELEGRAM_BOT_TOKEN
 wrangler secret put TELEGRAM_CHAT_ID
 ```
 
-That's the entire integration. Two env vars. The Durable Object handles delivery, ordering, and routing your reply to the right visitor even if three conversations are happening at once.
+That's the full integration. The Durable Object handles delivery, ordering, and routing your reply to the right visitor even when three conversations are happening at once.
 
-## When no one replies immediately
+Compare this to commercial alternatives: Intercom's Fin AI Agent charges $0.99 per resolved conversation on top of a base seat subscription, [per their pricing page](https://www.intercom.com/pricing) — and still requires agents to work inside Intercom's own dashboard. Krispy's Telegram routing puts the handoff where you already are.
 
-This is the case people don't think about until it breaks. What happens at 2am? What if you're on a flight?
+> 🥐 **Buttr:** intercom's great at being intercom. i'm just free and already in your pocket.
 
-The Durable Object keeps the conversation open indefinitely. The visitor's session doesn't expire in the widget while they're in the tab. If they close it and come back, the thread is still there.
+## What happens when no one replies immediately?
 
-You can configure a fallback message the bot sends after a timeout — something like "We're a small team and might be a few hours, but we will reply." That's honest, sets the right expectation, and doesn't abandon the conversation.
+This is the case people don't think about until it breaks: 2am, a flight, a team of one.
 
-When you eventually open Telegram and reply — hours later, different timezone — the message delivers. If the visitor is in the tab, it arrives live. If not, it's waiting on their next visit. The bot doesn't pretend to be a human during the gap. It holds the queue and tells the truth.
+The Durable Object keeps the conversation open indefinitely. The visitor's session doesn't expire in the widget while they're in the tab. If they close it and return, the thread is still there.
 
-## Triggering the handoff
+You can configure a fallback message the bot sends after a timeout — something like "We're a small team and might be a few hours, but we will reply." That's honest, sets the right expectation, and doesn't abandon the thread.
 
-Handoff triggers are configurable in `krispy.config.ts`. The defaults cover two cases:
+When you eventually open Telegram and reply, the message delivers. If the visitor is in the tab, it arrives live. If not, it's waiting on their next visit. The bot doesn't pretend to be a human during the gap.
+
+## How do you configure the handoff trigger?
+
+Handoff triggers are set in `krispy.config.ts`. The defaults cover two paths:
 
 1. **Explicit request** — visitor types "human," "agent," "real person," or anything on your keyword list.
 2. **Confidence threshold** — if the bot produces a low-confidence answer two turns in a row, it escalates automatically before the visitor has to ask.
 
-Both can run simultaneously. First trigger that fires wins. If you want to watch confidence scores in real time to calibrate without guessing:
+Both can run simultaneously. First trigger that fires wins.
 
-```sh
-wrangler tail
-```
+To calibrate without guessing, `wrangler tail` streams actual confidence scores and which turn fired the escalation in real time — useful for tuning the threshold to the questions your visitors actually ask.
 
-Actual scores and which turn triggered the escalation show up in the log stream. Useful for tuning the threshold to match the kind of questions your visitors actually ask.
+> 🥐 **Buttr:** i know when i'm out of my depth. that's kind of the whole point.
 
 ---
 
-If you want to run this yourself: [star Krispy on GitHub](https://github.com/krispyai/krispy) — the README gets you deployed in under 30 minutes. If you'd rather skip the infrastructure entirely, [Krispy Cloud](https://krispy.ai) has a free tier that covers most small sites with no credit card required.
+Self-host it — [star Krispy on GitHub](https://github.com/lonormaly/krispyai) and the README gets you deployed in under 30 minutes. If you'd rather skip the infrastructure, [Krispy Cloud](https://krispy.ai) has a 14-day free trial at $19/mo flat.
 
 ---
 
@@ -81,20 +89,20 @@ If you want to run this yourself: [star Krispy on GitHub](https://github.com/kri
 
 ### When the agent takes over, do the bot messages disappear from the visitor's view?
 
-No. The entire transcript stays in the widget exactly as it happened — bot replies, visitor messages, agent replies, all in the same thread in order. The only visible change is the name on incoming messages. From the visitor's perspective, the conversation just continues. There's no visual reset and no moment where they can tell the handoff happened.
+No. The entire transcript stays in the widget exactly as it happened — bot replies, visitor messages, agent replies, all in the same thread in order. The only visible change is the name on incoming messages. From the visitor's perspective, the conversation just continues. There's no visual reset and no moment where they can tell the handoff occurred.
 
 ### How does the agent know what the visitor already said?
 
-The Telegram handoff notification includes the actual prior conversation, not a summary. The agent reads it before they type a single word. This is the core guarantee: no "can you repeat your issue?" moments, because the full transcript is attached before the first reply. That one detail is what separates a real handoff from a restart.
+The Telegram handoff notification includes the actual prior conversation, not a summary. The agent reads the full thread before typing a word. No "can you repeat your issue?" — the transcript is attached before the first reply. That one detail is what separates a real handoff from a restart with extra steps.
 
-### Can the handoff trigger automatically without the visitor asking?
+### Can the handoff trigger automatically, without the visitor asking?
 
-Yes. Krispy tracks bot confidence per turn. If the bot falls below your configured threshold twice in a row, it escalates and notifies you in Telegram without the visitor needing to ask. This is the "graceful exit before things go sideways" path — the bot hands off before it's visibly failing rather than after it's already frustrated someone.
+Yes. Krispy tracks bot confidence per turn. If the bot falls below your configured threshold twice in a row, it escalates and notifies you in Telegram without the visitor needing to ask. This is the "graceful exit before things go sideways" path — the bot hands off before it's visibly failing, not after it's already frustrated someone.
 
 ### What if no one replies and the visitor closes the tab?
 
-The conversation stays open in the Durable Object. When an agent eventually replies in Telegram, the message is waiting in the thread for the visitor's next visit. You can also configure a bot fallback — an honest "we'll get back to you in a few hours" — so the visitor doesn't wonder if their message went nowhere. Nothing expires on a timer.
+The conversation stays open in the Durable Object indefinitely. When an agent eventually replies in Telegram, the message is waiting in the thread for the visitor's next visit. You can also configure a bot fallback — an honest "we'll get back to you in a few hours" — so the visitor doesn't wonder if their message went nowhere. Nothing expires on a timer.
 
 ### Does this work for a solo founder who checks Telegram once an hour?
 
-That's actually the main use case. The bot handles first contact instantly, which covers most visitors without any human involvement. For the ones who genuinely need a person, you get a Telegram ping, reply when you can, and it reaches them. You're not running a 24/7 support desk — you're building a human fallback that works at the pace a small team can actually sustain.
+That's the main use case. The bot handles first contact instantly, which covers most visitors without any human involvement. For the ones who genuinely need a person, you get a Telegram ping, reply when you can, and it reaches them. You're not running a 24/7 support desk — you're running a human fallback that works at the pace a small team can sustain.
