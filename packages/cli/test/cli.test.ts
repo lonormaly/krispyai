@@ -39,4 +39,42 @@ describe("krispy cli", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain("TENANT_SYNC_SECRET");
   });
+
+  test("usage lists the init command", () => {
+    expect(run([]).err).toContain("init");
+  });
+
+  test("init in a non-TTY (piped subprocess) → exit 1, doesn't hang", () => {
+    const r = run(["init"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("TTY");
+  });
+});
+
+describe("telegramGetMe (token validate path)", () => {
+  // Import the real function; stub global fetch so we exercise the ok/reject branches
+  // without hitting Telegram. Restore fetch after each case.
+  test("a fake/rejected token → null (no hang, no throw)", async () => {
+    const { telegramGetMe } = await import("../src/index.ts");
+    const orig = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ok: false, error_code: 401 }), { status: 401 });
+    try {
+      expect(await telegramGetMe("fake:token")).toBeNull();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  test("a valid token → the bot @username", async () => {
+    const { telegramGetMe } = await import("../src/index.ts");
+    const orig = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ok: true, result: { username: "mybot" } }), { status: 200 });
+    try {
+      expect(await telegramGetMe("123:real")).toBe("mybot");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
 });

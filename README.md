@@ -68,6 +68,25 @@ bun run dev:edge         # runs the Worker on http://localhost:8787
 
 ### Go live
 
+**Fastest path — the `krispy init` wizard.** After you've created the KV namespace and
+set `TENANT_SYNC_SECRET` (steps 1 + 5 below), run the guided setup and it walks you through
+the rest in the terminal — the same steps as the Cloud dashboard onboarding:
+
+```sh
+npx krispy init          # (or: bun packages/cli/src/index.ts init)
+```
+
+It guides you through **① Connect Telegram** (BotFather → paste the bot token, validated
+live via Telegram's `getMe` → supergroup-with-Topics + add-bot-as-admin → chat id),
+**② Train your bot** (point it at a kbase file, accept a starter template, or skip),
+**③ Embed the widget** (prints the copy-paste `<script>` snippet, tenant baked in — paste
+before `</body>`), and **④ Next steps** (`krispy dev` / `wrangler deploy`, and how to test
+the loop). Each step persists as you go via `POST /api/tenant/config`. Re-run it any time;
+it never clobbers what you've already set.
+
+<details>
+<summary>Or set it up by hand (wrangler secrets)</summary>
+
 ```sh
 # 1. Create the KV namespace, paste the id into services/edge/wrangler.toml (REPLACE_WITH_KV_ID)
 bunx wrangler kv namespace create KRISPY_KV
@@ -93,6 +112,8 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -d "url=https://krispy-edge.YOU.workers.dev/api/telegram/webhook" \
   -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
+
+</details>
 
 Honest about the Telegram step: BotFather, the supergroup-with-Topics, and admin rights are a real five minutes of clicking — there's no way around a token if you want replies on your phone. Full walkthrough and architecture notes: [`services/edge/README.md`](./services/edge/README.md).
 
@@ -126,6 +147,7 @@ TENANT_SYNC_SECRET=... \
 
 | command | what it does |
 |---------|--------------|
+| `krispy init` | guided first-run wizard — Telegram → train → embed → next steps (`POST /api/tenant/config`) |
 | `krispy set-kbase <file>` | write `<file>`'s contents as the bot's system prompt (`POST /api/tenant/config`) |
 | `krispy dev` | run the edge Worker locally (`wrangler dev`) |
 

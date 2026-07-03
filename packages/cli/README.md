@@ -7,9 +7,27 @@ Worker's `POST /api/tenant/config` route, which merges the prompt into KV.
 ## Commands
 
 ```sh
+krispy init                  # guided first-run setup (Telegram → train → embed → next steps)
 krispy set-kbase kbase.md    # write kbase.md as the bot's system prompt
 krispy dev                   # run the edge Worker locally (wrangler dev)
 ```
+
+### `krispy init` — the wizard
+
+The terminal-native counterpart to Krispy Cloud's dashboard onboarding. Four steps, each
+persisted as you go via `POST /api/tenant/config` (single-tenant `self`); re-run any time —
+it never clobbers fields you've already set.
+
+1. **Connect Telegram** — BotFather guide (`/newbot` at <https://t.me/botfather>) → paste the
+   bot token, **validated live via Telegram `getMe`** (green `✓ @yourbot` or red retry) →
+   supergroup-with-Topics + add-the-bot-as-admin guide → chat id. Persists `botToken` + `chatId`.
+2. **Train your bot** — point it at a knowledge-base file, accept a starter template, or skip
+   (set one later with `set-kbase`). Persists `systemPrompt`.
+3. **Embed the widget** — prints the copy-paste `<script>` snippet with your `data-api` +
+   `data-tenant` baked in. Paste it before `</body>`.
+4. **Next steps** — how to run (`krispy dev` / `wrangler deploy`) and test the loop.
+
+Needs a real terminal (TTY); in CI/piped input it exits with guidance instead of hanging.
 
 ## Config (env)
 
