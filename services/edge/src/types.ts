@@ -25,6 +25,13 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET?: string;
   SYSTEM_PROMPT?: string;
   AI_MODEL?: string;
+  // --- turn-tax cost knobs (all optional; sensible defaults in code) ---
+  /** Sliding-window size the AI sees, default MAX_HISTORY_MSGS (8). */
+  MAX_HISTORY_MSGS?: string;
+  /** AI turns before forced human handoff, default MAX_AI_TURNS (10). */
+  MAX_AI_TURNS?: string;
+  /** Output token cap per reply, default MAX_OUTPUT_TOKENS (256). */
+  MAX_OUTPUT_TOKENS?: string;
 
   // --- misc ---
   /** CORS allow-origin for the widget. Default "*". */

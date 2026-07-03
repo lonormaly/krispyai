@@ -9,6 +9,11 @@
 
 export const HANDOFF_MARKER = "[!HANDOFF]";
 
+// Reinforces the output-token cap (ai.ts MAX_OUTPUT_TOKENS) in words the model obeys,
+// and matches the live-chat voice. Appended after the handoff contract so it never
+// competes with it (a reply can still be one short sentence + the marker).
+export const BREVITY_INSTRUCTION = "Keep replies under ~3 short sentences.";
+
 const DEFAULT_PROMPT = `You are a friendly, concise live-chat assistant on a company's website.
 Answer visitor questions helpfully in the visitor's own language. Keep replies short —
 a sentence or two, like a real support chat, not an essay.
@@ -24,9 +29,10 @@ questions you can answer.`;
 export function buildSystemPrompt(custom?: string): string {
   const base = custom?.trim() ? custom.trim() : DEFAULT_PROMPT;
   // Even a custom prompt must know the handoff contract, so always restate it.
-  return custom?.includes(HANDOFF_MARKER)
+  const withHandoff = custom?.includes(HANDOFF_MARKER)
     ? base
     : `${base}\n\nWhen a human should take over, append ${HANDOFF_MARKER} at the very end of your reply.`;
+  return `${withHandoff}\n\n${BREVITY_INSTRUCTION}`;
 }
 
 export interface ParsedReply {

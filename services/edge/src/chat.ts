@@ -10,6 +10,22 @@ import { parseHandoff } from "./system-prompt";
 
 export const FALLBACK_REPLY = "Thanks — a teammate will jump in here shortly.";
 
+// Turn tax: the client re-sends the whole history each turn, so cost is quadratic in
+// conversation length. Two bounds fix that here (the single chokepoint every AI call
+// routes through). Both are overridable per-deploy (index.ts reads the env vars).
+
+// Sliding window — the AI only sees the last N prior messages. System + latest user
+// are always added on top, so context stays coherent while the tail stops growing.
+export const MAX_HISTORY_MSGS = 8;
+
+// After this many AI turns in one session with no resolution, tag in a human instead
+// of paying for another turn (cost + UX: no endless bot loop). Generous on purpose —
+// short chats never hit it. Counted from the assistant messages in history.
+export const MAX_AI_TURNS = 10;
+
+/** Rough token count when the provider exposes none: ~4 chars/token. */
+const estTokens = (s: string) => Math.ceil(s.length / 4);
+
 export interface ChatDeps {
   /** Ensure a Telegram topic exists for this session; return its thread id (0 = Telegram off). */
   ensureTopic: (sessionId: string, firstMessage: string) => Promise<number>;
@@ -21,9 +37,15 @@ export interface ChatDeps {
   ai: (messages: ChatMessage[]) => Promise<string>;
   /** Increment a usage counter. */
   meter: (kind: "ai" | "handoff") => Promise<void>;
+  /** Add `n` to the approximate-token usage counter (optional; no-op if unwired). */
+  meterTokens?: (n: number) => Promise<void>;
   systemPrompt: string;
   /** Prior turns for context (optional). */
   history?: ChatMessage[];
+  /** Sliding-window size the AI sees (default MAX_HISTORY_MSGS). */
+  maxHistoryMsgs?: number;
+  /** AI turns before forced human handoff (default MAX_AI_TURNS). */
+  maxAiTurns?: number;
 }
 
 export interface ChatInput {
@@ -51,14 +73,32 @@ export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatRe
     return { reply: null, handoff: false, handedOff: true };
   }
 
+  const history = deps.history ?? [];
+
+  // Turn-tax guard: too many AI turns without resolution → hand to a human instead of
+  // paying for another (likely-looping) turn. Counted from the assistant replies so far.
+  const aiTurns = history.reduce((n, m) => n + (m.role === "assistant" ? 1 : 0), 0);
+  if (aiTurns >= (deps.maxAiTurns ?? MAX_AI_TURNS)) {
+    await deps.meter("handoff");
+    await deps.toTopic(threadId, "🙋 Long chat with no resolution — bringing in a human.");
+    return { reply: FALLBACK_REPLY, handoff: true, handedOff: false };
+  }
+
+  // Sliding window: cap the prior turns the AI sees; system + latest user added on top.
+  const windowed = history.slice(-(deps.maxHistoryMsgs ?? MAX_HISTORY_MSGS));
+  const messages: ChatMessage[] = [
+    { role: "system", content: deps.systemPrompt },
+    ...windowed,
+    { role: "user", content: input.message },
+  ];
+
   let raw: string;
   try {
-    raw = await deps.ai([
-      { role: "system", content: deps.systemPrompt },
-      ...(deps.history ?? []),
-      { role: "user", content: input.message },
-    ]);
+    raw = await deps.ai(messages);
     await deps.meter("ai");
+    // Approx token metering (provider seam returns text only → estimate in + out).
+    const tokens = messages.reduce((n, m) => n + estTokens(m.content), 0) + estTokens(raw);
+    await deps.meterTokens?.(tokens);
   } catch {
     // AI down — keep the loop alive by routing to a human.
     await deps.toTopic(threadId, "⚠️ AI unavailable — visitor is waiting for you.");

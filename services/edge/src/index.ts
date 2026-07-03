@@ -24,6 +24,7 @@ import {
   linkThreadSession,
   meter,
   getUsage,
+  getTokens,
   entitled,
   withinPlan,
   writeEntitlement,
@@ -35,6 +36,12 @@ import {
 export { SessionDO };
 
 const DEFAULT_TENANT = "self";
+
+/** Parse a positive-integer env knob; undefined (→ code default) when unset/invalid. */
+const numEnv = (v?: string): number | undefined => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+};
 
 function cors(env: Env): Record<string, string> {
   return {
@@ -117,9 +124,13 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const result = await chatFlow(
     {
       systemPrompt: buildSystemPrompt(tenant?.systemPrompt),
-      history: body.history?.slice(-10),
+      // Full history in; chatFlow applies the sliding window + counts turns (chokepoint).
+      history: body.history,
+      maxHistoryMsgs: numEnv(env.MAX_HISTORY_MSGS),
+      maxAiTurns: numEnv(env.MAX_AI_TURNS),
       ai: workersAiRunner(env, tenant?.model || env.AI_MODEL),
       meter: (kind) => meter(env, tenantId, kind),
+      meterTokens: (n) => meter(env, tenantId, "tokens", n),
       isHandedOff: async (sessionId) => {
         const r = await sessionStub(env, tenantId, sessionId).fetch("https://do/state");
         return ((await r.json()) as { handedOff: boolean }).handedOff;
@@ -257,11 +268,14 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
 // Metering readout wired to the plan: usage counters vs the entitlement's caps.
 async function handleUsage(request: Request, env: Env): Promise<Response> {
   const tenantId = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
-  const usage = await getUsage(env, tenantId);
-  const ent = await entitled(env, tenantId);
+  const [usage, tokens, ent] = await Promise.all([
+    getUsage(env, tenantId),
+    getTokens(env, tenantId),
+    entitled(env, tenantId),
+  ]);
   return json(env, {
     tenantId,
-    usage,
+    usage: { ...usage, tokens },
     plan: ent.plan,
     entitled: ent.entitled,
     status: ent.status,

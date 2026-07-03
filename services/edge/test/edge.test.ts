@@ -2,10 +2,22 @@
 // public webhook (those are service-gated — see README). Run: `bun test`.
 import { expect, test, describe } from "bun:test";
 import worker from "../src/index";
-import { buildSystemPrompt, parseHandoff, HANDOFF_MARKER } from "../src/system-prompt";
+import {
+  buildSystemPrompt,
+  parseHandoff,
+  HANDOFF_MARKER,
+  BREVITY_INSTRUCTION,
+} from "../src/system-prompt";
 import { parseOwnerReply } from "../src/telegram";
 import { broadcast } from "../src/session-do";
-import { chatFlow, FALLBACK_REPLY, type ChatDeps } from "../src/chat";
+import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
+import {
+  chatFlow,
+  FALLBACK_REPLY,
+  MAX_AI_TURNS,
+  MAX_HISTORY_MSGS,
+  type ChatDeps,
+} from "../src/chat";
 import {
   kThreadToSession,
   kSessionToThread,
@@ -13,6 +25,7 @@ import {
   monthKey,
   meter,
   getUsage,
+  getTokens,
   getThreadForSession,
   linkThreadSession,
   getTenant,
@@ -337,5 +350,136 @@ describe("chatFlow", () => {
     expect(r.handoff).toBe(true);
     expect(r.reply).toBe(FALLBACK_REPLY);
     expect(topic.some((t) => t.includes("AI unavailable"))).toBe(true);
+  });
+});
+
+// ── turn-tax cost optimizations ──────────────────────────────────────────────
+describe("system prompt brevity", () => {
+  test("buildSystemPrompt appends the brevity instruction (default + custom)", () => {
+    expect(buildSystemPrompt()).toContain(BREVITY_INSTRUCTION);
+    expect(buildSystemPrompt("Custom voice.")).toContain(BREVITY_INSTRUCTION);
+    // brevity must not clobber the handoff contract
+    expect(buildSystemPrompt()).toContain(HANDOFF_MARKER);
+  });
+});
+
+describe("workersAiRunner max_tokens", () => {
+  const fakeAiEnv = (over: Record<string, unknown> = {}) => {
+    let seen: unknown;
+    const env = {
+      AI: {
+        run: async (_m: string, input: unknown) => {
+          seen = input;
+          return { response: "hi" };
+        },
+      },
+      ...over,
+    } as unknown as Env;
+    return { env, input: () => seen as { max_tokens?: number } };
+  };
+
+  test("caps output at MAX_OUTPUT_TOKENS by default", async () => {
+    const { env, input } = fakeAiEnv();
+    await workersAiRunner(env)([{ role: "user", content: "hey" }]);
+    expect(input().max_tokens).toBe(MAX_OUTPUT_TOKENS);
+    expect(MAX_OUTPUT_TOKENS).toBe(256);
+  });
+
+  test("MAX_OUTPUT_TOKENS env overrides the cap", async () => {
+    const { env, input } = fakeAiEnv({ MAX_OUTPUT_TOKENS: "128" });
+    await workersAiRunner(env)([{ role: "user", content: "hey" }]);
+    expect(input().max_tokens).toBe(128);
+  });
+});
+
+describe("chatFlow turn-tax bounds", () => {
+  function harness(over: Partial<ChatDeps> = {}) {
+    let sawMessages: ChatMessage[] = [];
+    const metered: string[] = [];
+    let tokensMetered = 0;
+    const base: ChatDeps = {
+      systemPrompt: "sys",
+      ensureTopic: async () => 5,
+      toTopic: async () => {},
+      isHandedOff: async () => false,
+      ai: async (msgs) => {
+        sawMessages = msgs;
+        return "ok";
+      },
+      meter: async (k) => void metered.push(k),
+      meterTokens: async (n) => void (tokensMetered += n),
+      ...over,
+    };
+    return { base, sawMessages: () => sawMessages, metered, tokens: () => tokensMetered };
+  }
+
+  const hist = (n: number): ChatMessage[] =>
+    Array.from({ length: n }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: `m${i}`,
+    }));
+
+  test("sliding window: AI sees at most system + MAX_HISTORY_MSGS + latest user", async () => {
+    const h = harness({ history: hist(20), maxAiTurns: 999 }); // isolate from turn-count guard
+    await chatFlow(h.base, { sessionId: "s", message: "now?" });
+    const msgs = h.sawMessages();
+    // system + 8 windowed + 1 latest user
+    expect(msgs.length).toBe(1 + MAX_HISTORY_MSGS + 1);
+    expect(msgs[0]!.role).toBe("system");
+    expect(msgs.at(-1)).toEqual({ role: "user", content: "now?" });
+    // oldest turns trimmed: m0 must be gone, the tail (m19) kept
+    expect(msgs.some((m) => m.content === "m0")).toBe(false);
+    expect(msgs.some((m) => m.content === "m19")).toBe(true);
+  });
+
+  test("token metering increments with a positive estimate", async () => {
+    const h = harness({ history: hist(4) });
+    await chatFlow(h.base, { sessionId: "s", message: "hello there" });
+    expect(h.tokens()).toBeGreaterThan(0);
+    expect(h.metered).toContain("ai");
+  });
+
+  test("forces handoff at MAX_AI_TURNS without calling the AI", async () => {
+    let aiCalled = false;
+    // MAX_AI_TURNS assistant messages already in history
+    const history: ChatMessage[] = Array.from({ length: MAX_AI_TURNS }, () => ({
+      role: "assistant",
+      content: "prior reply",
+    }));
+    const h = harness({
+      history,
+      ai: async () => {
+        aiCalled = true;
+        return "should not run";
+      },
+    });
+    const r = await chatFlow(h.base, { sessionId: "s", message: "still stuck" });
+    expect(aiCalled).toBe(false);
+    expect(r.handoff).toBe(true);
+    expect(r.reply).toBe(FALLBACK_REPLY);
+    expect(h.metered).toEqual(["handoff"]);
+  });
+
+  test("does NOT force handoff just below the threshold", async () => {
+    const history: ChatMessage[] = Array.from({ length: MAX_AI_TURNS - 1 }, () => ({
+      role: "assistant",
+      content: "prior reply",
+    }));
+    const h = harness({ history });
+    const r = await chatFlow(h.base, { sessionId: "s", message: "one more" });
+    expect(r.reply).toBe("ok");
+    expect(r.handoff).toBe(false);
+    expect(h.metered).toEqual(["ai"]);
+  });
+});
+
+describe("token usage counter", () => {
+  test("meter adds n (not 1) for tokens; getTokens reads back", async () => {
+    const env = fakeEnv();
+    await meter(env, "self", "tokens", 120);
+    await meter(env, "self", "tokens", 30);
+    expect(await getTokens(env, "self")).toBe(150);
+    // getUsage shape stays {ai, handoff} — backward compatible
+    expect(await getUsage(env, "self")).toEqual({ ai: 0, handoff: 0 });
   });
 });

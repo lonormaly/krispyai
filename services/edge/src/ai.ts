@@ -15,16 +15,27 @@ export type AiRunner = (messages: ChatMessage[]) => Promise<string>;
 // Free, fast, good-enough default per the product spec. Override per tenant/env.
 export const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
+// Output cap (turn tax): a support reply is 2–3 sentences, and output tokens are the
+// pricey side (4–5× input). Capping here bounds per-turn cost hard. Env override:
+// MAX_OUTPUT_TOKENS. The system prompt also asks for brevity so the cap rarely bites.
+export const MAX_OUTPUT_TOKENS = 256;
+
 /** Workers AI runner — the default provider, bound as env.AI. */
 export function workersAiRunner(env: Env, model = env.AI_MODEL || DEFAULT_MODEL): AiRunner {
+  const maxTokens = Number(env.MAX_OUTPUT_TOKENS) || MAX_OUTPUT_TOKENS;
   return async (messages) => {
-    const res = (await env.AI.run(model, { messages })) as { response?: string };
+    const res = (await env.AI.run(model, { messages, max_tokens: maxTokens })) as {
+      response?: string;
+    };
     const text = res?.response?.trim();
     if (!text) throw new Error("empty AI response");
     return text;
   };
 }
 
-// ponytail: BYO-key providers (OpenAI-compatible, Anthropic, …) plug in here as
-// another AiRunner factory, selected by env.AI_API_KEY presence. Not built until a
-// self-hoster actually wants to leave Workers AI — the seam is all that's needed now.
+// Prompt caching: N/A for Workers AI — it exposes no cache_control / prefix-cache knob,
+// so the static system prompt is re-billed each turn (the sliding window in chat.ts is
+// what bounds that cost). ponytail: when a BYO-key provider adapter lands here (selected
+// by env.AI_API_KEY), enable its prompt caching on the system-prompt prefix — Anthropic
+// via a `cache_control: {type:"ephemeral"}` block on the system message, OpenAI's is
+// automatic on repeated prefixes. Not built until a self-hoster leaves Workers AI.

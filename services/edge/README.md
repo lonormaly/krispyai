@@ -33,8 +33,25 @@ owner replies in topic ──POST /api/telegram/webhook──▶ Worker
 | GET | `/api/tenant/config?t=<tenant>` | dashboard → read a tenant's config `{botToken, chatId, systemPrompt?, model?}`, 404 if none *(secret-guarded)* |
 | POST | `/api/tenant/config` | dashboard → `{tenantId, config}` merge into the tenant's KV config *(secret-guarded)* |
 | GET | `/api/session/:id/ws?t=<tenant>` | visitor's live channel (WebSocket → DO) |
-| GET | `/api/usage?t=<tenant>` | metering + plan readout |
+| GET | `/api/usage?t=<tenant>` | metering + plan readout (`usage` also carries approx `tokens`) |
 | GET | `/health` | liveness |
+
+### Cost knobs — the "turn tax"
+
+Each chat turn re-sends the whole history to the LLM, so naive cost grows quadratically
+with conversation length. Three bounds (all optional env vars; code defaults shown) keep
+per-turn cost flat, without changing product behavior on normal short chats:
+
+| env var | default | why |
+|---------|---------|-----|
+| `MAX_HISTORY_MSGS` | `8` | Sliding window — the AI only sees the last N prior messages (system + latest user always kept, oldest turns trimmed). Caps the input that grows every turn. |
+| `MAX_OUTPUT_TOKENS` | `256` | Hard cap on reply length (output tokens are ~4–5× the price of input). A brevity line is also appended to the system prompt so the cap rarely bites. |
+| `MAX_AI_TURNS` | `10` | After N AI turns in a session with no resolution, hand off to a human instead of paying for another (likely-looping) turn — cost *and* UX. Generous: short chats never hit it. |
+
+Metering now also tracks approximate tokens (`chars/4` estimate, since Workers AI's
+response exposes no usage counts) under the `usage:<tenant>:<yyyymm>:tokens` KV counter,
+surfaced as `tokens` in `/api/usage`. Prompt caching is N/A on Workers AI (no
+`cache_control` knob); the BYO-key adapter seam in `ai.ts` is where it plugs in later.
 
 ### Tenant-config sync (dashboard → gate)
 

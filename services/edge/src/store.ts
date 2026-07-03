@@ -11,7 +11,9 @@ export const kTenant = (t: string) => `tenant:${t}`;
 export const kUsage = (t: string, kind: UsageKind, yyyymm: string) =>
   `usage:${t}:${yyyymm}:${kind}`;
 
-export type UsageKind = "ai" | "handoff";
+// "tokens" tracks approximate LLM tokens (chars/4 estimate), not a call count — so the
+// meter takes an increment `n`. "ai"/"handoff" stay +1-per-call (n defaults to 1).
+export type UsageKind = "ai" | "handoff" | "tokens";
 
 export function monthKey(now = new Date()): string {
   return `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -95,10 +97,11 @@ export async function linkThreadSession(
 }
 
 // ── metering ─────────────────────────────────────────────────────────────────
-export async function meter(env: Env, t: string, kind: UsageKind): Promise<void> {
+// `n` lets a kind add more than 1 per call (tokens); call counters pass the default 1.
+export async function meter(env: Env, t: string, kind: UsageKind, n = 1): Promise<void> {
   const key = kUsage(t, kind, monthKey());
   const cur = Number((await env.KRISPY_KV.get(key)) ?? 0);
-  await env.KRISPY_KV.put(key, String(cur + 1));
+  await env.KRISPY_KV.put(key, String(cur + n));
 }
 
 export async function getUsage(env: Env, t: string): Promise<{ ai: number; handoff: number }> {
@@ -108,6 +111,11 @@ export async function getUsage(env: Env, t: string): Promise<{ ai: number; hando
     env.KRISPY_KV.get(kUsage(t, "handoff", m)),
   ]);
   return { ai: Number(ai ?? 0), handoff: Number(handoff ?? 0) };
+}
+
+/** Approximate tokens metered this month (separate from getUsage to keep its shape). */
+export async function getTokens(env: Env, t: string): Promise<number> {
+  return Number((await env.KRISPY_KV.get(kUsage(t, "tokens", monthKey()))) ?? 0);
 }
 
 // ── plan gate (seam) ─────────────────────────────────────────────────────────
