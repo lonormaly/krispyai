@@ -1,6 +1,21 @@
-import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { pgTable, text, timestamp, uuid, index, pgPolicy } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+
+// Postgres row-level-security defense-in-depth (see docs/design/tenant-isolation.md).
+// The USING/WITH CHECK expression: a row is visible/writable only when its
+// tenant_id equals the per-request session variable `app.tenant_id` — OR the
+// trusted-server bypass sentinel `app.bypass_rls` is 'on'. The `true` second arg
+// to current_setting = "missing_ok" — return NULL instead of erroring when a
+// variable is unset, so a connection with NEITHER context set sees no rows (fails
+// closed) rather than throwing.
+//
+// The bypass sentinel is the webhook path (see docs/design/tenant-isolation.md §webhook):
+// the Creem webhook resolves a row by provider_subscription_id with NO tenant
+// context, so it runs inside withBypassRls() which sets `app.bypass_rls='on'`
+// LOCAL for that one transaction. Only server code that owns the connection can
+// set it — no client input ever reaches a SET.
+const tenantMatch = sql`(tenant_id = current_setting('app.tenant_id', true) OR current_setting('app.bypass_rls', true) = 'on')`;
 
 // One subscription row per tenant — the billing state for Krispy Cloud.
 // Self-host (tenantId "self") never gets a row: it's free-forever and always
@@ -42,8 +57,19 @@ export const subscription = pgTable(
   (table) => [
     index("subscription_user_id_idx").on(table.userId),
     index("subscription_provider_subscription_id_idx").on(table.providerSubscriptionId),
+    // RLS: one policy per command. Reads/writes only ever touch the tenant whose
+    // id is in `app.tenant_id` (set per-request via withTenant()). INSERT/UPDATE
+    // also carry WITH CHECK so a row can't be written INTO another tenant.
+    pgPolicy("subscription_tenant_select", { for: "select", using: tenantMatch }),
+    pgPolicy("subscription_tenant_insert", { for: "insert", withCheck: tenantMatch }),
+    pgPolicy("subscription_tenant_update", {
+      for: "update",
+      using: tenantMatch,
+      withCheck: tenantMatch,
+    }),
+    pgPolicy("subscription_tenant_delete", { for: "delete", using: tenantMatch }),
   ],
-);
+).enableRLS();
 
 export const subscriptionRelations = relations(subscription, ({ one }) => ({
   user: one(user, { fields: [subscription.userId], references: [user.id] }),
