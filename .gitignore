@@ -1,0 +1,20 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+.next/
+.turbo/
+.nx/
+storybook-static/
+*.log
+logs/
+.wrangler/
+.DS_Store
+.tilt/
+tilt_modules/
+
+# private — moved to krispy-ops
+docs/launch/
+docs/design/knowledge-memory.md
