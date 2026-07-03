@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared TS config. Every app/service/lib has its own tsconfig that extends this one — single source of truth (no config drift). The `paths` block below is what gives @nx/enforce-module-boundaries its teeth: without it Nx can't resolve @krispy/* (apps & services have no `exports`/`main`) and silently SKIPS the tag depConstraints. Values MUST start with `./` (relative to this file) — bare `libs/...` triggers TS5090 since there's no baseUrl. App/service targets need not exist on disk; the boundary rule maps them to a project by root. Apps override `paths` in their own tsconfig, so this doesn't perturb their symlink/exports runtime resolution.",
+  "$comment": "Shared TS config. Every service/package has its own tsconfig that extends this one — single source of truth (no config drift). The lean core has two runtime surfaces (the edge Worker and the widget) plus the krispy CLI; none cross-import via aliases today, so `paths` is intentionally minimal.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -13,23 +13,8 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "paths": {
-      "@krispy/ai": ["./libs/ai/src/index.ts"],
-      "@krispy/analytics": ["./libs/analytics/src/index.ts"],
-      "@krispy/analytics/events": ["./libs/analytics/src/events.ts"],
-      "@krispy/api-types": ["./libs/api-types/src/index.ts"],
-      "@krispy/auth": ["./libs/auth/src/index.ts"],
-      "@krispy/billing": ["./libs/billing/src/index.ts"],
-      "@krispy/config": ["./libs/config/src/index.ts"],
-      "@krispy/db": ["./libs/db/src/index.ts"],
-      "@krispy/email": ["./libs/email/src/index.ts"],
-      "@krispy/seo": ["./libs/seo/src/index.ts"],
-      "@krispy/ui": ["./libs/ui/src/index.ts"],
-      "@krispy/ui/tokens": ["./libs/ui/src/tokens/index.ts"],
-      "@krispy/api": ["./services/api/src/index.ts"],
-      "@krispy/ai-worker": ["./services/ai-worker/src/index.ts"],
-      "@krispy/payment": ["./services/payment/src/index.ts"],
-      "@krispy/web": ["./apps/web/index.ts"],
-      "@krispy/mobile": ["./apps/mobile/index.ts"]
+      "@krispy/edge": ["./services/edge/src/index.ts"],
+      "@krispy/cli": ["./packages/cli/src/index.ts"]
     }
   }
 }

@@ -1,12 +1,12 @@
 {
-  "name": "@krispy/edge",
+  "name": "@krispy/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "krispy": "./src/index.ts"
+  },
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "tail": "wrangler tail",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test"
   },

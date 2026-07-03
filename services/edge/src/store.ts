@@ -39,9 +39,10 @@ export async function getTenant(env: Env, tenantId: string): Promise<TenantConfi
   return cfg.botToken && cfg.chatId ? (cfg as TenantConfig) : null;
 }
 
-// ── tenant config sync (Krispy Cloud dashboard → gate) ───────────────────────
-// The dashboard (apps/web) writes a tenant's Telegram creds + prompt/model here so
-// getTenant() picks them up. Same KV key + shape getTenant() reads (kTenant → a
+// ── tenant config sync (krispy CLI / your own tooling → gate) ────────────────
+// The `krispy` CLI (packages/cli) — or Krispy Cloud, or your own script — writes a
+// tenant's Telegram creds + prompt/model here so getTenant() picks them up, via the
+// POST /api/tenant/config route. Same KV key + shape getTenant() reads (kTenant → a
 // Partial<TenantConfig> JSON blob). Read raw so a partial config (e.g. prompt saved
 // before creds) still round-trips — getTenant() itself gates on both botToken+chatId.
 export async function readTenantConfig(
@@ -137,10 +138,11 @@ export function withinPlan(usage: { ai: number; handoff: number }, plan: Plan): 
   return usage.ai < plan.aiPerMonth && usage.handoff < plan.handoffPerMonth;
 }
 
-// ── entitlement (Krispy Cloud billing) ───────────────────────────────────────
-// The gate reads a pre-computed snapshot pushed here by @krispy/billing (the DB
-// source of truth lives in the payment service / Postgres, which workerd can't
-// reach — so we mirror the decision into KV over one guarded HTTP call, no polling).
+// ── entitlement (optional billing hook — unused in single-tenant self-host) ──
+// A gate that reads a pre-computed "is this tenant allowed" snapshot from KV. Self-host
+// is single-tenant with no accounts, so nothing writes this and the gate stays open. It
+// exists for a hosted/multi-tenant deployment (e.g. Krispy Cloud) to mirror a billing
+// decision into KV over one guarded HTTP call (POST /api/billing/entitlement), no polling.
 // A `null` limit means "unmetered" (Infinity can't survive JSON).
 export const kEntitlement = (t: string) => `entitlement:${t}`;
 

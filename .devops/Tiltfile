@@ -1,26 +1,19 @@
-# krispyai — local dev via Tilt + Vercel Portless.
+# krispyai (public core) — local dev via Tilt + Vercel Portless.
 #
 # Every SERVED role (has a URL) is wrapped with portless so it gets a stable,
 # named URL instead of a pinned port: <service>.krispy.localhost:1355.
 # Portless injects a random PORT and proxies the named URL → that port, so
 # NOTHING here pins a service port. Every served role reads process.env.PORT.
 #
-# The map: apps/ = public UI (the web dashboard; the marketing landing + blog
-# moved to the krispy-site repo) · services/ = has a URL · libs/ = shared, never
-# served (so no Tilt resource — except the design system's Storybook, which IS
-# served for humans).
+# The map: services/ = has a URL · packages/ = shared/static bundle. Only served
+# roles get a Tilt resource; libs that are never served get none.
 #
-# Only Krispy's REAL resources boot here. The forked builders-stack shipped a few
-# example services (services/api Hono demo, services/ai-worker in-memory queue
-# sample) + a builders-stack deploy flow — those are NOT part of Krispy and are
-# intentionally absent (see the "Removed" note in Services below).
-#
-# See docs/portless.md for the convention and the full URL table.
+# This is the PUBLIC core — it stands alone (a cloner runs it without the private
+# cloud repo). The cloud repo's dev.Tiltfile includes this one as a sibling.
 
 os.putenv('PATH', os.environ['HOME'] + '/.bun/bin:' + os.environ.get('PATH', ''))
 
-# Direct bun binary — bypasses the proto shim (~/.proto/shims/bun) that rewrites
-# `bun run X` to `moon run :X`, which breaks bare targets inside local_resource.
+# Direct bun binary — bypasses any proto/moon shim that rewrites `bun run X`.
 BUN = os.environ['HOME'] + '/.bun/bin/bun'
 
 update_settings(max_parallel_updates=4)
@@ -30,22 +23,21 @@ docker_prune_settings(disable=True)
 REPO_ROOT = str(local('cd .. && pwd', quiet=True)).strip()
 
 print('=' * 60)
-print('KRISPY TILT - LOCAL (portless)')
+print('KRISPYAI (public core) TILT - LOCAL (portless)')
 print('=' * 60)
 
 # All served roles share this scheme. <service>.krispy.localhost:1355
 PORTLESS_PROXY = 'http://{}.krispy.localhost:1355'
 
-# Sourced into each service so DATABASE_URL / secrets from .env.local reach the
-# process. Cross-service URLs are injected AFTER this (via portless_cmd env=), so
-# they win over any stale values in .env.local.
+# Sourced into each service so vars from .env.local reach the process. Cross-service
+# URLs are injected AFTER this (via portless_cmd env=), so they win over stale values.
 ENV_LOCAL = 'set -a && [ -f ' + REPO_ROOT + '/.env.local ] && . ' + REPO_ROOT + '/.env.local; set +a; '
 
 # Portless wrapper: retry route registration with backoff to survive cross-project
 # lock contention (portless has a ~1s internal lock budget; another project
 # registering at the same moment can exceed it). Pass health_url to add a watchdog
 # that kills the process group if the URL stops responding, so Tilt restarts it
-# (fixes: portless stays alive while bun --watch silently loops on a crashed server).
+# (fixes: portless stays alive while a --watch server silently loops on a crash).
 def portless_cmd(args, env='', health_url=''):
     cmd = (env + ' ' if env else '') + 'portless --force ' + args
     retry = 'for i in 1 2 3 4 5; do ' + cmd + ' && break || echo "portless lock failed (attempt $i/5), retrying in ${i}s..." && sleep $i; done'
@@ -57,117 +49,46 @@ def portless_cmd(args, env='', health_url=''):
 
 # =============================================================================
 # Services (served — have a URL, wrapped with portless)
-#
-# Removed vs. the builders-stack fork (not part of Krispy, so they don't boot):
-#   • api        — the Hono + Better Auth demo. NOTE: web's auth-client still
-#                  points at its /api/auth/*; auth backend needs rehoming before
-#                  web login works locally again.
-#   • ai-worker  — a "summarize" in-memory-queue sample worker. Krispy's AI runs
-#                  inside `edge` via the Workers AI binding, not a side worker.
-#                  (If Krispy ever needs a no-URL background worker, mirror the
-#                  plain local_resource pattern — no portless, since it has no URL.)
 # =============================================================================
 
-# edge — THE product Worker (live-chat + human-handoff): /api/chat, /api/contact,
-# the Telegram webhook, the SessionDO WebSocket fan-out, and the /api/billing
-# entitlement push endpoint. Runs on Cloudflare's local runtime via `wrangler dev`.
-#
-# Portless quirk: wrangler ignores PORT env (unlike our bun/next services) — it
-# only takes --port. Portless injects PORT into the *child's* env, so we hand it
-# `sh -c '… --port $PORT'` (single-quoted): the OUTER shell must NOT expand $PORT,
-# the inner sh (which portless spawns with PORT set) does. cd into services/edge so
-# wrangler finds wrangler.toml; KV/DO run under local Miniflare (placeholder id ok).
+# edge — the live-chat + human-handoff Worker (Hono-style routes + SessionDO), run
+# under `wrangler dev`. wrangler needs an explicit port, so unlike the others it
+# takes --port '$PORT': the single quotes keep Tilt/Starlark from expanding it,
+# so the *inner* sh that portless spawns expands portless's injected $PORT.
+# edge serves GET /health.
 local_resource(
     'edge',
-    serve_cmd='cd ' + REPO_ROOT + ' && ' + ENV_LOCAL + portless_cmd(
-        "edge.stack sh -c 'cd " + REPO_ROOT + "/services/edge && " + BUN + " x wrangler dev --port $PORT'",
+    serve_cmd='cd ' + REPO_ROOT + '/services/edge && ' + ENV_LOCAL + portless_cmd(
+        "edge.krispy " + BUN + " x wrangler dev --port '$PORT'",
         health_url=PORTLESS_PROXY.format('edge') + '/health'),
     links=[PORTLESS_PROXY.format('edge') + '/health'],
     labels=['services'],
 )
 
-# payment — the REAL Krispy Cloud billing app (@krispy/billing over Hono): mounts
-# /api/billing/* (subscriptions, trials, entitlement) plus a Creem checkout/webhook.
-# Runs standalone on process.env.PORT. Boots on the Mock provider until CREEM_API_KEY
-# is set; point Creem webhooks at this URL via the `tunnel` button.
+# =============================================================================
+# Packages (served static bundle — wrapped with portless)
+# =============================================================================
+
+# widget — the embeddable chat widget: a static index.html + widget.js bundle.
+# `serve` binds portless's injected $PORT and proxies the named URL to it, so the
+# widget demo page is reachable at the stable widget.krispy URL. No health route
+# (static server), so no watchdog.
 local_resource(
-    'payment',
-    serve_cmd='cd ' + REPO_ROOT + ' && ' + ENV_LOCAL + portless_cmd(
-        'payment.stack ' + BUN + ' --filter @krispy/payment dev',
-        health_url=PORTLESS_PROXY.format('payment') + '/health'),
-    links=[PORTLESS_PROXY.format('payment') + '/health'],
-    labels=['services'],
-)
-
-# =============================================================================
-# Apps (served to humans, wrapped with portless)
-# =============================================================================
-
-# web — Next.js — the Krispy Cloud dashboard. portless sets PORT; `next dev`
-# (no --port) binds it. (The api/auth cross-URL env was dropped with the `api`
-# demo service — see the Removed note above; the dashboard UI still boots, only
-# Better Auth calls have no backend until auth is rehomed.)
-local_resource(
-    'web',
-    serve_cmd='cd ' + REPO_ROOT + ' && ' + ENV_LOCAL + portless_cmd(
-        'web.stack ' + BUN + ' --filter @krispy/web dev',
-        health_url=PORTLESS_PROXY.format('web')),
-    links=[PORTLESS_PROXY.format('web')],
-    labels=['apps'],
-)
-
-# The marketing apps (landing + blog) moved to the krispy-site repo
-# (github.com/lonormaly/krispy-site) — this is now the lean product repo, so they
-# no longer boot here. Their local_resources (same portless pattern as web) and
-# their OpenNext → Cloudflare deploy flow live in that repo now.
-
-# =============================================================================
-# Design system (served — Storybook)
-# =============================================================================
-# @krispy/ui's storybook script binds `-p ${PORT:-...}`, so portless's injected
-# PORT is what it binds and proxies to. It falls back to a default standalone.
-local_resource(
-    'storybook',
-    serve_cmd='cd ' + REPO_ROOT + ' && ' + portless_cmd('storybook.stack ' + BUN + ' --filter @krispy/ui storybook'),
-    links=[PORTLESS_PROXY.format('storybook')],
-    labels=['design-system'],
-)
-
-# =============================================================================
-# One-off flows (click-to-run buttons in the Tilt UI; auto_init=False = don't
-# run on boot). Builders-stack deploy flow (deploy:staging) dropped — it assumed
-# the example stack, not Krispy's deploy targets.
-# =============================================================================
-
-# db:push — drizzle-kit push of the @krispy/db schema (includes the billing tables
-# the payment service reads/writes). Click after a schema change.
-local_resource(
-    'db:push',
-    cmd='cd ' + REPO_ROOT + ' && ' + ENV_LOCAL + BUN + ' --filter @krispy/db push',
-    auto_init=False,
-    labels=['flows'],
-)
-
-# tunnel — public HTTPS tunnel for local dev, needed so Telegram can reach the
-# edge Worker's /api/telegram/webhook (and Creem can reach payment's webhook).
-local_resource(
-    'tunnel',
-    cmd='cd ' + REPO_ROOT + ' && ./scripts/tunnel.sh',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    labels=['flows'],
+    'widget',
+    serve_cmd='cd ' + REPO_ROOT + ' && ' + portless_cmd(
+        "widget.krispy " + BUN + " x serve packages/widget -l '$PORT'"),
+    links=[PORTLESS_PROXY.format('widget')],
+    labels=['packages'],
 )
 
 print("""
 ================================================================================
-                        KRISPY — LOCAL DEVELOPMENT (Portless)
+                    KRISPYAI (public core) LOCAL DEV (Portless)
 ================================================================================
-  Web:       http://web.krispy.localhost:1355        (Krispy Cloud dashboard)
-  Edge:      http://edge.krispy.localhost:1355       (/health · product Worker)
-  Payment:   http://payment.krispy.localhost:1355    (/health · /api/billing/*)
-  Storybook: http://storybook.krispy.localhost:1355
+  Edge:   http://edge.krispy.localhost:1355     (/health — Worker via wrangler dev)
+  Widget: http://widget.krispy.localhost:1355   (static embed bundle)
 
-  Flows (click in the Tilt UI): db:push · tunnel
+  No-Tilt path: `bun run dev:edge` + `bun run dev:widget` (two terminals).
   Portless proxy: install with `npm install -g portless` (starts automatically).
 ================================================================================
 """)

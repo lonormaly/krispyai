@@ -1,5 +1,0 @@
-{
-  "$comment": "Extends the single-source-of-truth base; billing is a plain TS lib.",
-  "extends": "../../tsconfig.base.json",
-  "include": ["src"]
-}

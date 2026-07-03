@@ -4,17 +4,8 @@ node_modules/
 .env.*.local
 dist/
 build/
-.next/
-.turbo/
-.nx/
-storybook-static/
 *.log
 logs/
 .wrangler/
+.dev.vars
 .DS_Store
-.tilt/
-tilt_modules/
-
-# private — moved to krispy-ops
-docs/launch/
-docs/design/knowledge-memory.md

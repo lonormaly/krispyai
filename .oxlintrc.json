@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "import", "jsx-a11y"],
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
@@ -9,16 +9,11 @@
     "typeAware": true
   },
   "rules": {
-    "react/react-in-jsx-scope": "off",
     "typescript/no-base-to-string": "warn"
   },
   "ignorePatterns": [
     "**/node_modules/**",
-    "**/.next/**",
     "**/dist/**",
-    "**/build/**",
-    "**/storybook-static/**",
-    "**/next-env.d.ts",
-    "libs/db/index.js"
+    "**/build/**"
   ]
 }

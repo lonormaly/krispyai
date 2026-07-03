@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="apps/web/public/brand/hero.png" alt="Buttr, the Krispy croissant, handing a chat conversation off to a human" width="640" />
+<img src="docs/assets/hero.png" alt="Buttr, the Krispy croissant, handing a chat conversation off to a human" width="640" />
 
 # Krispy AI 🥐
 
@@ -24,6 +24,12 @@ Open-source live chat with a human handoff to Telegram — the free, self-hostab
 Krispy is open-source live chat with a human in the loop. An AI answers your visitors in your voice, and hands off to *you* on Telegram the moment a real person is needed — you reply from your phone, and it lands live in the chat while the bot goes quiet.
 
 The paid stack for this runs **$100–400/mo** (Intercom, Crisp, a seat here, an AI add-on there). Krispy self-hosts on Cloudflare's free tier for **$0** — no per-seat tax, no login your customers never asked for, no conversations living on someone else's servers.
+
+**This repo is the lean, self-hostable core** — exactly two deployable things and the CLI to run them:
+
+- **`services/edge`** — the Cloudflare Worker + `SessionDO` (chat + Telegram handoff). The whole backend, one deploy.
+- **`packages/widget`** — the dependency-free embeddable `widget.js`.
+- **`packages/cli`** — the `krispy` CLI to manage your bot's knowledge base.
 
 > **Buttr:** bonjour — i'm the croissant that answers your visitors so you can nap. no shade to Intercom. i'm just free.
 
@@ -52,10 +58,10 @@ You'll need [Bun](https://bun.com), a Cloudflare account (free), and a Telegram 
 
 ```sh
 git clone https://github.com/lonormaly/krispyai
-cd krispyai/services/edge
+cd krispyai
 bun install
 bun test                 # unit tests, no external services needed
-bunx wrangler dev        # runs the whole thing on http://localhost:8787
+bun run dev:edge         # runs the Worker on http://localhost:8787
 ```
 
 `wrangler dev` binds Workers AI and the Durable Object automatically — you can drive the full loop locally before touching Telegram.
@@ -76,16 +82,54 @@ bunx wrangler secret put TELEGRAM_CHAT_ID
 # 4. Pick any random string as the webhook secret
 bunx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 
-# 5. Ship it
-bunx wrangler deploy
+# 5. (Optional) a secret to gate the tenant-config route the CLI uses
+bunx wrangler secret put TENANT_SYNC_SECRET
 
-# 6. Point Telegram at your deployed Worker
+# 6. Ship it (from services/edge)
+cd services/edge && bunx wrangler deploy
+
+# 7. Point Telegram at your deployed Worker
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -d "url=https://krispy-edge.YOU.workers.dev/api/telegram/webhook" \
   -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
 
 Honest about the Telegram step: BotFather, the supergroup-with-Topics, and admin rights are a real five minutes of clicking — there's no way around a token if you want replies on your phone. Full walkthrough and architecture notes: [`services/edge/README.md`](./services/edge/README.md).
+
+## Local dev
+
+No Docker, no Tilt, no orchestrator — two `bun` scripts in two terminals:
+
+```sh
+bun run dev:edge      # edge Worker (wrangler dev) on http://localhost:8787
+bun run dev:widget    # widget demo (bunx serve) on http://localhost:3000
+```
+
+Open the widget demo, say hi, and watch the loop. Handy checks:
+
+```sh
+bun run typecheck     # tsc over the edge Worker + CLI
+bun run lint          # oxlint (Rust, fast)
+bun run test          # edge unit tests + CLI smoke tests
+bun run check         # typecheck + lint + test in one shot
+```
+
+## Manage your kbase — the `krispy` CLI
+
+Your bot's knowledge base is its **system prompt**. Write it in a file, then push it into the Worker's KV — no hand-written `wrangler kv` calls:
+
+```sh
+KRISPY_API=https://krispy-edge.YOU.workers.dev \
+TENANT_SYNC_SECRET=... \
+  bun packages/cli/src/index.ts set-kbase ./kbase.md
+```
+
+| command | what it does |
+|---------|--------------|
+| `krispy set-kbase <file>` | write `<file>`'s contents as the bot's system prompt (`POST /api/tenant/config`) |
+| `krispy dev` | run the edge Worker locally (`wrangler dev`) |
+
+Config via env: `KRISPY_API` (Worker URL), `KRISPY_TENANT` (default `self`), `TENANT_SYNC_SECRET` (must match the Worker's). Details: [`packages/cli/README.md`](./packages/cli/README.md).
 
 ## Embed the widget
 
@@ -126,26 +170,21 @@ Don't want to touch a terminal? **[Krispy Cloud](https://krispyai.com)** is the 
 
 ## Repo structure
 
-This is the **lean, self-hostable product** repo: the dashboard, the edge Worker, the payment service, the embeddable widget, and the shared libs. The self-hostable core is **`packages/widget` + `services/edge`** — those two deploy independently of everything else.
-
-> **Marketing site (landing + blog):** [github.com/lonormaly/krispy-site](https://github.com/lonormaly/krispy-site) — the public marketing site and blog live in their own repo and deploy on their own.
+This is the **lean, self-hostable core** — only what a user self-hosts. The dashboard, billing, accounts, and marketing surfaces live in the Cloud repo and don't ship here.
 
 ```
-apps/
-  web/        the app dashboard
-  mobile/     Expo starter
 services/
   edge/       ⭐ the core — Cloudflare Worker + SessionDO (chat + handoff)
-  api/        Hono + OpenAPI backend
-  payment/    Creem / Dodo adapters
 packages/
   widget/     ⭐ the core — dependency-free embeddable widget.js
-libs/
-  ui/         shadcn + shared design tokens + Storybook
-  ...         auth, db, config, analytics, email, seo, api-types
+  cli/        the `krispy` CLI — manage your kbase (system prompt)
+agents/
+  skills/     generic scaffolding skills (add-a-service, add-a-lib, wire-a-payment-provider)
+docs/         linting · secrets · agent-skills
+api-collection/  Bruno requests for the edge Worker's routes
 ```
 
-Want *just* the chat? Clone the repo, `cd services/edge`, deploy, embed `packages/widget`. You can ignore the rest.
+Want *just* the chat? `cd services/edge`, deploy, embed `packages/widget`. That's the whole thing.
 
 ## Tech
 
@@ -167,8 +206,6 @@ PRs welcome — this repo is a template people clone, so clarity and convention 
 ---
 
 <div align="center">
-
-<img src="apps/web/public/brand/buttr-chill.png" alt="Buttr the croissant, relaxed" width="120" />
 
 **à bientôt 🥐**
 

@@ -72,6 +72,6 @@ Do not ship these in a template. Not a judgment on every use — a judgment on _
 
 ## What this repo already covers natively (don't vendor a skill for it)
 
-**SEO/GEO is not a vendored skill here — it's _enforced_.** `@krispy/seo` is the one door for page metadata + JSON-LD, `bun run check:seo` fails the build if a public page drifts, and the CLAUDE/AGENTS laws spell out the rules (see [`AGENTS.md`](../AGENTS.md) § 3.1). An enforced gate in CI beats a skill an agent may or may not read — skip any "SEO skill".
+**Lint, format, and secret-scanning are enforced gates, not skills.** Oxlint + Oxfmt run in `bun run lint` / `format:check` and CI; `gitleaks` fails the build on a committed secret; `osv-scanner` flags vulnerable deps. An enforced gate beats a skill an agent may or may not read — skip any "linting" or "secret-scanning" skill (see [`AGENTS.md`](../AGENTS.md) § 6).
 
 Categories where a skill **is** worth adding for cloners (nothing here covers them): **security, testing, a11y, performance, DevOps, UI/UX, design, marketing.** Vet each one through the 5-step law before it lands.

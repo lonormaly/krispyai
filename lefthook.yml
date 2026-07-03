@@ -1,8 +1,6 @@
-# Git hooks — the commit-boundary version of the boundary thesis. The two laws are
-# enforced in `lint` (Nx) and in review; this stops drift one step earlier: an agent
-# (or human) literally can't COMMIT unformatted / unlinted code, and can't PUSH code
-# that doesn't typecheck. Fast by construction — staged files only on commit, the
-# Nx-affected graph only on push.
+# Git hooks — so an agent (or human) literally can't COMMIT unformatted / unlinted
+# code, and can't PUSH code that doesn't typecheck. Fast by construction: staged
+# files only on commit; the edge Worker's typecheck on push.
 #
 # Enable once after `bun install`:  bunx lefthook install
 # Skip in a pinch:                  LEFTHOOK=0 git commit …   (or `git commit --no-verify`)
@@ -22,13 +20,5 @@ pre-commit:
 
 pre-push:
   commands:
-    # Typecheck only the projects the push affects (Nx graph + cache).
-    # Guard: skip on the very FIRST push (no upstream ref to diff against yet) so a
-    # fresh repo or clone never hangs typechecking all projects cold. CI still runs it.
     typecheck:
-      run: git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1 && bunx nx affected -t typecheck || echo "→ no upstream yet — skipping pre-push typecheck (CI runs it)"
-    # SEO/GEO drift gate — fails the push if a public page lacks metadata or is
-    # client-rendered, or an app is missing robots.ts/sitemap.ts. Fast (regex over
-    # apps/*/app), no Nx graph needed. Same check runs in `bun run check` + CI.
-    check-seo:
-      run: bun scripts/check-seo.ts
+      run: bun run typecheck

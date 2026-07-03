@@ -13,6 +13,6 @@ tests {
     expect(res.status).to.equal(200);
   });
   test("reports ok", function() {
-    expect(res.getBody().ok).to.equal(true);
+    expect(res.getBody().status).to.equal("ok");
   });
 }

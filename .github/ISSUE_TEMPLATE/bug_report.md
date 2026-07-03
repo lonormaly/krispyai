@@ -22,14 +22,14 @@ assignees: ""
 
 ## Which part
 
-<!-- Package/area: e.g. @krispy/api, @krispy/db, Tiltfile, infra, docs -->
+<!-- Package/area: e.g. services/edge, packages/widget, packages/cli, docs -->
 
 ## Environment
 
 - OS:
 - Bun version (`bun --version`):
-- Booted with `./tilt_up.sh`? (yes/no):
+- Wrangler version (`bunx wrangler --version`):
 
 ## Logs / screenshots
 
-<!-- Paste relevant output from the Tilt dashboard (localhost:10380) or terminal. -->
+<!-- Paste relevant output from `wrangler dev` / `wrangler tail` or the terminal. -->

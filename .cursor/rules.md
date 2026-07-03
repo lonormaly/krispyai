@@ -2,31 +2,31 @@
 
 > **Single source of truth:** these rules mirror the repo-root [`AGENTS.md`](../AGENTS.md). Codex, Cursor, and Copilot read a root `AGENTS.md` by convention; Claude Code reads `CLAUDE.md`; Cursor also reads this file. Keep the details in root `AGENTS.md` — this is the short version Cursor loads into every prompt.
 
-You are working in **krispyai**, a bun-workspace monorepo. Before writing code, know the map.
+You are working in **krispyai**, the lean, self-hostable core of Krispy. Before writing code, know the map.
 
-## The three folders (role = is it served, and to whom?)
+## What's here
 
-- `apps/` — public UI humans see (`@krispy/web`, `@krispy/mobile`).
-- `services/` — anything with a URL / its own deploy (`@krispy/api`, `@krispy/ai-worker`, `@krispy/payment`).
-- `libs/` — shared code, **never served**, consumed only (`@krispy/ui`, `@krispy/auth`, `@krispy/db`, `@krispy/ai`, `@krispy/analytics`, `@krispy/email`, `@krispy/config`, `@krispy/api-types`).
+- `services/edge` — ⭐ the core Cloudflare Worker + `SessionDO` (chat + Telegram handoff). Self-contained, no `@krispy/*` runtime imports.
+- `packages/widget` — ⭐ the dependency-free embeddable `widget.js` (vanilla JS, Shadow DOM).
+- `packages/cli` — the `krispy` CLI (`set-kbase`, `dev`).
+
+The dashboard, billing, accounts, and marketing live in a separate Cloud repo — not here.
 
 ## Laws (do not break)
 
-1. **No upward import** — `libs` never import from `apps`/`services`. Dependencies point down.
-2. **One public door** — import a lib by package name (`@krispy/db`), never a deep path.
-3. **By feature, not by layer** inside each app/service (`billing/`, not `controllers/`).
-4. **One ORM: Drizzle** — all DB access via `@krispy/db`.
-5. **Payments via the `@krispy/payment` adapter** — never call Creem directly from an app.
-6. Every workspace extends root `tsconfig.base.json`. No hardcoded URLs/ports/secrets — use env.
+1. **No hardcoded URLs/ports/secrets** — Worker secrets in Cloudflare (`wrangler secret put`); CLI reads env (see `.env.example`).
+2. **The widget stays dependency-free** — no framework, no bundler, no npm deps.
+3. **The edge Worker stays self-contained** — don't add a lib dependency.
+4. Every workspace extends root `tsconfig.base.json`. Don't fork compiler options.
 
 ## Run
 
-- `bun install`, then `./tilt_up.sh` (never `tilt up` directly — it pins Tilt UI port 10380). Dashboard: `localhost:10380`. Served roles get portless URLs `<svc>.krispy.localhost:1355` — no pinned ports.
-- The `.devops/Tiltfile` is the runtime manifest. New service → add its `local_resource` there.
-- Nx runs the tasks (build/typecheck/lint/test) with enforced boundaries. Typecheck: `bun run typecheck`; both gates: `bun run check`.
+- `bun install`, then `bun run dev:edge` (Worker on :8787) and `bun run dev:widget` (demo on :3000).
+- Checks: `bun run typecheck` · `bun run lint` · `bun run test` · `bun run check` (all three).
+- Deploy the Worker from `services/edge` with `bunx wrangler deploy`.
 
 ## Finishing
 
-Typecheck passes · no new upward/deep imports · new service in `Tiltfile` · new env var in `.env.example` · conventional-commit message.
+Typecheck passes · lint clean · tests green · new env var in `.env.example` · edge-route change mirrored in `api-collection/` · conventional-commit message.
 
-For the full primer, skills, and subagents see [`agents/`](../agents/).
+For the full primer and skills see [`agents/`](../agents/) and [`AGENTS.md`](../AGENTS.md).

@@ -14,15 +14,13 @@
 
 <!-- Commands you ran, endpoints you hit, screenshots if UI. -->
 
-- [ ] `bun run typecheck` passes
-- [ ] Ran locally via `./tilt_up.sh`
+- [ ] `bun run check` passes (typecheck + lint + test)
+- [ ] Ran locally via `bun run dev:edge` / `bun run dev:widget`
 
 ## Convention checklist
 
-- [ ] No upward import (`libs` don't import from `apps`/`services`)
-- [ ] No deep imports into a lib's internals (imported by package name only)
-- [ ] Organized by feature, not by layer
-- [ ] DB access via `@krispy/db`; payments via `@krispy/payment` adapter
-- [ ] New service is in the `Tiltfile`
+- [ ] No hardcoded URLs/ports/secrets (env only; Worker secrets via `wrangler secret put`)
+- [ ] The widget stays dependency-free
+- [ ] The edge Worker stays self-contained (no `@krispy/*` runtime imports)
 - [ ] New env vars added to `.env.example` (no real secrets)
-- [ ] New/changed API route reflected in `api-collection/` (Bruno)
+- [ ] New/changed edge route reflected in `api-collection/` (Bruno)

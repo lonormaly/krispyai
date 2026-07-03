@@ -30,8 +30,8 @@ owner replies in topic ──POST /api/telegram/webhook──▶ Worker
 | POST | `/api/contact` | `[!HANDOFF]` contact-capture → owner's topic |
 | POST | `/api/telegram/webhook` | owner reply → push to visitor via DO |
 | POST | `/api/billing/entitlement` | billing → gate: mirror an entitlement snapshot into KV *(secret-guarded)* |
-| GET | `/api/tenant/config?t=<tenant>` | dashboard → read a tenant's config `{botToken, chatId, systemPrompt?, model?}`, 404 if none *(secret-guarded)* |
-| POST | `/api/tenant/config` | dashboard → `{tenantId, config}` merge into the tenant's KV config *(secret-guarded)* |
+| GET | `/api/tenant/config?t=<tenant>` | read a tenant's config `{botToken, chatId, systemPrompt?, model?}`, 404 if none *(secret-guarded)* |
+| POST | `/api/tenant/config` | `{tenantId, config}` merge into the tenant's KV config — the `krispy` CLI writes here *(secret-guarded)* |
 | GET | `/api/session/:id/ws?t=<tenant>` | visitor's live channel (WebSocket → DO) |
 | GET | `/api/usage?t=<tenant>` | metering + plan readout (`usage` also carries approx `tokens`) |
 | GET | `/health` | liveness |
@@ -53,18 +53,18 @@ response exposes no usage counts) under the `usage:<tenant>:<yyyymm>:tokens` KV 
 surfaced as `tokens` in `/api/usage`. Prompt caching is N/A on Workers AI (no
 `cache_control` knob); the BYO-key adapter seam in `ai.ts` is where it plugs in later.
 
-### Tenant-config sync (dashboard → gate)
+### Tenant-config sync (the `krispy` CLI → gate)
 
-The Krispy Cloud dashboard (`apps/web`) manages a tenant's Telegram creds + prompt/
-model over `/api/tenant/config`. Both routes require the header
+The `krispy` CLI (`packages/cli`) — or Krispy Cloud, or your own tooling — manages a
+tenant's Telegram creds + prompt/model over `/api/tenant/config`. Both routes require the header
 `x-tenant-sync-secret: <TENANT_SYNC_SECRET>` — the payload holds a **bot token**, so
 without the secret they return **401** and never leak config. POST **merges** (unset
 fields are preserved), writing the exact KV shape `getTenant()` reads (key
 `tenant:<tenantId>`), so a saved bot token/prompt immediately drives the bot.
 
-Secrets are separate on purpose: `BILLING_SYNC_SECRET` guards the billing→gate push,
-`TENANT_SYNC_SECRET` guards the dashboard→config sync. Set both with
-`bunx wrangler secret put <NAME>`.
+Secrets are separate on purpose: `TENANT_SYNC_SECRET` guards the config sync (the
+`krispy` CLI uses it); `BILLING_SYNC_SECRET` guards the optional billing→gate push
+(unused in single-tenant self-host). Set either with `bunx wrangler secret put <NAME>`.
 
 ## Architecture
 

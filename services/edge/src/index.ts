@@ -205,9 +205,10 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 // ── POST /api/billing/entitlement ──────────────────────────────────────────
-// Internal push endpoint: @krispy/billing (payment webhook / trial start) mirrors
-// a tenant's entitlement snapshot into KV so the gate can read it. Guarded by a
-// shared secret — never exposed to the widget/browser.
+// Optional push endpoint for a hosted/multi-tenant deployment: a billing service
+// (payment webhook / trial start) mirrors a tenant's entitlement snapshot into KV so
+// the gate can read it. Unused in single-tenant self-host. Guarded by a shared secret
+// — never exposed to the widget/browser.
 async function handleEntitlementSync(request: Request, env: Env): Promise<Response> {
   if (
     !env.BILLING_SYNC_SECRET ||
@@ -227,10 +228,10 @@ async function handleEntitlementSync(request: Request, env: Env): Promise<Respon
 }
 
 // ── /api/tenant/config ─────────────────────────────────────────────────────
-// The Krispy Cloud dashboard (apps/web) reads/writes a tenant's Telegram creds +
-// prompt/model here so getTenant() drives the bot. Guarded by a shared secret (same
-// billing→gate push pattern) — the config holds a bot token, so NEVER expose it
-// without the secret. 401 (not 403): the browser must send auth, none was accepted.
+// The `krispy` CLI (packages/cli) — or Krispy Cloud, or your own tooling — reads/writes
+// a tenant's Telegram creds + prompt/model here so getTenant() drives the bot. Guarded
+// by a shared secret (x-tenant-sync-secret == TENANT_SYNC_SECRET) — the config holds a
+// bot token, so NEVER expose it without the secret. 401 (not 403): auth required, none accepted.
 function tenantSyncAuthed(request: Request, env: Env): boolean {
   return (
     !!env.TENANT_SYNC_SECRET &&

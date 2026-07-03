@@ -18,5 +18,5 @@ if ! command -v portless >/dev/null 2>&1; then
 fi
 
 echo "→ krispyai: tilt up on http://localhost:$PORT"
-echo "  Web http://web.krispy.localhost:1355 · Edge http://edge.krispy.localhost:1355 · Storybook http://storybook.krispy.localhost:1355"
+echo "  Edge http://edge.krispy.localhost:1355 · Widget http://widget.krispy.localhost:1355"
 exec tilt up --port "$PORT" "$@"
