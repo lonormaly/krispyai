@@ -6,7 +6,8 @@
 //   mirror the AI reply to the topic → answer the visitor. If the AI throws, we
 //   degrade to a human handoff rather than dropping the visitor.
 import type { ChatMessage } from "./ai";
-import { parseHandoff } from "./system-prompt";
+import { parseHandoff, parseForm } from "./system-prompt";
+import type { FormSpec } from "./types";
 
 export const FALLBACK_REPLY = "Thanks — a teammate will jump in here shortly.";
 
@@ -62,12 +63,35 @@ export interface ChatResult {
   handedOff: boolean;
   /** AI was unavailable and we fell back to a human. */
   degraded?: boolean;
+  /** The model asked to raise this lead form (id parsed from [!FORM:<id>]). */
+  formId?: string | null;
+  /** The resolved FormSpec (+ CTA connectors) index.ts attaches for the widget. */
+  form?: FormSpec | null;
 }
 
 export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatResult> {
-  const threadId = await deps.ensureTopic(input.sessionId, input.message);
+  // Telegram is an OPTIONAL, best-effort mirror — a Telegram outage must not reject the
+  // visitor's AI reply. Wrap the passive topic ops (not the handoff/lead DELIVERY paths,
+  // which live in index.ts) so a throw degrades to "AI answers, owner just misses the mirror".
+  const ensureTopic = async (sessionId: string, firstMessage: string): Promise<number> => {
+    try {
+      return await deps.ensureTopic(sessionId, firstMessage);
+    } catch (e) {
+      console.error("telegram ensureTopic failed (mirror best-effort):", e);
+      return 0;
+    }
+  };
+  const toTopic = async (threadId: number, text: string): Promise<void> => {
+    try {
+      await deps.toTopic(threadId, text);
+    } catch (e) {
+      console.error("telegram toTopic failed (mirror best-effort):", e);
+    }
+  };
+
+  const threadId = await ensureTopic(input.sessionId, input.message);
   // Owner always sees the visitor's message, even after handoff.
-  await deps.toTopic(threadId, `👤 ${input.message}`);
+  await toTopic(threadId, `👤 ${input.message}`);
 
   if (await deps.isHandedOff(input.sessionId)) {
     return { reply: null, handoff: false, handedOff: true };
@@ -80,7 +104,7 @@ export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatRe
   const aiTurns = history.reduce((n, m) => n + (m.role === "assistant" ? 1 : 0), 0);
   if (aiTurns >= (deps.maxAiTurns ?? MAX_AI_TURNS)) {
     await deps.meter("handoff");
-    await deps.toTopic(threadId, "🙋 Long chat with no resolution — bringing in a human.");
+    await toTopic(threadId, "🙋 Long chat with no resolution — bringing in a human.");
     return { reply: FALLBACK_REPLY, handoff: true, handedOff: false };
   }
 
@@ -101,15 +125,17 @@ export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatRe
     await deps.meterTokens?.(tokens);
   } catch {
     // AI down — keep the loop alive by routing to a human.
-    await deps.toTopic(threadId, "⚠️ AI unavailable — visitor is waiting for you.");
+    await toTopic(threadId, "⚠️ AI unavailable — visitor is waiting for you.");
     return { reply: FALLBACK_REPLY, handoff: true, handedOff: false, degraded: true };
   }
 
   const { text, handoff } = parseHandoff(raw);
+  // Orthogonal form marker — parsed off the already-handoff-stripped text.
+  const { text: clean, formId } = parseForm(text);
   if (handoff) {
     await deps.meter("handoff");
-    await deps.toTopic(threadId, "🙋 AI asked for a human here.");
+    await toTopic(threadId, "🙋 AI asked for a human here.");
   }
-  await deps.toTopic(threadId, `🤖 ${text}`);
-  return { reply: text, handoff, handedOff: false };
+  await toTopic(threadId, `🤖 ${clean}`);
+  return { reply: clean, handoff, handedOff: false, formId };
 }

@@ -3,6 +3,39 @@
 // code never hand-rolls a key string.
 import type { Env, TenantConfig } from "./types";
 
+// ── public widget config (secret-free whitelist) ─────────────────────────────
+// The ONLY fields the unauthenticated public widget may read. Secret-free by
+// construction: botToken/chatId/systemPrompt/model are structurally excluded (we
+// project explicit theme keys, never spread cfg). The leak-guard test enforces this.
+export function publicWidgetConfig(cfg: Partial<TenantConfig> | null) {
+  const th = cfg?.theme ?? {};
+  return {
+    theme: {
+      primaryColor: th.primaryColor,
+      launcherColor: th.launcherColor,
+      position: th.position,
+      avatar: th.avatar,
+      greeting: th.greeting,
+      headerTitle: th.headerTitle,
+      radius: th.radius,
+      font: th.font,
+      sound: th.sound,
+    },
+    // Feature A appends PUBLIC-safe form + connector-CTA projections here.
+  };
+}
+
+// ── Worker→DO internal auth ──────────────────────────────────────────────────
+// The DO's /state, /operator, /handoff routes are Worker-only (never the browser).
+// The Worker attaches DO_INTERNAL_HEADER on every internal fetch; the DO verifies it.
+// Defaults to a build-time constant (DOs aren't publicly addressable, so this closes
+// a latent hole rather than a live one); override with env.DO_INTERNAL_SECRET to rotate.
+export const DO_INTERNAL_HEADER = "x-krispy-do-internal";
+const DO_INTERNAL_DEFAULT = "krispy-do-internal-v1";
+export function doInternalSecret(env: Env): string {
+  return env.DO_INTERNAL_SECRET || DO_INTERNAL_DEFAULT;
+}
+
 // ── key builders (pure) ──────────────────────────────────────────────────────
 export const kThreadToSession = (t: string, threadId: number) => `thread:${t}:${threadId}`;
 export const kSessionToThread = (t: string, sessionId: string) => `session:${t}:${sessionId}`;
@@ -26,11 +59,17 @@ export function monthKey(now = new Date()): string {
 export async function getTenant(env: Env, tenantId: string): Promise<TenantConfig | null> {
   if (tenantId === "self") {
     if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return null;
+    // forms/connectors/theme (+ prompt/model overrides) only ever live in KV — merge
+    // them in so the chat/lead path reads the SAME source as /api/widget/config.
+    // Env creds win for botToken/chatId (the secrets); env prompt/model override KV
+    // only when set (env unset ⇒ KV value survives).
+    const kv = await readTenantConfig(env, "self");
     return {
+      ...kv,
       botToken: env.TELEGRAM_BOT_TOKEN,
       chatId: env.TELEGRAM_CHAT_ID,
-      systemPrompt: env.SYSTEM_PROMPT,
-      model: env.AI_MODEL,
+      systemPrompt: env.SYSTEM_PROMPT ?? kv?.systemPrompt,
+      model: env.AI_MODEL ?? kv?.model,
     };
   }
   const raw = await env.KRISPY_KV.get(kTenant(tenantId));
@@ -99,6 +138,11 @@ export async function linkThreadSession(
 
 // ── metering ─────────────────────────────────────────────────────────────────
 // `n` lets a kind add more than 1 per call (tokens); call counters pass the default 1.
+// ponytail: read-modify-write on eventually-consistent KV — concurrent turns for one
+// tenant can lose increments, so this UNDERCOUNTS under contention. Acceptable for soft
+// caps (self-host = Infinity caps, no impact). If usage ever gates real billing, move the
+// counter to a per-tenant Durable Object (single-threaded → atomic increments); the DO is
+// already the strongly-consistent store for handoff. Don't add a distributed lock here.
 export async function meter(env: Env, t: string, kind: UsageKind, n = 1): Promise<void> {
   const key = kUsage(t, kind, monthKey());
   const cur = Number((await env.KRISPY_KV.get(key)) ?? 0);
@@ -117,6 +161,27 @@ export async function getUsage(env: Env, t: string): Promise<{ ai: number; hando
 /** Approximate tokens metered this month (separate from getUsage to keep its shape). */
 export async function getTokens(env: Env, t: string): Promise<number> {
   return Number((await env.KRISPY_KV.get(kUsage(t, "tokens", monthKey()))) ?? 0);
+}
+
+// ── lead rate limit ──────────────────────────────────────────────────────────
+// /api/lead + /api/contact are unauthenticated and un-metered — a spam/cost vector
+// (each lead can fan out a Resend email). Cap submits per (tenant, session, hour) with
+// a TTL'd KV counter. First submit always passes; over LEAD_RATE_MAX in the window → 429.
+// ponytail: KV read-modify-write races (a burst could slip a few over the cap) — fine for
+// a coarse anti-spam bound; upgrade to a per-session DO counter if it must be exact.
+export const LEAD_RATE_MAX = 10;
+const LEAD_RATE_WINDOW_SEC = 3600;
+const kLeadRate = (t: string, sessionId: string, hourBucket: number) =>
+  `leadrate:${t}:${sessionId}:${hourBucket}`;
+
+/** True if this lead submit is allowed; increments the window counter. */
+export async function checkLeadRate(env: Env, t: string, sessionId: string): Promise<boolean> {
+  const bucket = Math.floor(Date.now() / (LEAD_RATE_WINDOW_SEC * 1000));
+  const key = kLeadRate(t, sessionId, bucket);
+  const cur = Number((await env.KRISPY_KV.get(key)) ?? 0);
+  if (cur >= LEAD_RATE_MAX) return false;
+  await env.KRISPY_KV.put(key, String(cur + 1), { expirationTtl: LEAD_RATE_WINDOW_SEC });
+  return true;
 }
 
 // ── plan gate (seam) ─────────────────────────────────────────────────────────

@@ -16,7 +16,8 @@ import { chatFlow } from "./chat";
 import { SessionDO } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
 import { parseOwnerReply, createForumTopic, sendToTopic } from "./telegram";
-import type { Env, TenantConfig } from "./types";
+import { renderLeadEmail, sendLeadEmail } from "./email";
+import type { Connector, Env, FormSpec, TenantConfig } from "./types";
 import {
   getTenant,
   getThreadForSession,
@@ -30,6 +31,10 @@ import {
   writeEntitlement,
   readTenantConfig,
   mergeTenantConfig,
+  publicWidgetConfig,
+  DO_INTERNAL_HEADER,
+  doInternalSecret,
+  checkLeadRate,
   type EntitlementSnapshot,
 } from "./store";
 
@@ -58,6 +63,22 @@ function sessionStub(env: Env, tenantId: string, sessionId: string) {
   return env.SESSION.get(env.SESSION.idFromName(`${tenantId}:${sessionId}`));
 }
 
+/** Internal Worker→DO fetch: attaches the shared secret the DO verifies (the DO's
+ * /state,/operator,/handoff are Worker-only). WS upgrades don't route through here. */
+function doFetch(
+  env: Env,
+  tenantId: string,
+  sessionId: string,
+  path: string,
+  init: RequestInit = {},
+) {
+  const headers = {
+    ...(init.headers as Record<string, string>),
+    [DO_INTERNAL_HEADER]: doInternalSecret(env),
+  };
+  return sessionStub(env, tenantId, sessionId).fetch(path, { ...init, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -69,6 +90,7 @@ export default {
 
     if (request.method === "POST" && path === "/api/chat") return handleChat(request, env);
     if (request.method === "POST" && path === "/api/contact") return handleContact(request, env);
+    if (request.method === "POST" && path === "/api/lead") return handleLead(request, env);
     if (request.method === "POST" && path === "/api/telegram/webhook")
       return handleWebhook(request, env);
     if (request.method === "POST" && path === "/api/billing/entitlement")
@@ -77,6 +99,8 @@ export default {
       return handleTenantConfigGet(request, env);
     if (request.method === "POST" && path === "/api/tenant/config")
       return handleTenantConfigSet(request, env);
+    if (request.method === "GET" && path === "/api/widget/config")
+      return handleWidgetConfig(request, env);
     if (request.method === "GET" && path === "/api/usage") return handleUsage(request, env);
 
     // GET /api/session/:sessionId/ws  → forward the upgrade to the session's DO.
@@ -118,12 +142,11 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   }
 
   const tenant = await getTenant(env, tenantId);
-  const stub = sessionStub(env, tenantId, body.sessionId);
 
   // Telegram is optional: no config → topic ops no-op, chat still answers.
   const result = await chatFlow(
     {
-      systemPrompt: buildSystemPrompt(tenant?.systemPrompt),
+      systemPrompt: buildSystemPrompt(tenant?.systemPrompt, tenant?.forms),
       // Full history in; chatFlow applies the sliding window + counts turns (chokepoint).
       history: body.history,
       maxHistoryMsgs: numEnv(env.MAX_HISTORY_MSGS),
@@ -132,7 +155,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       meter: (kind) => meter(env, tenantId, kind),
       meterTokens: (n) => meter(env, tenantId, "tokens", n),
       isHandedOff: async (sessionId) => {
-        const r = await sessionStub(env, tenantId, sessionId).fetch("https://do/state");
+        const r = await doFetch(env, tenantId, sessionId, "https://do/state");
         return ((await r.json()) as { handedOff: boolean }).handedOff;
       },
       ensureTopic: async (sessionId, firstMessage) => {
@@ -152,12 +175,32 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   );
 
   // If the AI escalated, nudge the visitor's browser to open contact capture.
-  if (result.handoff) await stub.fetch("https://do/handoff", { method: "POST" });
+  if (result.handoff)
+    await doFetch(env, tenantId, body.sessionId, "https://do/handoff", { method: "POST" });
+
+  // Resolve the FormSpec (+ its visitor-facing CTA connectors) so the widget — which
+  // holds no tenant config — can render the form and its wa.me/instagram links.
+  if (result.formId) {
+    const spec = tenant?.forms?.find((f) => f.id === result.formId) ?? null;
+    // `ctas` rides on the wire form only (visitor-facing links); not part of FormSpec.
+    result.form = spec
+      ? ({ ...spec, ctas: ctaConnectors(tenant, spec) } as FormSpec & { ctas: Connector[] })
+      : null;
+  }
   return json(env, result);
 }
 
+/** The visitor-facing CTA connectors (whatsapp/instagram) for a form — email/telegram
+ * are invisible delivery channels and never leave the server. */
+function ctaConnectors(tenant: TenantConfig | null, form: FormSpec): Connector[] {
+  const all = tenant?.connectors ?? [];
+  const scoped = form.connectorIds ? all.filter((c) => form.connectorIds!.includes(c.id)) : all;
+  return scoped.filter((c) => c.type === "whatsapp" || c.type === "instagram");
+}
+
 // ── POST /api/contact ──────────────────────────────────────────────────────
-// Contact-capture form submission → drop the details into the owner's topic.
+// Back-compat shim — embeds in the wild still POST the legacy {name, contact} shape.
+// Maps it onto the generalized lead fan-out (deliverLead), so both routes share one path.
 async function handleContact(request: Request, env: Env): Promise<Response> {
   const b = (await request.json().catch(() => null)) as {
     sessionId?: string;
@@ -168,14 +211,87 @@ async function handleContact(request: Request, env: Env): Promise<Response> {
   } | null;
   if (!b?.sessionId) return json(env, { error: "sessionId required" }, 400);
   const tenantId = b.tenantId || DEFAULT_TENANT;
-  const tenant = await getTenant(env, tenantId);
-  const threadId = tenant ? await getThreadForSession(env, tenantId, b.sessionId) : null;
-  if (tenant && threadId) {
-    const text =
-      `📇 Contact left:\n• ${b.name || "—"}\n• ${b.contact || "—"}\n• ${b.message || ""}`.trim();
-    await sendToTopic(tenant.botToken, tenant.chatId, threadId, text);
-  }
+  if (!(await checkLeadRate(env, tenantId, b.sessionId)))
+    return json(env, { error: "rate_limited" }, 429);
+  await deliverLead(env, {
+    tenantId,
+    sessionId: b.sessionId,
+    formId: null,
+    values: { name: b.name || "", contact: b.contact || "", message: b.message || "" },
+    history: [],
+  });
   return json(env, { ok: true });
+}
+
+// ── POST /api/lead ─────────────────────────────────────────────────────────
+// The generalized lead endpoint: a data-driven form's captured values fan out to the
+// tenant's DELIVERY connectors (Telegram + email). whatsapp/instagram are CTA-only —
+// the visitor taps those links; nothing is delivered server-side for them.
+interface LeadPayload {
+  tenantId: string;
+  sessionId: string;
+  formId: string | null;
+  values: Record<string, string>;
+  history: { role: string; content: string }[];
+}
+
+async function handleLead(request: Request, env: Env): Promise<Response> {
+  const b = (await request.json().catch(() => null)) as Partial<LeadPayload> | null;
+  if (!b?.sessionId) return json(env, { error: "sessionId required" }, 400);
+  const tenantId = b.tenantId || DEFAULT_TENANT;
+  if (!(await checkLeadRate(env, tenantId, b.sessionId)))
+    return json(env, { error: "rate_limited" }, 429);
+  await deliverLead(env, {
+    tenantId,
+    sessionId: b.sessionId,
+    formId: b.formId ?? null,
+    values: b.values || {},
+    history: Array.isArray(b.history) ? b.history : [],
+  });
+  return json(env, { ok: true });
+}
+
+/**
+ * Resolve tenant + FormSpec + connectors, then fan a lead out to the delivery channels:
+ *   • Telegram — the existing sendToTopic into the visitor's topic (already has the full mirror)
+ *   • Email    — Resend, silent no-op without a key (email.ts)
+ * whatsapp/instagram connectors are never delivered here (CTA-only in the widget).
+ */
+export async function deliverLead(env: Env, lead: LeadPayload): Promise<void> {
+  const tenant = await getTenant(env, lead.tenantId);
+  const form = tenant?.forms?.find((f) => f.id === lead.formId) ?? null;
+  const connectors = tenant?.connectors ?? [];
+  // Which connectors get this lead: the form's scoped set, else all configured.
+  const targets = form?.connectorIds
+    ? connectors.filter((c) => form.connectorIds!.includes(c.id))
+    : connectors;
+
+  // Telegram delivery — drop the values into the visitor's topic.
+  if (tenant) {
+    const threadId = await getThreadForSession(env, lead.tenantId, lead.sessionId);
+    if (threadId) {
+      const lines = Object.entries(lead.values)
+        .filter(([, v]) => v && String(v).trim())
+        .map(([k, v]) => `• ${k}: ${v}`)
+        .join("\n");
+      await sendToTopic(
+        tenant.botToken,
+        tenant.chatId,
+        threadId,
+        `📇 ${form?.title || "Lead"} captured:\n${lines || "—"}`,
+      );
+    }
+  }
+
+  // Email delivery — every email connector in scope. wa.me reply button when a
+  // whatsapp connector exists. Silent no-op without RESEND_API_KEY (self-host may
+  // rely on Telegram only).
+  const waPhone = targets.find((c) => c.type === "whatsapp")?.phone;
+  const emailTargets = targets.filter((c) => c.type === "email" && c.toAddress);
+  for (const c of emailTargets) {
+    const mail = renderLeadEmail(form, lead.values, lead.history, waPhone);
+    await sendLeadEmail(env.RESEND_API_KEY, env.LEAD_EMAIL_FROM, c.toAddress, mail);
+  }
 }
 
 // ── POST /api/telegram/webhook ─────────────────────────────────────────────
@@ -195,7 +311,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const tenantId = DEFAULT_TENANT;
   const sessionId = await getSessionForThread(env, tenantId, reply.threadId);
   if (sessionId) {
-    await sessionStub(env, tenantId, sessionId).fetch("https://do/operator", {
+    await doFetch(env, tenantId, sessionId, "https://do/operator", {
       method: "POST",
       body: JSON.stringify({ text: reply.text }),
     });
@@ -263,6 +379,16 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
   }
   await mergeTenantConfig(env, body.tenantId, body.config);
   return json(env, { ok: true });
+}
+
+// ── GET /api/widget/config ───────────────────────────────────────────────────
+// PUBLIC (CORS-*, no secret): the widget's boot-time read of its appearance/forms.
+// Returns ONLY the whitelist projection (publicWidgetConfig) — NEVER botToken/chatId/
+// systemPrompt. The widget must never reach the secret-guarded GET /api/tenant/config.
+async function handleWidgetConfig(request: Request, env: Env): Promise<Response> {
+  const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
+  const cfg = await readTenantConfig(env, t);
+  return json(env, publicWidgetConfig(cfg));
 }
 
 // ── GET /api/usage ─────────────────────────────────────────────────────────

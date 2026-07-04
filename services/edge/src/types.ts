@@ -1,6 +1,44 @@
 // Shared types + the tenant seam. Everything is keyed by tenantId (default "self")
 // so the single-tenant self-host and a future multi-tenant SaaS are the same code.
 
+// ── Connectors + Lead (Feature A) ─────────────────────────────────────────
+export type FieldType = "text" | "email" | "tel" | "textarea" | "select";
+export interface FormField {
+  name: string; // machine key, e.g. "budget"
+  label: string; // visitor-facing
+  type: FieldType;
+  required?: boolean;
+  options?: string[]; // select only
+}
+export interface FormSpec {
+  id: string; // referenced by [!FORM:<id>]
+  title: string; // card heading, e.g. "book a call"
+  fields: FormField[];
+  connectorIds?: string[]; // which connectors receive this lead; default = ALL configured
+}
+export type ConnectorType = "email" | "telegram" | "whatsapp" | "instagram";
+export interface Connector {
+  id: string;
+  type: ConnectorType;
+  toAddress?: string; // email
+  phone?: string; // whatsapp (E.164 digits, no +)
+  profileUrl?: string; // instagram
+  // telegram uses the existing top-level botToken/chatId — no per-connector creds
+}
+
+// ── Widget theme (Feature B) ──────────────────────────────────────────────
+export interface WidgetTheme {
+  primaryColor?: string; // header + visitor bubble + send button. Default gold #e39a2b
+  launcherColor?: string; // FAB only (defaults to primaryColor)
+  position?: "br" | "bl"; // bottom-right | bottom-left. Default "br"
+  avatar?: string; // "buttr" (default, inline data-URI) | an https URL
+  greeting?: string; // first bot bubble on open
+  headerTitle?: string; // header text (supersedes legacy data-title)
+  radius?: number; // panel/bubble corner radius px, 0–20. Default 14
+  font?: string; // optional CSS font-family stack
+  sound?: boolean; // notification ding on inbound message while panel closed. Default true
+}
+
 export interface TenantConfig {
   /** Telegram bot token (BotFather). */
   botToken: string;
@@ -10,6 +48,15 @@ export interface TenantConfig {
   systemPrompt?: string;
   /** Optional model override. */
   model?: string;
+  /** Onboarding progress (mirrors cloud types; optional). */
+  onboardingStep?: number;
+  onboardingComplete?: boolean;
+  /** Feature A — lead forms. */
+  forms?: FormSpec[];
+  /** Feature A — delivery/CTA connectors. */
+  connectors?: Connector[];
+  /** Feature B — widget appearance. */
+  theme?: WidgetTheme;
 }
 
 export interface Env {
@@ -42,6 +89,15 @@ export interface Env {
   BILLING_SYNC_SECRET?: string;
   /** Shared secret guarding /api/tenant/config (dashboard → tenant-config sync). */
   TENANT_SYNC_SECRET?: string;
+  /** Shared secret the Worker attaches to internal Worker→SessionDO calls (rotatable;
+   * a build-time default is used when unset — DOs aren't publicly addressable). */
+  DO_INTERNAL_SECRET?: string;
+
+  // --- lead email (Feature A; optional — no key → email delivery no-ops) ---
+  /** Resend API key for lead-email delivery (reuses the cloud's existing key). */
+  RESEND_API_KEY?: string;
+  /** Verified-domain from-address for lead email. */
+  LEAD_EMAIL_FROM?: string;
 }
 
 /** Message pushed over the DO WebSocket to the visitor's browser. */

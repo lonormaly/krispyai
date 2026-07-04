@@ -5,11 +5,14 @@ import worker from "../src/index";
 import {
   buildSystemPrompt,
   parseHandoff,
+  parseForm,
   HANDOFF_MARKER,
   BREVITY_INSTRUCTION,
 } from "../src/system-prompt";
+import { renderLeadEmail } from "../src/email";
+import { deliverLead } from "../src/index";
 import { parseOwnerReply } from "../src/telegram";
-import { broadcast } from "../src/session-do";
+import { broadcast, SessionDO } from "../src/session-do";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
   chatFlow,
@@ -36,6 +39,10 @@ import {
   readEntitlement,
   readTenantConfig,
   mergeTenantConfig,
+  checkLeadRate,
+  LEAD_RATE_MAX,
+  DO_INTERNAL_HEADER,
+  doInternalSecret,
   type EntitlementSnapshot,
 } from "../src/store";
 import type { Env } from "../src/types";
@@ -119,6 +126,29 @@ describe("store", () => {
       "self",
     );
     expect(ok?.botToken).toBe("t");
+  });
+  test("getTenant('self') merges KV forms/connectors/theme over env creds (P1)", async () => {
+    const env = fakeEnv({ TELEGRAM_BOT_TOKEN: "envtok", TELEGRAM_CHAT_ID: "-100" });
+    // KV blob for "self" holds forms/connectors/theme + a stale bot token
+    await mergeTenantConfig(env, "self", {
+      botToken: "kv-stale-token",
+      forms: [{ id: "book", title: "Book a call", fields: [] }],
+      connectors: [{ id: "e", type: "email", toAddress: "owner@x.co" }],
+      theme: { greeting: "hi there" },
+      systemPrompt: "kv prompt",
+    });
+    const t = await getTenant(env, "self");
+    // env creds win for the secret…
+    expect(t?.botToken).toBe("envtok");
+    expect(t?.chatId).toBe("-100");
+    // …but KV supplies the non-secret keys the chat/lead path needs
+    expect(t?.forms?.[0]?.id).toBe("book");
+    expect(t?.connectors?.[0]?.toAddress).toBe("owner@x.co");
+    expect(t?.theme?.greeting).toBe("hi there");
+    // env unset ⇒ KV systemPrompt survives (env override only when set)
+    expect(t?.systemPrompt).toBe("kv prompt");
+    const overridden = await getTenant({ ...env, SYSTEM_PROMPT: "env prompt" } as any, "self");
+    expect(overridden?.systemPrompt).toBe("env prompt");
   });
   test("plan gate", () => {
     expect(withinPlan({ ai: 0, handoff: 0 }, planFor("self"))).toBe(true);
@@ -308,7 +338,8 @@ describe("chatFlow", () => {
   test("normal: AI answers, mirrored to topic, ai metered", async () => {
     const { base, topic, metered } = deps();
     const r = await chatFlow(base, { sessionId: "s", message: "hours?" });
-    expect(r).toEqual({ reply: "Sure, 9am.", handoff: false, handedOff: false });
+    // formId rides along (null — no [!FORM:] in this reply); U3 added it to ChatResult.
+    expect(r).toEqual({ reply: "Sure, 9am.", handoff: false, handedOff: false, formId: null });
     expect(topic).toContain("👤 hours?");
     expect(topic).toContain("🤖 Sure, 9am.");
     expect(metered).toEqual(["ai"]);
@@ -337,6 +368,23 @@ describe("chatFlow", () => {
     expect(r.handoff).toBe(true);
     expect(r.reply).toBe("A teammate will help.");
     expect(metered).toEqual(["ai", "handoff"]);
+  });
+
+  test("Telegram mirror throws → AI reply still returns (mirror best-effort, P2)", async () => {
+    // ensureTopic + toTopic both simulate a Telegram outage; the visitor must still get the reply.
+    const { base } = deps({
+      ensureTopic: async () => {
+        throw new Error("telegram down");
+      },
+      toTopic: async () => {
+        throw new Error("telegram down");
+      },
+      ai: async () => "We open at 9am.",
+    });
+    const r = await chatFlow(base, { sessionId: "s", message: "hours?" });
+    expect(r.reply).toBe("We open at 9am.");
+    expect(r.handoff).toBe(false);
+    expect(r.handedOff).toBe(false);
   });
 
   test("AI throws → graceful degradation to human, never drops the visitor", async () => {
@@ -481,5 +529,222 @@ describe("token usage counter", () => {
     expect(await getTokens(env, "self")).toBe(150);
     // getUsage shape stays {ai, handoff} — backward compatible
     expect(await getUsage(env, "self")).toEqual({ ai: 0, handoff: 0 });
+  });
+});
+
+// ── [!FORM:<id>] marker (mirrors parseHandoff, orthogonal) ───────────────────
+describe("parseForm", () => {
+  test("extracts + lowercases the form id, strips the marker", () => {
+    expect(parseForm("Let me grab your details. [!FORM:Book-Call]")).toEqual({
+      text: "Let me grab your details.",
+      formId: "book-call",
+    });
+  });
+  test("no marker → null id, text untouched", () => {
+    expect(parseForm("Just a normal reply.")).toEqual({
+      text: "Just a normal reply.",
+      formId: null,
+    });
+  });
+  test("independent of [!HANDOFF] — a reply can carry both, parsed separately", () => {
+    const raw = "One sec. [!HANDOFF] [!FORM:quote]";
+    const { text } = parseHandoff(raw); // strips handoff only
+    const form = parseForm(text); // then strips form
+    expect(form.formId).toBe("quote");
+    expect(form.text).toBe("One sec.");
+  });
+  test("buildSystemPrompt lists configured forms; omits the block when none", () => {
+    const withForms = buildSystemPrompt(undefined, [{ id: "book", title: "Book a call" }]);
+    expect(withForms).toContain("[!FORM:<id>]");
+    expect(withForms).toContain("book (Book a call)");
+    expect(buildSystemPrompt()).not.toContain("[!FORM:<id>]");
+  });
+});
+
+// ── renderLeadEmail (pure) ───────────────────────────────────────────────────
+describe("renderLeadEmail", () => {
+  const form = {
+    id: "book",
+    title: "Book a call",
+    fields: [
+      { name: "name", label: "Your name", type: "text" as const },
+      { name: "budget", label: "Budget", type: "text" as const },
+    ],
+  };
+  test("labels values via the FormSpec + includes transcript", () => {
+    const mail = renderLeadEmail(form, { name: "Dana", budget: "5k" }, [
+      { role: "user", content: "hi" },
+    ]);
+    expect(mail.subject).toBe("New lead · Book a call");
+    expect(mail.html).toContain("Your name");
+    expect(mail.html).toContain("Dana");
+    expect(mail.html).toContain("Budget");
+    expect(mail.html).toContain("Conversation");
+  });
+  test("wa.me reply button only when a whatsapp phone is passed", () => {
+    const without = renderLeadEmail(form, { name: "X" }, []);
+    expect(without.html).not.toContain("wa.me");
+    const withWa = renderLeadEmail(form, { name: "X" }, [], "972501234567");
+    expect(withWa.html).toContain("https://wa.me/972501234567");
+  });
+  test("escapes visitor-controlled values (no HTML injection)", () => {
+    const mail = renderLeadEmail(form, { name: "<script>x</script>" }, []);
+    expect(mail.html).not.toContain("<script>x</script>");
+    expect(mail.html).toContain("&lt;script&gt;");
+  });
+});
+
+// ── deliverLead fan-out (telegram + email; wa/ig are CTA-only) ───────────────
+describe("deliverLead fan-out", () => {
+  // Capture every outbound fetch so we can assert which channels fired.
+  function withCapturedFetch<T>(run: () => Promise<T>): Promise<{ urls: string[]; result: T }> {
+    const urls: string[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ ok: true, result: {} }), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    return run()
+      .then((result) => ({ urls, result }))
+      .finally(() => {
+        globalThis.fetch = orig;
+      });
+  }
+
+  test("fans out to Telegram + email; whatsapp/instagram never delivered server-side", async () => {
+    const env = fakeEnv({ RESEND_API_KEY: "re_x", LEAD_EMAIL_FROM: "leads@x.co" });
+    await mergeTenantConfig(env, "acme", {
+      botToken: "tok",
+      chatId: "-100",
+      forms: [{ id: "book", title: "Book a call", fields: [] }],
+      connectors: [
+        { id: "e", type: "email", toAddress: "owner@x.co" },
+        { id: "w", type: "whatsapp", phone: "972500000000" },
+        { id: "i", type: "instagram", profileUrl: "https://instagram.com/x" },
+      ],
+    });
+    await linkThreadSession(env, "acme", 42, "sess-1"); // gives getThreadForSession a hit
+
+    const { urls } = await withCapturedFetch(() =>
+      deliverLead(env, {
+        tenantId: "acme",
+        sessionId: "sess-1",
+        formId: "book",
+        values: { name: "Dana" },
+        history: [{ role: "user", content: "hi" }],
+      }),
+    );
+    // Telegram sendMessage fired…
+    expect(urls.some((u) => u.includes("api.telegram.org") && u.includes("sendMessage"))).toBe(
+      true,
+    );
+    // …and exactly one Resend email…
+    expect(urls.filter((u) => u.includes("api.resend.com")).length).toBe(1);
+    // …and NO wa.me / instagram delivery leaked to the server side.
+    expect(urls.some((u) => u.includes("wa.me") || u.includes("instagram.com"))).toBe(false);
+  });
+
+  test("no RESEND_API_KEY → email silently skipped (Telegram still fires)", async () => {
+    const env = fakeEnv(); // non-"self" tenant → getTenant reads creds from KV
+    await mergeTenantConfig(env, "acme", {
+      botToken: "tok",
+      chatId: "-100",
+      connectors: [{ id: "e", type: "email", toAddress: "owner@x.co" }],
+    });
+    await linkThreadSession(env, "acme", 7, "sess-2");
+    const { urls } = await withCapturedFetch(() =>
+      deliverLead(env, {
+        tenantId: "acme",
+        sessionId: "sess-2",
+        formId: null,
+        values: { name: "A" },
+        history: [],
+      }),
+    );
+    expect(urls.some((u) => u.includes("api.resend.com"))).toBe(false);
+    expect(urls.some((u) => u.includes("api.telegram.org"))).toBe(true);
+  });
+});
+
+// ── lead rate limit (anti-spam / cost on the unauth lead routes) ─────────────
+describe("checkLeadRate", () => {
+  test("first submits pass, over LEAD_RATE_MAX in the window → rejected", async () => {
+    const env = fakeEnv();
+    for (let i = 0; i < LEAD_RATE_MAX; i++) {
+      expect(await checkLeadRate(env, "self", "sess-a")).toBe(true);
+    }
+    // one past the cap → blocked
+    expect(await checkLeadRate(env, "self", "sess-a")).toBe(false);
+    // a different session in the same window is independent
+    expect(await checkLeadRate(env, "self", "sess-b")).toBe(true);
+  });
+
+  test("POST /api/lead over the cap returns 429", async () => {
+    const env = fakeEnv();
+    const post = () =>
+      worker.fetch(
+        new Request("https://edge.test/api/lead", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: "s1", tenantId: "self", values: {} }),
+        }),
+        env,
+      );
+    for (let i = 0; i < LEAD_RATE_MAX; i++) expect((await post()).status).toBe(200);
+    const over = await post();
+    expect(over.status).toBe(429);
+    expect(await over.json()).toEqual({ error: "rate_limited" });
+  });
+});
+
+// ── SessionDO internal auth (Worker-only /state,/operator,/handoff) ──────────
+describe("SessionDO internal auth", () => {
+  function fakeState() {
+    const store = new Map<string, unknown>();
+    return {
+      acceptWebSocket: () => {},
+      getWebSockets: () => [],
+      storage: {
+        get: async (k: string) => store.get(k),
+        put: async (k: string, v: unknown) => void store.set(k, v),
+      },
+    } as unknown as DurableObjectState;
+  }
+  const env = fakeEnv();
+  const secret = doInternalSecret(env);
+
+  test("rejects an unauthenticated internal call (no secret header) → 403", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    const res = await do_.fetch(
+      new Request("https://do/operator", {
+        method: "POST",
+        body: JSON.stringify({ text: "spoofed" }),
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("accepts the internal call when the shared secret matches", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    const res = await do_.fetch(
+      new Request("https://do/operator", {
+        method: "POST",
+        headers: { [DO_INTERNAL_HEADER]: secret },
+        body: JSON.stringify({ text: "real operator reply" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, delivered: 0 });
+  });
+
+  test("/state also gated", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    expect((await do_.fetch(new Request("https://do/state"))).status).toBe(403);
+    const ok = await do_.fetch(
+      new Request("https://do/state", { headers: { [DO_INTERNAL_HEADER]: secret } }),
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ handedOff: false });
   });
 });
