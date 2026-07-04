@@ -89,6 +89,9 @@ export interface Env {
   BILLING_SYNC_SECRET?: string;
   /** Shared secret guarding /api/tenant/config (dashboard → tenant-config sync). */
   TENANT_SYNC_SECRET?: string;
+  /** Shared secret the Worker attaches to internal Worker→SessionDO calls (rotatable;
+   * a build-time default is used when unset — DOs aren't publicly addressable). */
+  DO_INTERNAL_SECRET?: string;
 
   // --- lead email (Feature A; optional — no key → email delivery no-ops) ---
   /** Resend API key for lead-email delivery (reuses the cloud's existing key). */

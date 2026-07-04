@@ -52,6 +52,8 @@
   var handedOff = false; // a human took over → hide the AI framing
   var ws = null;
   var keepalive = null;
+  var wsBackoff = 3000; // reconnect delay, exponential up to WS_BACKOFF_MAX (with jitter)
+  var WS_BACKOFF_MAX = 30000;
 
   // ── UI (Shadow DOM) ─────────────────────────────────────────────────────
   var host = document.createElement("div");
@@ -367,10 +369,15 @@
         }
       };
       ws.onclose = function () {
-        setTimeout(connectWs, 3000);
+        // Exponential backoff capped at WS_BACKOFF_MAX, ±25% jitter (avoid a
+        // thundering-herd reconnect when the edge recovers). Reset on open.
+        var delay = wsBackoff * (0.75 + Math.random() * 0.5);
+        wsBackoff = Math.min(wsBackoff * 2, WS_BACKOFF_MAX);
+        setTimeout(connectWs, delay);
       }; // reconnect
       // keepalive so proxies don't idle-close (hibernation-friendly)
       ws.onopen = function () {
+        wsBackoff = 3000; // healthy again — reset the backoff
         clearInterval(keepalive);
         keepalive = setInterval(function () {
           try {

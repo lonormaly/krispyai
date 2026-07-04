@@ -12,7 +12,7 @@ import {
 import { renderLeadEmail } from "../src/email";
 import { deliverLead } from "../src/index";
 import { parseOwnerReply } from "../src/telegram";
-import { broadcast } from "../src/session-do";
+import { broadcast, SessionDO } from "../src/session-do";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
   chatFlow,
@@ -39,6 +39,10 @@ import {
   readEntitlement,
   readTenantConfig,
   mergeTenantConfig,
+  checkLeadRate,
+  LEAD_RATE_MAX,
+  DO_INTERNAL_HEADER,
+  doInternalSecret,
   type EntitlementSnapshot,
 } from "../src/store";
 import type { Env } from "../src/types";
@@ -122,6 +126,29 @@ describe("store", () => {
       "self",
     );
     expect(ok?.botToken).toBe("t");
+  });
+  test("getTenant('self') merges KV forms/connectors/theme over env creds (P1)", async () => {
+    const env = fakeEnv({ TELEGRAM_BOT_TOKEN: "envtok", TELEGRAM_CHAT_ID: "-100" });
+    // KV blob for "self" holds forms/connectors/theme + a stale bot token
+    await mergeTenantConfig(env, "self", {
+      botToken: "kv-stale-token",
+      forms: [{ id: "book", title: "Book a call", fields: [] }],
+      connectors: [{ id: "e", type: "email", toAddress: "owner@x.co" }],
+      theme: { greeting: "hi there" },
+      systemPrompt: "kv prompt",
+    });
+    const t = await getTenant(env, "self");
+    // env creds win for the secret…
+    expect(t?.botToken).toBe("envtok");
+    expect(t?.chatId).toBe("-100");
+    // …but KV supplies the non-secret keys the chat/lead path needs
+    expect(t?.forms?.[0]?.id).toBe("book");
+    expect(t?.connectors?.[0]?.toAddress).toBe("owner@x.co");
+    expect(t?.theme?.greeting).toBe("hi there");
+    // env unset ⇒ KV systemPrompt survives (env override only when set)
+    expect(t?.systemPrompt).toBe("kv prompt");
+    const overridden = await getTenant({ ...env, SYSTEM_PROMPT: "env prompt" } as any, "self");
+    expect(overridden?.systemPrompt).toBe("env prompt");
   });
   test("plan gate", () => {
     expect(withinPlan({ ai: 0, handoff: 0 }, planFor("self"))).toBe(true);
@@ -341,6 +368,23 @@ describe("chatFlow", () => {
     expect(r.handoff).toBe(true);
     expect(r.reply).toBe("A teammate will help.");
     expect(metered).toEqual(["ai", "handoff"]);
+  });
+
+  test("Telegram mirror throws → AI reply still returns (mirror best-effort, P2)", async () => {
+    // ensureTopic + toTopic both simulate a Telegram outage; the visitor must still get the reply.
+    const { base } = deps({
+      ensureTopic: async () => {
+        throw new Error("telegram down");
+      },
+      toTopic: async () => {
+        throw new Error("telegram down");
+      },
+      ai: async () => "We open at 9am.",
+    });
+    const r = await chatFlow(base, { sessionId: "s", message: "hours?" });
+    expect(r.reply).toBe("We open at 9am.");
+    expect(r.handoff).toBe(false);
+    expect(r.handedOff).toBe(false);
   });
 
   test("AI throws → graceful degradation to human, never drops the visitor", async () => {
@@ -621,5 +665,86 @@ describe("deliverLead fan-out", () => {
     );
     expect(urls.some((u) => u.includes("api.resend.com"))).toBe(false);
     expect(urls.some((u) => u.includes("api.telegram.org"))).toBe(true);
+  });
+});
+
+// ── lead rate limit (anti-spam / cost on the unauth lead routes) ─────────────
+describe("checkLeadRate", () => {
+  test("first submits pass, over LEAD_RATE_MAX in the window → rejected", async () => {
+    const env = fakeEnv();
+    for (let i = 0; i < LEAD_RATE_MAX; i++) {
+      expect(await checkLeadRate(env, "self", "sess-a")).toBe(true);
+    }
+    // one past the cap → blocked
+    expect(await checkLeadRate(env, "self", "sess-a")).toBe(false);
+    // a different session in the same window is independent
+    expect(await checkLeadRate(env, "self", "sess-b")).toBe(true);
+  });
+
+  test("POST /api/lead over the cap returns 429", async () => {
+    const env = fakeEnv();
+    const post = () =>
+      worker.fetch(
+        new Request("https://edge.test/api/lead", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: "s1", tenantId: "self", values: {} }),
+        }),
+        env,
+      );
+    for (let i = 0; i < LEAD_RATE_MAX; i++) expect((await post()).status).toBe(200);
+    const over = await post();
+    expect(over.status).toBe(429);
+    expect(await over.json()).toEqual({ error: "rate_limited" });
+  });
+});
+
+// ── SessionDO internal auth (Worker-only /state,/operator,/handoff) ──────────
+describe("SessionDO internal auth", () => {
+  function fakeState() {
+    const store = new Map<string, unknown>();
+    return {
+      acceptWebSocket: () => {},
+      getWebSockets: () => [],
+      storage: {
+        get: async (k: string) => store.get(k),
+        put: async (k: string, v: unknown) => void store.set(k, v),
+      },
+    } as unknown as DurableObjectState;
+  }
+  const env = fakeEnv();
+  const secret = doInternalSecret(env);
+
+  test("rejects an unauthenticated internal call (no secret header) → 403", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    const res = await do_.fetch(
+      new Request("https://do/operator", {
+        method: "POST",
+        body: JSON.stringify({ text: "spoofed" }),
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("accepts the internal call when the shared secret matches", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    const res = await do_.fetch(
+      new Request("https://do/operator", {
+        method: "POST",
+        headers: { [DO_INTERNAL_HEADER]: secret },
+        body: JSON.stringify({ text: "real operator reply" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, delivered: 0 });
+  });
+
+  test("/state also gated", async () => {
+    const do_ = new SessionDO(fakeState(), env);
+    expect((await do_.fetch(new Request("https://do/state"))).status).toBe(403);
+    const ok = await do_.fetch(
+      new Request("https://do/state", { headers: { [DO_INTERNAL_HEADER]: secret } }),
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ handedOff: false });
   });
 });

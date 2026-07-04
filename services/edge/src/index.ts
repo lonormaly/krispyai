@@ -32,6 +32,9 @@ import {
   readTenantConfig,
   mergeTenantConfig,
   publicWidgetConfig,
+  DO_INTERNAL_HEADER,
+  doInternalSecret,
+  checkLeadRate,
   type EntitlementSnapshot,
 } from "./store";
 
@@ -58,6 +61,22 @@ const json = (env: Env, data: unknown, status = 200) =>
 
 function sessionStub(env: Env, tenantId: string, sessionId: string) {
   return env.SESSION.get(env.SESSION.idFromName(`${tenantId}:${sessionId}`));
+}
+
+/** Internal Worker→DO fetch: attaches the shared secret the DO verifies (the DO's
+ * /state,/operator,/handoff are Worker-only). WS upgrades don't route through here. */
+function doFetch(
+  env: Env,
+  tenantId: string,
+  sessionId: string,
+  path: string,
+  init: RequestInit = {},
+) {
+  const headers = {
+    ...(init.headers as Record<string, string>),
+    [DO_INTERNAL_HEADER]: doInternalSecret(env),
+  };
+  return sessionStub(env, tenantId, sessionId).fetch(path, { ...init, headers });
 }
 
 export default {
@@ -123,7 +142,6 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   }
 
   const tenant = await getTenant(env, tenantId);
-  const stub = sessionStub(env, tenantId, body.sessionId);
 
   // Telegram is optional: no config → topic ops no-op, chat still answers.
   const result = await chatFlow(
@@ -137,7 +155,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       meter: (kind) => meter(env, tenantId, kind),
       meterTokens: (n) => meter(env, tenantId, "tokens", n),
       isHandedOff: async (sessionId) => {
-        const r = await sessionStub(env, tenantId, sessionId).fetch("https://do/state");
+        const r = await doFetch(env, tenantId, sessionId, "https://do/state");
         return ((await r.json()) as { handedOff: boolean }).handedOff;
       },
       ensureTopic: async (sessionId, firstMessage) => {
@@ -157,7 +175,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   );
 
   // If the AI escalated, nudge the visitor's browser to open contact capture.
-  if (result.handoff) await stub.fetch("https://do/handoff", { method: "POST" });
+  if (result.handoff)
+    await doFetch(env, tenantId, body.sessionId, "https://do/handoff", { method: "POST" });
 
   // Resolve the FormSpec (+ its visitor-facing CTA connectors) so the widget — which
   // holds no tenant config — can render the form and its wa.me/instagram links.
@@ -192,6 +211,8 @@ async function handleContact(request: Request, env: Env): Promise<Response> {
   } | null;
   if (!b?.sessionId) return json(env, { error: "sessionId required" }, 400);
   const tenantId = b.tenantId || DEFAULT_TENANT;
+  if (!(await checkLeadRate(env, tenantId, b.sessionId)))
+    return json(env, { error: "rate_limited" }, 429);
   await deliverLead(env, {
     tenantId,
     sessionId: b.sessionId,
@@ -217,8 +238,11 @@ interface LeadPayload {
 async function handleLead(request: Request, env: Env): Promise<Response> {
   const b = (await request.json().catch(() => null)) as Partial<LeadPayload> | null;
   if (!b?.sessionId) return json(env, { error: "sessionId required" }, 400);
+  const tenantId = b.tenantId || DEFAULT_TENANT;
+  if (!(await checkLeadRate(env, tenantId, b.sessionId)))
+    return json(env, { error: "rate_limited" }, 429);
   await deliverLead(env, {
-    tenantId: b.tenantId || DEFAULT_TENANT,
+    tenantId,
     sessionId: b.sessionId,
     formId: b.formId ?? null,
     values: b.values || {},
@@ -287,7 +311,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const tenantId = DEFAULT_TENANT;
   const sessionId = await getSessionForThread(env, tenantId, reply.threadId);
   if (sessionId) {
-    await sessionStub(env, tenantId, sessionId).fetch("https://do/operator", {
+    await doFetch(env, tenantId, sessionId, "https://do/operator", {
       method: "POST",
       body: JSON.stringify({ text: reply.text }),
     });

@@ -93,5 +93,6 @@ export async function sendLeadEmail(
       subject: mail.subject,
       html: mail.html,
     }),
+    signal: AbortSignal.timeout(10_000), // stalled Resend can't hang the Worker
   }).catch(() => {}); // email is best-effort; never block the lead response
 }

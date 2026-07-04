@@ -16,6 +16,7 @@ async function call<T = unknown>(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000), // don't let a stalled Telegram hang the Worker
   });
   const json = (await res.json()) as { ok: boolean; result?: T; description?: string };
   if (!json.ok) throw new Error(`telegram ${method} failed: ${json.description ?? res.status}`);

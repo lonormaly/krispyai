@@ -10,7 +10,8 @@
 //   GET  /state                → { handedOff }   (chat flow reads this)
 //   POST /operator {text}      → set handedOff, broadcast operator reply
 //   POST /handoff              → broadcast a handoff prompt (AI escalation)
-import type { ServerEvent } from "./types";
+import type { Env, ServerEvent } from "./types";
+import { DO_INTERNAL_HEADER, doInternalSecret } from "./store";
 
 interface Sendable {
   send(data: string): void;
@@ -33,13 +34,22 @@ export function broadcast(sockets: Sendable[], event: ServerEvent): number {
 
 export class SessionDO {
   private state: DurableObjectState;
+  private env: Env;
 
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, env: Env) {
     this.state = state;
+    this.env = env;
   }
 
   private async handedOff(): Promise<boolean> {
     return (await this.state.storage.get<boolean>("handedOff")) === true;
+  }
+
+  /** The internal (Worker-only) HTTP surface is state-mutating — require the shared
+   * secret so only our Worker can flip handoff / broadcast. The WS upgrade stays open
+   * (the session id is the capability the browser holds). */
+  private internalAuthed(request: Request): boolean {
+    return request.headers.get(DO_INTERNAL_HEADER) === doInternalSecret(this.env);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -58,6 +68,9 @@ export class SessionDO {
       }
       return new Response(null, { status: 101, webSocket: client });
     }
+
+    // Everything past the WS upgrade is the internal Worker→DO surface — gated.
+    if (!this.internalAuthed(request)) return new Response("forbidden", { status: 403 });
 
     if (request.method === "GET" && url.pathname.endsWith("/state")) {
       return Response.json({ handedOff: await this.handedOff() });
