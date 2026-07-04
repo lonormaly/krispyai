@@ -1,0 +1,79 @@
+---
+title: concepts
+description: the markers, the handoff loop, connectors, theme, and the KV-backed TenantConfig.
+---
+
+# core concepts
+
+everything in Krispy hangs off a few small ideas. understand these five and the rest of
+the docs is just detail.
+
+## 1. the loop (AI → Telegram → live handoff)
+
+a visitor message goes to `POST /api/chat`. the Worker:
+
+1. ensures a **Telegram forum topic** exists for that session (one topic per visitor) and
+   mirrors the visitor's message into it.
+2. if a human already took over this session, stays silent — the operator drives.
+3. otherwise asks the AI (Workers AI by default), parses the control markers, mirrors the
+   AI reply into the topic, and returns the reply to the widget.
+
+the strongly-consistent "a human took over" flag lives in a **Durable Object**
+(`SessionDO`), not KV — KV is too eventually-consistent for a switch that must flip
+instantly. operator replies are pushed to the visitor's browser over a WebSocket held by
+that same DO (hibernatable, so idle sockets cost nothing).
+
+## 2. the control markers — `[!HANDOFF]` and `[!FORM:<id>]`
+
+the whole product hinges on one convention: the model answers normally, and appends a
+literal marker at the very end of its reply when it needs to trigger something. the server
+strips the marker out (the visitor never sees it) and acts on it.
+
+- **`[!HANDOFF]`** — the model hit a wall a human should own (pricing negotiation, a
+  complaint, an explicit "talk to a person"). the server shows the human-readable text,
+  flags a handoff, and the widget opens a contact-capture form.
+- **`[!FORM:<id>]`** — orthogonal to handoff. the model offers a concrete next step it
+  can't finish in chat (booking, quote, demo) by naming one of your configured forms. the
+  server resolves the matching `FormSpec` and the widget renders it. a reply can raise a
+  form **without** escalating to a human.
+
+these are parsed independently (a reply can carry neither, either, or both). full grammar:
+[reference → the markers](/docs/reference/markers).
+
+## 3. connectors — where a lead goes
+
+a **connector** is a delivery or CTA channel. four types:
+
+| type        | role                                   | delivered server-side?                  |
+| ----------- | -------------------------------------- | --------------------------------------- |
+| `telegram`  | drop the lead into the visitor's topic | yes (uses the top-level bot token)      |
+| `email`     | send the lead by email via Resend      | yes (silent no-op without a Resend key) |
+| `whatsapp`  | a `wa.me` CTA link in the widget       | no — visitor taps it                    |
+| `instagram` | a profile-link CTA in the widget       | no — visitor taps it                    |
+
+`telegram` + `email` are **delivery** channels (the lead is sent for you). `whatsapp` +
+`instagram` are **CTA-only** — the widget renders them as links; nothing leaves the server.
+a form can scope which connectors receive its leads (`connectorIds`), else all configured
+connectors get it.
+
+## 4. theme — the widget's appearance
+
+the widget reads a public, secret-free theme projection at boot from
+`GET /api/widget/config`. no build step, no redeploy — change the theme in KV and the
+widget picks it up. themeable: primary/launcher color, position (`br`/`bl`), avatar
+(`buttr` default or an `https` URL), greeting, header title, corner radius, font, and the
+notification sound. see [embed + theme the widget](/docs/guides/embed-and-theme).
+
+## 5. tenants + KV config
+
+everything is keyed by a `tenantId` (default `"self"`), so the single-tenant self-host and
+a future multi-tenant SaaS are the **same code**. for `"self"`, the Telegram creds come
+from Worker secrets; the forms / connectors / theme / prompt overrides live in KV under
+`tenant:self`. any other tenant reads its whole config from KV. the shape is
+[`TenantConfig`](/docs/reference/tenant-config).
+
+<Callout title="graceful degradation is a feature">
+  Telegram unconfigured → chat still answers, topic ops no-op. AI provider down → the Worker hands
+  off to a human rather than dropping the visitor. no Resend key → email delivery silently skips.
+  nothing in the loop hard-fails on a missing optional dependency.
+</Callout>

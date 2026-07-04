@@ -1,0 +1,94 @@
+---
+title: TenantConfig reference
+description: the KV-backed config shape that drives a tenant's bot, forms, connectors, and theme.
+---
+
+# `TenantConfig`
+
+everything a tenant needs, keyed by `tenantId` (default `"self"`) in KV under `tenant:<id>`.
+for `"self"`, `botToken`/`chatId` come from Worker **secrets** and the rest from KV; any
+other tenant reads the whole thing from KV.
+
+```ts
+interface TenantConfig {
+  botToken: string; // Telegram bot token (BotFather)
+  chatId: string; // target supergroup id WITH topics, e.g. -1001234567890
+  systemPrompt?: string; // optional system-prompt override
+  model?: string; // optional model override
+  onboardingStep?: number; // onboarding progress (optional; mirrors cloud)
+  onboardingComplete?: boolean;
+  forms?: FormSpec[]; // lead forms
+  connectors?: Connector[]; // delivery / CTA connectors
+  theme?: WidgetTheme; // widget appearance
+}
+```
+
+`getTenant()` only treats a config as usable once **both** `botToken` and `chatId` are
+present; a partial config (e.g. a prompt saved before creds) still round-trips through KV.
+
+## `FormSpec`
+
+```ts
+interface FormSpec {
+  id: string; // referenced by [!FORM:<id>]
+  title: string; // card heading, e.g. "book a call"
+  fields: FormField[];
+  connectorIds?: string[]; // which connectors receive this lead; default = ALL configured
+}
+
+interface FormField {
+  name: string; // machine key, e.g. "budget"
+  label: string; // visitor-facing
+  type: "text" | "email" | "tel" | "textarea" | "select";
+  required?: boolean;
+  options?: string[]; // select only
+}
+```
+
+## `Connector`
+
+```ts
+type ConnectorType = "email" | "telegram" | "whatsapp" | "instagram";
+
+interface Connector {
+  id: string;
+  type: ConnectorType;
+  toAddress?: string; // email
+  phone?: string; // whatsapp — E.164 digits, no "+"
+  profileUrl?: string; // instagram
+  // telegram uses the top-level botToken/chatId — no per-connector creds
+}
+```
+
+`telegram` + `email` are delivered server-side; `whatsapp` + `instagram` are CTA links only.
+see [lead forms + connectors](/docs/guides/lead-forms-and-connectors).
+
+## `WidgetTheme`
+
+```ts
+interface WidgetTheme {
+  primaryColor?: string; // header + visitor bubble + send button. Default gold #e39a2b
+  launcherColor?: string; // launcher only (defaults to primaryColor)
+  position?: "br" | "bl"; // bottom-right | bottom-left. Default "br"
+  avatar?: string; // "buttr" (inline default) | an https URL
+  greeting?: string; // first bot bubble on open
+  headerTitle?: string; // header text (supersedes data-title)
+  radius?: number; // corner radius px, clamped 0–20. Default 14
+  font?: string; // CSS font-family stack
+  sound?: boolean; // notification ding. Default true
+}
+```
+
+only these fields are exposed to the public `GET /api/widget/config`; the projection is a
+literal whitelist (never a spread of the config), so `botToken`/`chatId`/`systemPrompt` are
+structurally excluded. see [security](/docs/security).
+
+## KV keys
+
+| key                              | value                                                          |
+| -------------------------------- | -------------------------------------------------------------- |
+| `tenant:<id>`                    | the `TenantConfig` JSON blob                                   |
+| `session:<tenant>:<sessionId>`   | the Telegram thread id for that session                        |
+| `thread:<tenant>:<threadId>`     | the session id for that thread                                 |
+| `usage:<tenant>:<yyyymm>:<kind>` | monthly usage counter — `kind` ∈ `ai` \| `handoff` \| `tokens` |
+| `entitlement:<tenant>`           | optional billing snapshot (unused in self-host)                |

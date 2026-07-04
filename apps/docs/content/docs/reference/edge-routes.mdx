@@ -1,0 +1,59 @@
+---
+title: edge routes / API
+description: every HTTP route on the edge Worker — method, path, shape, auth.
+---
+
+# edge routes
+
+one Cloudflare Worker hosts all of these plus the `SessionDO`. CORS allow-origin is
+`ALLOWED_ORIGIN` (default `*`); `OPTIONS` is answered for every route.
+
+## public routes
+
+| method | path                             | body / query → response                                                                                                           |
+| ------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/chat`                      | `{ sessionId, message, tenantId?, history? }` → `{ reply, handoff, handedOff, degraded?, formId?, form? }`                        |
+| `POST` | `/api/contact`                   | `{ sessionId, tenantId?, name?, contact?, message? }` → `{ ok: true }` — legacy contact-capture shim (maps onto the lead fan-out) |
+| `POST` | `/api/lead`                      | `{ tenantId?, sessionId, formId?, values, history }` → `{ ok: true }` — a form's captured values fan out to delivery connectors   |
+| `GET`  | `/api/session/:id/ws?t=<tenant>` | WebSocket upgrade → `SessionDO`. `426` if not an upgrade. the visitor's live channel                                              |
+| `GET`  | `/api/widget/config?t=<tenant>`  | → `{ theme: {...} }` — the **public, secret-free** widget projection (whitelist only)                                             |
+| `GET`  | `/api/usage?t=<tenant>`          | → `{ tenantId, usage: { ai, handoff, tokens }, plan, entitled, status, limits, withinLimits }`                                    |
+| `GET`  | `/health`                        | → `{ status: "ok", service: "edge" }`                                                                                             |
+
+### `POST /api/chat` gate
+
+before answering, the Worker checks entitlement + plan limits. self-host (`"self"`) is
+always entitled and unmetered. a non-self tenant with no valid snapshot gets
+`402 { error: "subscription_required" }`; over its cap it gets
+`429 { error: "usage_limit_reached" }`. missing `sessionId`/`message` → `400`.
+
+## secret-guarded routes
+
+these carry a bot token or mutate config, so they require a shared-secret header. a missing
+or wrong secret returns **401** (config routes) / **403** (webhook, billing) and leaks nothing.
+
+| method | path                            | auth header                                                  | purpose                                                                                        |
+| ------ | ------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `POST` | `/api/telegram/webhook`         | `x-telegram-bot-api-secret-token: <TELEGRAM_WEBHOOK_SECRET>` | owner's Telegram reply → push to the visitor via the DO, set `handedOff`                       |
+| `GET`  | `/api/tenant/config?t=<tenant>` | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | read a tenant's full config `{ botToken, chatId, systemPrompt?, model?, ... }` (404 if none)   |
+| `POST` | `/api/tenant/config`            | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | `{ tenantId, config }` → **merge** into the tenant's KV config. the CLI writes here            |
+| `POST` | `/api/billing/entitlement`      | `x-billing-sync-secret: <BILLING_SYNC_SECRET>`               | mirror an entitlement snapshot into KV (for a hosted/multi-tenant deploy; unused in self-host) |
+
+<Callout type="warn">
+  `GET /api/tenant/config` returns the **full** config (bot token included) and is secret-guarded.
+  `GET /api/widget/config` is the public read the browser uses — it returns **only** the theme
+  whitelist and never the token/prompt. don't confuse them. see [security](/docs/security).
+</Callout>
+
+## the SessionDO (internal)
+
+the Worker forwards to a `SessionDO` per `(tenant, session)`; the browser never calls it
+directly. its surface: the WebSocket upgrade (visitor connects, receives
+`{ type: "ready", handedOff }`), `GET /state` (`{ handedOff }`), `POST /operator {text}`
+(set `handedOff`, broadcast the operator reply), and `POST /handoff` (broadcast a handoff
+prompt). server → browser events: `ready`, `operator`, `handoff`, `resume`.
+
+## keeping this in sync
+
+the repo mirrors routes into a Bruno collection (`api-collection/`). when you add or change
+a route, update the matching `.bru` request in the same change (per `CONTRIBUTING.md`).

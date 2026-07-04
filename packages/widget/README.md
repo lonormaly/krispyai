@@ -9,17 +9,20 @@ Host `widget.js` anywhere static (your CDN, the edge Worker's origin, an R2/Page
 bucket) and drop one tag on any page:
 
 ```html
-<script src="https://YOUR-HOST/widget.js"
-        data-api="https://krispy-edge.YOU.workers.dev"
-        data-tenant="self" async></script>
+<script
+  src="https://YOUR-HOST/widget.js"
+  data-api="https://krispy-edge.YOU.workers.dev"
+  data-tenant="self"
+  async
+></script>
 ```
 
-| attribute | required | default | meaning |
-|-----------|----------|---------|---------|
-| `data-api` | yes | — | the `@krispy/edge` Worker base URL |
-| `data-tenant` | no | `self` | tenant id (multi-tenant SaaS uses this) |
-| `data-title` | no | `Chat with us` | header text |
-| `data-accent` | no | `#e8552d` | brand color |
+| attribute     | required | default        | meaning                                              |
+| ------------- | -------- | -------------- | ---------------------------------------------------- |
+| `data-api`    | yes      | —              | the `@krispy/edge` Worker base URL                   |
+| `data-tenant` | no       | `self`         | tenant id (multi-tenant SaaS uses this)              |
+| `data-title`  | no       | `Chat with us` | header text                                          |
+| `data-accent` | no       | `#e39a2b`      | brand color (used before the KV `theme` fetch lands) |
 
 ## The loop
 

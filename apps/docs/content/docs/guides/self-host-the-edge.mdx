@@ -1,0 +1,87 @@
+---
+title: self-host the edge
+description: create the KV namespace, set the secrets, deploy the Worker, register the Telegram webhook.
+---
+
+# self-host the edge Worker
+
+the edge Worker is the whole backend: the `/api/*` routes **and** the `SessionDO` Durable
+Object, one deploy, one `wrangler.toml`. deploy it from `services/edge`.
+
+## 1. KV namespace
+
+the Worker uses one KV namespace (`KRISPY_KV`) for tenant config, the topic↔session map,
+and usage counters. create it and paste the id into `services/edge/wrangler.toml`
+(replacing `REPLACE_WITH_KV_ID`):
+
+```sh
+bunx wrangler kv namespace create KRISPY_KV
+```
+
+## 2. secrets
+
+the Worker never reads a `.env` file at runtime. set each secret in Cloudflare with
+`wrangler secret put` (from `services/edge`):
+
+```sh
+bunx wrangler secret put TELEGRAM_BOT_TOKEN       # BotFather token
+bunx wrangler secret put TELEGRAM_CHAT_ID         # supergroup id, e.g. -1001234567890
+bunx wrangler secret put TELEGRAM_WEBHOOK_SECRET  # any random string
+bunx wrangler secret put TENANT_SYNC_SECRET       # optional: gates /api/tenant/config
+```
+
+for local iteration without deploying, `wrangler dev` reads these from a git-ignored
+`.dev.vars` file in `services/edge`.
+
+<Callout type="warn">
+  Telegram creds, `TENANT_SYNC_SECRET`, and `BILLING_SYNC_SECRET` are **secrets** — they belong in
+  Cloudflare, never in the repo. KV and Durable Object bindings are **not** secrets; they live in
+  `wrangler.toml`. see [security](/docs/security).
+</Callout>
+
+## 3. optional vars
+
+set in `wrangler.toml` under `[vars]`, or as secrets. all optional — code defaults apply:
+
+| var                 | default                                    | what it does                                               |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| `ALLOWED_ORIGIN`    | `*`                                        | CORS allow-origin. lock to your site origin in production. |
+| `AI_MODEL`          | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | override the Workers AI model.                             |
+| `SYSTEM_PROMPT`     | —                                          | override the system prompt from env (KV wins if unset).    |
+| `MAX_HISTORY_MSGS`  | `8`                                        | sliding window — prior messages the AI sees.               |
+| `MAX_OUTPUT_TOKENS` | `256`                                      | hard cap on reply length.                                  |
+| `MAX_AI_TURNS`      | `10`                                       | AI turns before a forced human handoff.                    |
+| `RESEND_API_KEY`    | —                                          | enables lead-email delivery (no key → email no-ops).       |
+| `LEAD_EMAIL_FROM`   | —                                          | verified-domain from-address for lead email.               |
+
+`MAX_HISTORY_MSGS` / `MAX_OUTPUT_TOKENS` / `MAX_AI_TURNS` are the "turn tax" cost knobs — the
+client re-sends the whole history each turn, so these three bound per-turn cost without
+changing behavior on normal short chats.
+
+## 4. deploy
+
+```sh
+cd services/edge
+bunx wrangler deploy
+```
+
+## 5. register the Telegram webhook
+
+point Telegram at your deployed Worker so owner replies reach it. the `secret_token` must
+match the `TELEGRAM_WEBHOOK_SECRET` you set — the Worker rejects any webhook call whose
+`x-telegram-bot-api-secret-token` header doesn't match.
+
+```sh
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -d "url=https://krispy-edge.YOU.workers.dev/api/telegram/webhook" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+## 6. verify
+
+```sh
+curl https://krispy-edge.YOU.workers.dev/health   # → {"status":"ok","service":"edge"}
+```
+
+then embed the widget ([embed + theme the widget](/docs/guides/embed-and-theme)) with
+`data-api` pointed at your Worker, and drive the loop end to end.

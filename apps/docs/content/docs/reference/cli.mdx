@@ -1,0 +1,54 @@
+---
+title: CLI reference
+description: the `krispy` commands and the env vars that configure them.
+---
+
+# `krispy` CLI
+
+the self-host CLI. it manages your bot's knowledge base (system prompt) by `POST`ing to the
+edge Worker's `/api/tenant/config` route — no hand-written `wrangler kv` calls. single-file
+core, no arg-parser dependency.
+
+## commands
+
+| command                   | what it does                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `krispy init`             | guided first-run wizard — Telegram → train → embed → next steps. persists each step via `POST /api/tenant/config`. |
+| `krispy set-kbase <file>` | write `<file>`'s contents as the bot's system prompt (`POST /api/tenant/config`).                                  |
+| `krispy dev`              | run the edge Worker locally — a thin wrapper over `wrangler dev` in `services/edge`.                               |
+
+running `krispy` with no command (or an unknown one) prints usage.
+
+### `krispy init`
+
+the terminal-native counterpart to the Cloud dashboard onboarding. four steps, each
+persisted as it completes; re-run any time — the Worker merges, so it never clobbers fields
+you've already set.
+
+1. **connect Telegram** — BotFather guide → paste the bot token, validated live via
+   Telegram's `getMe` (green `✓ @yourbot` or red retry) → supergroup-with-Topics +
+   add-the-bot-as-admin guide → chat id. persists `botToken` + `chatId`.
+2. **train your bot** — a knowledge-base file, a starter template, or skip. persists `systemPrompt`.
+3. **embed the widget** — prints the copy-paste `<script>` snippet with your `data-api` +
+   `data-tenant` baked in.
+4. **next steps** — run/deploy commands and how to test the loop.
+
+`init` needs a real terminal (TTY); in CI or piped input it exits with guidance instead of
+hanging. it's the only command with dependencies (`@clack/prompts`, `picocolors`), lazy-loaded
+so the core stays lean.
+
+## env / config
+
+| var                  | default                 | meaning                                                                                                                                     |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KRISPY_API`         | `http://localhost:8787` | your edge Worker base URL                                                                                                                   |
+| `KRISPY_TENANT`      | `self`                  | tenant id                                                                                                                                   |
+| `TENANT_SYNC_SECRET` | —                       | must match the Worker's `TENANT_SYNC_SECRET`; sent as `x-tenant-sync-secret`. `set-kbase`/`init` fail with a clear message if it's missing. |
+
+## run from the repo (no publish needed)
+
+```sh
+KRISPY_API=https://krispy-edge.YOU.workers.dev \
+TENANT_SYNC_SECRET=... \
+  bun packages/cli/src/index.ts set-kbase ./kbase.md
+```

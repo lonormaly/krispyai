@@ -1,0 +1,58 @@
+---
+title: what is krispy
+description: open-source live chat with an AI answerer and a human handoff to Telegram — self-hosted on Cloudflare's free tier.
+---
+
+# krispy 🥐
+
+open-source live chat with a human in the loop. an AI answers your visitors in your
+voice, and hands off to **you** on Telegram the moment a real person is needed — you
+reply from your phone, it lands live in the chat, and the bot goes quiet.
+
+> **let the bot cook 🥐**
+
+## the repo you're reading
+
+this is the **lean, self-hostable core** — exactly two deployable things plus the CLI to run them.
+the dashboard, billing, accounts, and marketing surfaces live in a separate Cloud repo and
+do **not** ship here.
+
+| path              | what it is                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `services/edge`   | ⭐ one Cloudflare Worker + a hibernatable Durable Object (`SessionDO`). chat + Telegram handoff. the whole backend, one deploy. |
+| `packages/widget` | ⭐ the dependency-free embeddable `widget.js` — vanilla JS in a Shadow DOM, zero deps.                                          |
+| `packages/cli`    | the `krispy` CLI — manage your bot's knowledge base (its system prompt).                                                        |
+
+## the loop
+
+```
+visitor ──▶ AI answers (Cloudflare Workers AI) ──▶ visitor
+   │
+   └──▶ one Telegram topic per visitor, on your phone
+              │
+   you reply in the topic ──▶ shows up LIVE in the widget
+              │
+              └──▶ bot goes silent — the human owns the conversation
+```
+
+- visitor types → instant AI reply.
+- every message mirrors to **one Telegram forum topic per visitor** on your phone.
+- you reply from Telegram → it's pushed into the browser over a WebSocket, **live**.
+- the bot detects it's a human job and steps back — no double-answering.
+
+## the stack
+
+- **Cloudflare Workers** + **Durable Objects** (hibernatable `SessionDO`) — the whole backend, one deploy.
+- **Workers AI** — the built-in bot (`@cf/meta/llama-3.3-70b-instruct-fp8-fast` by default). a BYO-key seam is there.
+- **Cloudflare KV** — tenant config, topic↔session map, usage counters.
+- **Telegram Bot API** — the handoff channel (one forum topic per visitor).
+- **Bun** + **wrangler** — package manager, runtime, deploy.
+- widget is vanilla JS in a Shadow DOM — zero framework, zero dependencies.
+
+## where to go next
+
+- **[quickstart](/docs/quickstart)** — self-host in ~10 minutes.
+- **[concepts](/docs/concepts)** — the markers, connectors, theme, KV config.
+- **[guides](/docs/guides/self-host-the-edge)** — task-oriented: deploy, embed, connect Telegram, forms.
+- **[reference](/docs/reference/cli)** — CLI, edge routes, `TenantConfig`, the markers.
+- **[security](/docs/security)** — secrets, the widget-config whitelist, the prompt guardrails.

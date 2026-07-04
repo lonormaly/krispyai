@@ -1,0 +1,83 @@
+---
+title: embed + theme the widget
+description: drop the one-line script on any page, then theme it from KV without a redeploy.
+---
+
+# embed + theme the widget
+
+`widget.js` is dependency-free and lives in a Shadow DOM, so your site's CSS can't leak in
+(and vice versa). host it anywhere static — your CDN, the edge Worker's origin, an R2 /
+Pages bucket.
+
+## embed
+
+drop one tag on any page, before `</body>`:
+
+```html
+<script
+  src="https://YOUR-HOST/widget.js"
+  data-api="https://krispy-edge.YOU.workers.dev"
+  data-tenant="self"
+  async
+></script>
+```
+
+### script attributes
+
+these are the boot-time knobs read off the `<script>` tag. richer appearance is set via the
+theme (below), not attributes.
+
+| attribute     | required | default        | meaning                                         |
+| ------------- | -------- | -------------- | ----------------------------------------------- |
+| `data-api`    | yes      | —              | your `@krispy/edge` Worker base URL             |
+| `data-tenant` | no       | `self`         | tenant id (multi-tenant uses this)              |
+| `data-title`  | no       | `Chat with us` | header text (theme `headerTitle` supersedes it) |
+| `data-accent` | no       | `#e39a2b`      | brand color, used before the theme fetch lands  |
+
+## theme (from KV, no redeploy)
+
+on open, the widget fetches `GET /api/widget/config?t=<tenant>` — a **public, secret-free**
+projection of your tenant's `theme`. change it in KV (via the CLI or your own tooling
+writing `POST /api/tenant/config`) and the widget picks it up on next load; no rebuild.
+
+the themeable fields (`WidgetTheme`):
+
+| field           | default          | what it controls                                                  |
+| --------------- | ---------------- | ----------------------------------------------------------------- |
+| `primaryColor`  | `#e39a2b` (gold) | header, visitor bubble, send button                               |
+| `launcherColor` | = `primaryColor` | the floating launcher button only                                 |
+| `position`      | `br`             | `br` (bottom-right) or `bl` (bottom-left)                         |
+| `avatar`        | —                | `"buttr"` (inline default croissant) or an `https://` URL         |
+| `greeting`      | —                | first bot bubble shown when the panel opens                       |
+| `headerTitle`   | —                | header text (supersedes `data-title`)                             |
+| `radius`        | `14`             | panel/bubble corner radius, px, clamped 0–20                      |
+| `font`          | system stack     | a CSS `font-family` stack                                         |
+| `sound`         | `true`           | notification "ding" on inbound messages while the panel is closed |
+
+<Callout type="warn">
+theme values cross a CSS trust boundary. the widget **sanitizes** them: colors must be
+`#hex` or `rgb(...)`, radius is clamped 0–20, fonts reject `;{}<>`, and avatars must be the
+literal `buttr` or an `https://` URL. anything else is dropped. see [security](/docs/security).
+</Callout>
+
+## what the widget does
+
+- **markdown** — bot/operator bubbles render a safe subset (`**bold**`, `*italic*`,
+  `` `code` ``, `[label](url)`) built with `createElement`/`textContent`, never `innerHTML`.
+  visitor and system messages stay literal. links only render for `http(s)`/`mailto`.
+- **notifications** — a WebAudio "ding" + launcher pulse + unread dot, fired only on an
+  inbound message while the panel is closed. respects a per-visitor mute (persisted) and the
+  browser autoplay policy (silent until first interaction).
+- **mobile** — a keyboard-aware floating card via `visualViewport`, `16px` inputs to dodge
+  iOS zoom, and safe-area insets.
+- **resilience** — the operator WebSocket reconnects with exponential backoff + jitter; the
+  chat still works over plain `POST` if the socket is down.
+
+## local demo
+
+```sh
+cd services/edge && bunx wrangler dev    # Worker on :8787
+bunx serve packages/widget               # demo page (index.html points data-api at :8787)
+```
+
+serve over http so the WebSocket and `localStorage` work.

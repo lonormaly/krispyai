@@ -4,7 +4,7 @@
 
 **Do not open a public issue for a security problem.** Report it privately:
 
-- open a [GitHub private security advisory](https://github.com/lonormaly/krispyai/security/advisories/new) (Security → Advisories → _Report a vulnerability_). It's private to you and the maintainers until a fix ships.
+- open a [GitHub private security advisory](https://github.com/krispyhq/krispyai/security/advisories/new) (Security → Advisories → _Report a vulnerability_). It's private to you and the maintainers until a fix ships.
 
 Please give us a reasonable window to fix and release before any public disclosure. We'll acknowledge your report and keep you posted on the fix.
 

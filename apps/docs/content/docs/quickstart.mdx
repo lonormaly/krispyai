@@ -1,0 +1,87 @@
+---
+title: quickstart
+description: clone, run the edge Worker locally, then go live — Telegram, embed, first lead.
+---
+
+# quickstart
+
+you'll need [Bun](https://bun.com) ≥ 1.1.34, a Cloudflare account (free), and a Telegram account.
+
+## 1. run it locally
+
+```sh
+git clone https://github.com/krispyhq/krispyai
+cd krispyai
+bun install
+bun test                 # unit tests, no external services needed
+bun run dev:edge         # runs the Worker on http://localhost:8787
+```
+
+`wrangler dev` binds Workers AI and the Durable Object automatically — you can drive the
+full loop locally before touching Telegram.
+
+in a second terminal, serve the widget demo and open it:
+
+```sh
+bun run dev:widget       # widget demo (bunx serve) on http://localhost:3000
+```
+
+the demo page's `<script>` already points `data-api` at `http://localhost:8787`. open the
+bubble (bottom-right), say hi, and you get an AI reply. that's the loop, minus Telegram.
+
+<Callout>
+  without Telegram configured the chat still answers — the topic mirror just no-ops. this is the
+  deliberate "graceful degradation" behavior; you never need Telegram to try the AI.
+</Callout>
+
+## 2. go live — the `krispy init` wizard (fastest path)
+
+after you've created the KV namespace and set `TENANT_SYNC_SECRET` (see
+[self-host the edge](/docs/guides/self-host-the-edge)), run the guided setup:
+
+```sh
+npx krispy init          # (or: bun packages/cli/src/index.ts init)
+```
+
+it walks you through four steps, each persisted as you go via `POST /api/tenant/config`:
+
+1. **connect Telegram** — BotFather → paste the bot token (validated live via Telegram's
+   `getMe`) → supergroup-with-Topics + add-the-bot-as-admin → chat id.
+2. **train your bot** — point it at a knowledge-base file, accept a starter template, or skip.
+3. **embed the widget** — prints the copy-paste `<script>` snippet, tenant baked in.
+4. **next steps** — how to run (`krispy dev` / `wrangler deploy`) and test the loop.
+
+re-run it any time — it never clobbers fields you've already set.
+
+## 3. the manual path (wrangler secrets)
+
+prefer to do it by hand? the full sequence lives in
+[self-host the edge](/docs/guides/self-host-the-edge). in short:
+
+```sh
+bunx wrangler kv namespace create KRISPY_KV     # paste id into wrangler.toml
+bunx wrangler secret put TELEGRAM_BOT_TOKEN
+bunx wrangler secret put TELEGRAM_CHAT_ID
+bunx wrangler secret put TELEGRAM_WEBHOOK_SECRET
+bunx wrangler secret put TENANT_SYNC_SECRET     # optional: gates the CLI's config route
+cd services/edge && bunx wrangler deploy
+```
+
+then register the Telegram webhook against your deployed Worker (see the guide).
+
+## 4. your first lead
+
+open a page with the widget embedded and chat until the AI decides a human is needed
+(ask for pricing, ask for "a real person", or trigger a form). the widget shows a small
+contact-capture form or a lead form; on submit, the values fan out to your Telegram topic
+(and email, if you configured a Resend key). a topic appears on your phone — reply from
+Telegram, and your message lands live in the visitor's browser while the bot goes silent.
+
+## checks
+
+```sh
+bun run typecheck     # tsc over the edge Worker + CLI
+bun run lint          # oxlint (Rust, fast)
+bun run test          # edge unit tests + CLI smoke tests
+bun run check         # typecheck + lint + test in one shot
+```

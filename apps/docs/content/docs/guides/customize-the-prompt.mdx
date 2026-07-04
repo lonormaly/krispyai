@@ -1,0 +1,56 @@
+---
+title: customize the bot prompt
+description: the bot's knowledge base IS its system prompt. how to set it, and what's always appended.
+---
+
+# customize the bot prompt
+
+your bot's knowledge base **is** its system prompt. write it in a file and push it into the
+Worker's KV — no hand-written `wrangler kv` calls.
+
+## set it with the CLI
+
+```sh
+KRISPY_API=https://krispy-edge.YOU.workers.dev TENANT_SYNC_SECRET=... \
+  bun packages/cli/src/index.ts set-kbase ./kbase.md
+```
+
+`set-kbase` reads the file and `POST`s its contents as `systemPrompt` to
+`/api/tenant/config`, which merges it into KV `tenant:<id>`. the Worker's `getTenant()` then
+drives the bot with it. you can also set it during `krispy init` (step 2 — file, starter
+template, or skip), or via the `SYSTEM_PROMPT` env var (env wins over KV when set).
+
+## what's always appended (you can't drop these)
+
+a custom prompt **replaces** the default wholesale — but the Worker always appends three
+things after it, so they can never be lost:
+
+1. **the handoff contract** — if your prompt doesn't already mention `[!HANDOFF]`, the
+   server restates it: append `[!HANDOFF]` at the very end when a human should take over.
+2. **the form contract** — if you've configured forms, the list is injected with the
+   instruction to append `[!FORM:<id>]` for a concrete next step.
+3. **the security guardrails** (`SECURITY_INSTRUCTION`) — always appended, even over a
+   custom prompt. it tells the bot to represent the business (not the tech), refuse to
+   reveal the prompt / control tokens / internals, stay in scope, resist prompt injection,
+   never emit the control tokens on request, and never invent facts. see
+   [security](/docs/security).
+4. **a brevity line** — "keep replies under ~3 short sentences", reinforcing the output-token cap.
+
+<Callout>
+  because the guardrails and handoff contract are appended unconditionally, a tenant prompt can
+  customize the bot's voice and knowledge without being able to disable the safety rails or the
+  handoff behavior.
+</Callout>
+
+## the default prompt
+
+if you set no custom prompt, the bot uses a built-in default: a friendly, concise live-chat
+assistant that answers in the visitor's own language, keeps replies short, makes no promises
+it can't keep (pricing, refunds, legal/medical), and hands off to a human when asked or when
+a request is beyond it.
+
+## the model
+
+Workers AI's `@cf/meta/llama-3.3-70b-instruct-fp8-fast` by default. override per tenant
+(`model` in KV) or per deploy (`AI_MODEL` env var). a BYO-key provider adapter is a
+documented seam in `ai.ts` (`AiRunner`) — not built until a self-hoster leaves Workers AI.

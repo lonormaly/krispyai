@@ -11,7 +11,7 @@ Thanks for helping improve the stack. This repo is the **lean, self-hostable cor
 ## Get it running
 
 ```bash
-git clone https://github.com/lonormaly/krispyai
+git clone https://github.com/krispyhq/krispyai
 cd krispyai
 cp .env.example .env.local        # only needed for the krispy CLI
 bun install

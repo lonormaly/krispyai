@@ -1,0 +1,10 @@
+{
+  "title": "guides",
+  "pages": [
+    "self-host-the-edge",
+    "embed-and-theme",
+    "connect-telegram",
+    "lead-forms-and-connectors",
+    "customize-the-prompt"
+  ]
+}

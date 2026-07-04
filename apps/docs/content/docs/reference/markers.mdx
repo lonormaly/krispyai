@@ -1,0 +1,55 @@
+---
+title: the control markers
+description: "[!HANDOFF] and [!FORM:<id>] — the grammar the bot uses to trigger server actions."
+---
+
+# the control markers
+
+Krispy's whole control channel is two literal markers the model appends to the **end** of a
+reply. the server parses them out (the visitor never sees them) and acts. they are parsed
+independently — a reply can carry neither, either, or both.
+
+## `[!HANDOFF]`
+
+```
+[!HANDOFF]
+```
+
+the model appends this when a human should take over — the visitor asks for a person,
+they're upset, or the request is beyond the bot (pricing negotiation, a complaint, a promise
+it can't make).
+
+**server behavior:** strips the marker, keeps the human-readable text, sets `handoff: true`
+on the chat response, mirrors "🙋 AI asked for a human here" into the Telegram topic, and
+nudges the visitor's browser to open contact capture (via the DO). the bot's next replies
+stay live until an operator actually takes over.
+
+## `[!FORM:<id>]`
+
+```
+[!FORM:book]
+```
+
+`<id>` matches `[a-z0-9_-]{1,32}` (case-insensitive, lowercased on parse) and must be one of
+the tenant's configured form ids. the model appends it to offer a concrete next step it
+can't finish in chat (booking, quote, demo).
+
+**server behavior:** strips the marker, resolves the matching `FormSpec`, attaches it (plus
+its visitor-facing CTA connectors) to the chat response as `form`, and the widget renders it.
+this does **not** escalate to a human — a form and a handoff are orthogonal.
+
+## how the model learns them
+
+- the handoff contract is part of the default prompt, and is **always re-appended** even
+  over a custom tenant prompt (so it can't be dropped).
+- the form contract + the list of your forms (`<id> (<title>)`) is injected into the prompt
+  only when you have forms configured (no forms → the instruction is silently omitted).
+- the `SECURITY_INSTRUCTION` forbids the model from emitting the control tokens on request or
+  for any reason other than these handoff/form rules — so a visitor can't make the bot print
+  `[!HANDOFF]` by asking.
+
+## parsing (in the Worker)
+
+`parseHandoff(raw)` → `{ text, handoff }` (splits on the literal marker). `parseForm(raw)` →
+`{ text, formId }` (regex-matches `[!FORM:<id>]`). the chat flow runs handoff parsing first,
+then form parsing on the already-stripped text, so both can be present in one reply.

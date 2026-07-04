@@ -1,0 +1,94 @@
+---
+title: lead forms + connectors
+description: define data-driven forms the bot can raise, and wire where captured leads go.
+---
+
+# lead forms + connectors
+
+a **form** is a data-driven card the bot can raise with `[!FORM:<id>]` (booking, quote,
+demo). **connectors** decide where a captured lead goes. both live in your tenant config in
+KV — no code, no redeploy.
+
+## define a form
+
+a form is a `FormSpec`: an `id` (what `[!FORM:<id>]` references), a `title`, an ordered list
+of `fields`, and optionally `connectorIds` to scope which connectors receive its leads
+(default = all configured).
+
+```json
+{
+  "forms": [
+    {
+      "id": "book",
+      "title": "book a call",
+      "fields": [
+        { "name": "name", "label": "your name", "type": "text", "required": true },
+        { "name": "email", "label": "email", "type": "email", "required": true },
+        {
+          "name": "budget",
+          "label": "rough budget",
+          "type": "select",
+          "options": ["<5k", "5–20k", "20k+"]
+        },
+        { "name": "notes", "label": "anything else", "type": "textarea" }
+      ],
+      "connectorIds": ["tg-main", "sales-email"]
+    }
+  ]
+}
+```
+
+field `type` is one of `text` | `email` | `tel` | `textarea` | `select` (`select` uses
+`options`). the widget renders the form entirely with `createElement`/`textContent` (never
+`innerHTML`), so field labels/options are XSS-safe.
+
+## teach the bot to raise it
+
+the bot only offers a form if it knows the form exists. the server injects the list of your
+forms into the system prompt automatically (`<id> (<title>)`), instructing the model to
+append `[!FORM:<id>]` when a visitor is ready for a concrete next step it can't complete in
+chat. you don't wire this by hand — configuring a form is enough.
+
+## connectors — where a lead goes
+
+```json
+{
+  "connectors": [
+    { "id": "tg-main", "type": "telegram" },
+    { "id": "sales-email", "type": "email", "toAddress": "sales@you.com" },
+    { "id": "wa", "type": "whatsapp", "phone": "15551234567" },
+    { "id": "ig", "type": "instagram", "profileUrl": "https://instagram.com/you" }
+  ]
+}
+```
+
+| type        | fields                           | behavior                                                                              |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| `telegram`  | — (uses the top-level bot token) | the lead is posted into the visitor's topic                                           |
+| `email`     | `toAddress`                      | rendered + sent via Resend (silent no-op without `RESEND_API_KEY`)                    |
+| `whatsapp`  | `phone` (E.164 digits, no `+`)   | a `wa.me` CTA link in the widget; also a "Reply on WhatsApp" button in the lead email |
+| `instagram` | `profileUrl`                     | a profile-link CTA in the widget                                                      |
+
+`telegram` and `email` are **delivery** channels — the lead is sent for you. `whatsapp` and
+`instagram` are **CTA-only**: the widget renders them as links for the visitor to tap;
+nothing is delivered server-side for them, and they never leave the server as data.
+
+## the two capture paths
+
+- **`[!FORM:<id>]`** → the widget renders your `FormSpec`; on submit it `POST`s to
+  `/api/lead`, which fans the values out to the scoped connectors.
+- **`[!HANDOFF]` with no form** → the widget shows a minimal name + contact capture; on
+  submit it `POST`s to `/api/contact` (a back-compat shim that maps onto the same lead
+  fan-out).
+
+## write the config
+
+push it with the CLI (it merges — unset fields are preserved):
+
+```sh
+KRISPY_API=https://krispy-edge.YOU.workers.dev TENANT_SYNC_SECRET=... \
+  bun packages/cli/src/index.ts set-kbase ./kbase.md
+```
+
+`set-kbase` writes the `systemPrompt`; for `forms`/`connectors`/`theme` you `POST` the same
+shape to `/api/tenant/config` (see [reference → edge routes](/docs/reference/edge-routes)).

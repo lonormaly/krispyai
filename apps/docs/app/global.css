@@ -1,0 +1,92 @@
+/* Krispy docs theme — boulangerie neo-brutalist.
+ * Palette (clean hex tokens; the real @krispy/ui tokens live in the private repo):
+ *   espresso #241a12 · cream #fbf6ee · gold #e39a2b · jam #f0426b · pistachio #2fbf9e
+ * Look: hard offset shadows, mono uppercase micro-labels, lowercase copy. 🥐 = the one emoji.
+ */
+@import "fumadocs-ui/style.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fumadocs reads HSL triplets for its design tokens. Map them onto the Krispy palette. */
+:root {
+  --color-espresso: #241a12;
+  --color-cream: #fbf6ee;
+  --color-gold: #e39a2b;
+  --color-jam: #f0426b;
+  --color-pistachio: #2fbf9e;
+
+  --background: 36 44% 96%; /* cream */
+  --foreground: 30 33% 11%; /* espresso */
+  --card: 40 60% 98%;
+  --card-foreground: 30 33% 11%;
+  --popover: 40 60% 98%;
+  --popover-foreground: 30 33% 11%;
+  --primary: 35 76% 53%; /* gold */
+  --primary-foreground: 30 33% 11%;
+  --secondary: 34 45% 89%;
+  --secondary-foreground: 30 33% 11%;
+  --muted: 34 45% 89%;
+  --muted-foreground: 28 22% 35%;
+  --accent: 34 45% 89%;
+  --accent-foreground: 30 33% 11%;
+  --border: 33 41% 86%;
+  --input: 33 41% 86%;
+  --ring: 35 76% 53%;
+  --radius: 0.25rem;
+}
+
+.dark {
+  --background: 30 40% 8%;
+  --foreground: 36 44% 96%;
+  --card: 30 33% 11%;
+  --card-foreground: 36 44% 96%;
+  --popover: 30 33% 11%;
+  --popover-foreground: 36 44% 96%;
+  --primary: 35 76% 53%; /* gold stays */
+  --primary-foreground: 30 33% 11%;
+  --secondary: 30 25% 16%;
+  --secondary-foreground: 36 44% 96%;
+  --muted: 30 25% 16%;
+  --muted-foreground: 34 22% 65%;
+  --accent: 30 25% 16%;
+  --accent-foreground: 36 44% 96%;
+  --border: 30 25% 18%;
+  --input: 30 25% 18%;
+  --ring: 35 76% 53%;
+}
+
+/* Micro-labels: mono, uppercase, tracked — the boulangerie ticket look. */
+[data-eyebrow] {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Krispy CTA — gold fill, espresso hard offset shadow (no blur). */
+.krispy-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-gold);
+  color: var(--color-espresso);
+  border: 1px solid var(--color-espresso);
+  border-radius: var(--radius);
+  padding: 0.6rem 1.1rem;
+  font-weight: 700;
+  box-shadow: 4px 4px 0 0 var(--color-espresso);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease;
+}
+.krispy-cta:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 var(--color-espresso);
+}
+.krispy-cta:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 var(--color-espresso);
+}

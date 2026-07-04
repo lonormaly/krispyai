@@ -1,0 +1,68 @@
+---
+title: connect Telegram
+description: BotFather → a supergroup with Topics → the webhook. how the handoff channel works.
+---
+
+# connect Telegram
+
+Telegram is the operator's channel. every visitor maps to **one forum topic** in a
+supergroup you own, so each conversation is its own thread on your phone and you reply
+inline. it's optional — without it, the chat still answers (topic ops just no-op).
+
+## the fastest path: `krispy init`
+
+the wizard's first step guides this end to end and validates the token live:
+
+```sh
+npx krispy init
+```
+
+it prints the BotFather steps, validates the pasted token via Telegram's `getMe` (green
+`✓ @yourbot` or a red retry), guides the supergroup-with-Topics + add-bot-as-admin setup,
+takes the chat id, and persists `botToken` + `chatId`. do it by hand instead:
+
+## 1. create the bot
+
+1. open [@BotFather](https://t.me/botfather) in Telegram.
+2. send `/newbot`, follow the prompts (name + `@username`).
+3. BotFather replies with a token like `123456:ABC-DEF...`.
+
+set it as a secret: `bunx wrangler secret put TELEGRAM_BOT_TOKEN`.
+
+## 2. create the supergroup with Topics
+
+1. create a Telegram **group**, then enable **Topics** (Group → Edit → Topics). enabling
+   Topics upgrades it to a supergroup.
+2. add your bot to the group and make it an **admin** — it needs the **Manage Topics**
+   permission (that's how it creates a topic per visitor).
+3. get the group's **chat id** — e.g. add `@RawDataBot` briefly and read it, or read it from
+   the bot's updates. it looks like `-1001234567890`.
+
+set it: `bunx wrangler secret put TELEGRAM_CHAT_ID`.
+
+## 3. register the webhook
+
+so your replies reach the Worker. the `secret_token` must equal `TELEGRAM_WEBHOOK_SECRET`:
+
+```sh
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -d "url=https://krispy-edge.YOU.workers.dev/api/telegram/webhook" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+## how the handoff works
+
+- a visitor's first message creates a forum topic named `<first 40 chars> · <session id>`
+  and stores the `topic ↔ session` link in KV.
+- every visitor message and every AI reply is mirrored into that topic (best-effort — a
+  Telegram outage never blocks the visitor's reply).
+- when you **type a reply in the topic**, Telegram calls `POST /api/telegram/webhook`. the
+  Worker parses your reply, sets the session's `handedOff` flag in the DO, and pushes your
+  text to the visitor's browser live. the AI goes silent for that session.
+- the Worker ignores its own bot echoes, service messages (topic-created), and messages in
+  the group's General topic — only a real typed reply in a visitor topic counts.
+
+<Callout>
+  honest about the effort: BotFather, the supergroup-with-Topics, and admin rights are a real five
+  minutes of clicking. there's no way around a bot token if you want replies on your phone.
+</Callout>

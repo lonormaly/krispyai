@@ -13,6 +13,8 @@
   },
   "ignorePatterns": [
     "**/node_modules/**",
+    "**/.next/**",
+    "**/.source/**",
     "**/dist/**",
     "**/build/**"
   ]
