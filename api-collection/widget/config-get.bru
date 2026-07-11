@@ -1,0 +1,29 @@
+meta {
+  name: Widget - public config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/widget/config?t=self
+  auth: none
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns the theme projection only (no secrets)", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("theme");
+    expect(b).to.not.have.property("botToken");
+    expect(b).to.not.have.property("systemPrompt");
+  });
+}
+
+docs {
+  PUBLIC (CORS-*, no secret): the widget's boot-time read of its appearance. Returns ONLY the
+  whitelist projection `{ theme: {...} }` — NEVER botToken/chatId/systemPrompt. Do NOT confuse
+  with the secret-guarded `GET /api/tenant/config`, which returns the full config incl. the
+  bot token. See `openapi.yaml` and `reference/edge-routes.mdx`.
+}

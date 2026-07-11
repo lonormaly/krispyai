@@ -1,0 +1,27 @@
+meta {
+  name: Usage - metering readout
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/usage?t=self
+  auth: none
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns usage + plan snapshot", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("usage");
+    expect(b).to.have.property("withinLimits");
+  });
+}
+
+docs {
+  Metering readout wired to the plan: usage counters vs the entitlement's caps. Returns
+  `{ tenantId, usage: { ai, handoff, tokens }, plan, entitled, status, limits, withinLimits }`.
+  Public (no secret) — it exposes counts, not config.
+}

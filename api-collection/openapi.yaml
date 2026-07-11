@@ -1,0 +1,575 @@
+# OpenAPI 3.1 contract for the @krispy/edge Cloudflare Worker.
+#
+# This file IS the contract — there is NO auto-generation from the Worker. It only
+# stays true if you edit it in the same change as the route (see AGENTS.md §7). The
+# ground truth it mirrors: services/edge/src/index.ts (routing + handlers),
+# services/edge/src/types.ts (TenantConfig / WidgetTheme / FormSpec / Connector),
+# the Bruno collection in api-collection/, and apps/docs/content/docs/reference/edge-routes.mdx.
+#
+# Auth model: per-route shared-secret HEADERS (NOT a single bearer). Public routes are
+# CORS-* and secret-free; secret-guarded routes carry a bot token or mutate config, so a
+# missing/wrong secret returns 401 (config routes) or 403 (webhook, billing) and leaks nothing.
+openapi: 3.1.0
+info:
+  title: Krispy edge Worker API
+  version: 0.1.0
+  description: >
+    One Cloudflare Worker hosts every HTTP route below plus the hibernatable `SessionDO`.
+    CORS allow-origin is `ALLOWED_ORIGIN` (default `*`); every route answers `OPTIONS` with 204.
+    The `SessionDO`'s internal surface (`/state`, `/operator`, `/handoff`) is Worker-only and
+    intentionally NOT documented here — the browser never calls it directly.
+  license:
+    name: MIT
+    url: https://github.com/lonormaly/krispyai/blob/master/LICENSE
+servers:
+  - url: http://localhost:8787
+    description: local (wrangler dev)
+  - url: https://krispy-edge.YOUR-SUBDOMAIN.workers.dev
+    description: deployed Worker (replace with your workers.dev / custom domain)
+
+tags:
+  - name: public
+    description: CORS-*, secret-free — the widget/browser calls these.
+  - name: secret-guarded
+    description: Carry a bot token or mutate config — require a shared-secret header.
+
+paths:
+  /health:
+    get:
+      tags: [public]
+      summary: Liveness probe
+      operationId: health
+      security: [] # public — no auth
+      responses:
+        "200":
+          description: Worker is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { type: string, const: ok }
+                  service: { type: string, const: edge }
+
+  /api/chat:
+    post:
+      tags: [public]
+      summary: Visitor message → AI reply (mirrored to the owner's Telegram topic)
+      operationId: chat
+      description: >
+        Before answering, the Worker checks entitlement + plan limits. The self-host tenant
+        (`"self"`) is always entitled and unmetered; a non-self tenant with no valid snapshot
+        gets 402, and one over its cap gets 429.
+      security: [] # public — no auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatRequest" }
+      responses:
+        "200":
+          description: The AI (or handoff) result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatResult" }
+        "400":
+          description: Missing `sessionId` or `message`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "402":
+          description: subscription_required — non-self tenant without a valid entitlement snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntitlementError" }
+        "429":
+          description: usage_limit_reached — tenant is over its plan cap.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntitlementError" }
+
+  /api/contact:
+    post:
+      tags: [public]
+      summary: Legacy contact-capture shim → owner's Telegram topic
+      operationId: contact
+      description: >
+        Legacy contact-capture: drops name/contact/message into the visitor's existing topic.
+        Superseded by the generalized `/api/lead` fan-out; kept for older embeds.
+      security: [] # public — no auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactRequest" }
+      responses:
+        "200":
+          description: Acknowledged (delivery is best-effort; no topic → no-op).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400":
+          description: Missing `sessionId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/lead:
+    post:
+      tags: [public]
+      summary: A form's captured values fan out to the tenant's delivery connectors
+      operationId: lead
+      description: >
+        The generalized lead endpoint: a data-driven form's `values` fan out to the tenant's
+        DELIVERY connectors (Telegram topic + email via Resend). `whatsapp`/`instagram`
+        connectors are CTA-only — nothing is delivered server-side for them. Rate-limited per
+        (tenant, session).
+      security: [] # public — no auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadRequest" }
+      responses:
+        "200":
+          description: Accepted and fanned out.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400":
+          description: Missing `sessionId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: rate_limited — too many lead submissions for this (tenant, session).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/widget/config:
+    get:
+      tags: [public]
+      summary: Public, secret-free widget appearance projection
+      operationId: widgetConfig
+      description: >
+        The widget's boot-time read of its appearance/forms. Returns ONLY the whitelist
+        projection (`theme`) — NEVER botToken/chatId/systemPrompt. Do not confuse with the
+        secret-guarded `GET /api/tenant/config`, which returns the full config.
+      security: [] # public — no auth
+      parameters:
+        - $ref: "#/components/parameters/Tenant"
+      responses:
+        "200":
+          description: The public theme projection (fields are all optional / may be absent).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  theme: { $ref: "#/components/schemas/WidgetTheme" }
+
+  /api/usage:
+    get:
+      tags: [public]
+      summary: Metering readout — usage counters vs the entitlement's caps
+      operationId: usage
+      security: [] # public — no auth
+      parameters:
+        - $ref: "#/components/parameters/Tenant"
+      responses:
+        "200":
+          description: Usage + plan snapshot for the tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageResponse" }
+
+  /api/session/{id}/ws:
+    get:
+      tags: [public]
+      summary: Visitor's live channel — WebSocket upgrade forwarded to the SessionDO
+      operationId: sessionWs
+      description: >
+        A WebSocket upgrade request; the Worker forwards it to the `(tenant, session)` DO. The
+        visitor receives `{ type: "ready", handedOff }` on connect, then `operator` / `handoff`
+        / `resume` events. Not a normal JSON response — this row documents the upgrade contract.
+      security: [] # public — no auth
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          description: The visitor's session id.
+        - $ref: "#/components/parameters/Tenant"
+        - name: Upgrade
+          in: header
+          required: true
+          schema: { type: string, const: websocket }
+      responses:
+        "101":
+          description: Switching Protocols — WebSocket established (handled by the DO).
+        "426":
+          description: Upgrade Required — the request was not a WebSocket upgrade.
+
+  /api/telegram/webhook:
+    post:
+      tags: [secret-guarded]
+      summary: Owner's Telegram reply → push to the visitor via the DO
+      operationId: telegramWebhook
+      description: >
+        Telegram calls this with the owner's reply in a forum topic. The Worker verifies the
+        secret Telegram echoes back, resolves the session for the topic, and pushes the reply
+        to the visitor (setting `handedOff`). Non-owner updates are ack'd and ignored.
+      security:
+        - telegramWebhookSecret: []
+      requestBody:
+        required: true
+        description: A Telegram Update object (opaque here — only owner replies are acted on).
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: "`ok` — ack (whether or not it was an actionable owner reply)."
+          content:
+            text/plain:
+              schema: { type: string, const: ok }
+        "403":
+          description: Missing/wrong `x-telegram-bot-api-secret-token`.
+
+  /api/billing/entitlement:
+    post:
+      tags: [secret-guarded]
+      summary: Mirror an entitlement snapshot into KV (hosted/multi-tenant only)
+      operationId: billingEntitlement
+      description: >
+        A billing service (payment webhook / trial start) pushes a tenant's entitlement snapshot
+        into KV so the `/api/chat` gate can read it. Unused in single-tenant self-host.
+      security:
+        - billingSyncSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntitlementSyncRequest" }
+      responses:
+        "200":
+          description: Snapshot written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400":
+          description: Missing `tenantId` or `snapshot`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Missing/wrong `x-billing-sync-secret` (or the secret is not configured).
+
+  /api/tenant/config:
+    get:
+      tags: [secret-guarded]
+      summary: Read a tenant's FULL config (bot token included)
+      operationId: getTenantConfig
+      description: >
+        Returns the exact shape `getTenant()` consumes, including the bot token — so it is
+        secret-guarded and never leaked without the header. 404 when the tenant has no config.
+      security:
+        - tenantSyncSecret: []
+      parameters:
+        - name: t
+          in: query
+          required: true
+          schema: { type: string }
+          description: Tenant id (self-host = `self`).
+      responses:
+        "200":
+          description: The full tenant config.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantConfig" }
+        "400":
+          description: Missing `t`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/wrong `x-tenant-sync-secret` (or the secret is not configured).
+        "404":
+          description: No config saved for this tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      tags: [secret-guarded]
+      summary: Merge a partial config into the tenant's KV (the CLI writes here)
+      operationId: setTenantConfig
+      description: >
+        MERGEs the provided `config` fields into KV `tenant:<tenantId>` — unset fields are
+        preserved, so send only what changed. The `krispy` CLI's `set-kbase` posts here.
+      security:
+        - tenantSyncSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantConfigSetRequest" }
+      responses:
+        "200":
+          description: Merged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "400":
+          description: Missing `tenantId` or `config`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/wrong `x-tenant-sync-secret` (or the secret is not configured).
+
+components:
+  parameters:
+    Tenant:
+      name: t
+      in: query
+      required: false
+      schema: { type: string, default: self }
+      description: Tenant id (self-host default = `self`).
+
+  securitySchemes:
+    tenantSyncSecret:
+      type: apiKey
+      in: header
+      name: x-tenant-sync-secret
+      description: Must equal the Worker's `TENANT_SYNC_SECRET`.
+    billingSyncSecret:
+      type: apiKey
+      in: header
+      name: x-billing-sync-secret
+      description: Must equal the Worker's `BILLING_SYNC_SECRET`.
+    telegramWebhookSecret:
+      type: apiKey
+      in: header
+      name: x-telegram-bot-api-secret-token
+      description: Must equal the Worker's `TELEGRAM_WEBHOOK_SECRET` (Telegram echoes it back).
+
+  schemas:
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, const: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    EntitlementError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [subscription_required, usage_limit_reached]
+        plan: { type: string }
+        status: { type: string }
+
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [user, assistant, system] }
+        content: { type: string }
+
+    ChatRequest:
+      type: object
+      required: [sessionId, message]
+      properties:
+        sessionId: { type: string }
+        message: { type: string, minLength: 1 }
+        tenantId: { type: string, default: self }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/ChatMessage" }
+
+    ChatResult:
+      type: object
+      required: [reply, handoff, handedOff]
+      properties:
+        reply:
+          type: [string, "null"]
+          description: Visitor-facing reply, or null when a human operator is driving.
+        handoff:
+          type: boolean
+          description: The AI asked to escalate → the widget should offer contact/lead capture.
+        handedOff:
+          type: boolean
+          description: An operator already owns this session (bot is silent).
+        degraded:
+          type: boolean
+          description: The AI was unavailable and the Worker fell back to a human.
+        formId:
+          type: [string, "null"]
+          description: When the AI emitted `[!FORM:<id>]`, the id of the form to render.
+        form:
+          oneOf:
+            - $ref: "#/components/schemas/FormSpec"
+            - type: "null"
+          description: The resolved FormSpec for `formId` (public projection), when present.
+
+    ContactRequest:
+      type: object
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+        tenantId: { type: string, default: self }
+        name: { type: string }
+        contact: { type: string }
+        message: { type: string }
+
+    LeadRequest:
+      type: object
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+        tenantId: { type: string, default: self }
+        formId:
+          type: [string, "null"]
+          description: The FormSpec id this lead answers; null for the default form.
+        values:
+          type: object
+          additionalProperties: { type: string }
+          description: The form's captured field values (machine key → value).
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/ChatMessage" }
+
+    EntitlementSyncRequest:
+      type: object
+      required: [tenantId, snapshot]
+      properties:
+        tenantId: { type: string }
+        snapshot:
+          type: object
+          description: EntitlementSnapshot (plan/status/limits) — opaque to the widget.
+          additionalProperties: true
+
+    TenantConfigSetRequest:
+      type: object
+      required: [tenantId, config]
+      properties:
+        tenantId: { type: string }
+        config:
+          allOf:
+            - $ref: "#/components/schemas/TenantConfig"
+          description: A partial config — only the provided fields are merged.
+
+    UsageResponse:
+      type: object
+      required: [tenantId, usage, plan, entitled, status, limits, withinLimits]
+      properties:
+        tenantId: { type: string }
+        usage:
+          type: object
+          properties:
+            ai: { type: integer }
+            handoff: { type: integer }
+            tokens: { type: integer }
+        plan: { type: string }
+        entitled: { type: boolean }
+        status: { type: string }
+        limits:
+          type: object
+          additionalProperties: true
+        withinLimits: { type: boolean }
+
+    WidgetTheme:
+      type: object
+      description: Public widget appearance projection (all fields optional).
+      properties:
+        primaryColor:
+          {
+            type: string,
+            description: "Header + visitor bubble + send button. Default gold #e39a2b.",
+          }
+        launcherColor: { type: string, description: "FAB only; defaults to primaryColor." }
+        position:
+          { type: string, enum: [br, bl], description: "bottom-right | bottom-left. Default br." }
+        avatar: { type: string, description: '"buttr" (default) or an https URL.' }
+        greeting: { type: string, description: "First bot bubble on open." }
+        headerTitle: { type: string }
+        radius:
+          { type: integer, minimum: 0, maximum: 20, description: "Corner radius px. Default 14." }
+        font: { type: string, description: "CSS font-family stack." }
+        sound: { type: boolean, description: "Notification ding while panel closed. Default true." }
+
+    FieldType:
+      type: string
+      enum: [text, email, tel, textarea, select]
+
+    FormField:
+      type: object
+      required: [name, label, type]
+      properties:
+        name: { type: string, description: "Machine key, e.g. budget." }
+        label: { type: string, description: "Visitor-facing." }
+        type: { $ref: "#/components/schemas/FieldType" }
+        required: { type: boolean }
+        options:
+          type: array
+          items: { type: string }
+          description: "select only."
+
+    FormSpec:
+      type: object
+      required: [id, title, fields]
+      properties:
+        id: { type: string, description: "Referenced by [!FORM:<id>]." }
+        title: { type: string }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/FormField" }
+        connectorIds:
+          type: array
+          items: { type: string }
+          description: "Which connectors receive this lead; default = ALL configured."
+
+    ConnectorType:
+      type: string
+      enum: [email, telegram, whatsapp, instagram]
+
+    Connector:
+      type: object
+      required: [id, type]
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/ConnectorType" }
+        toAddress: { type: string, description: "email." }
+        phone: { type: string, description: "whatsapp (E.164 digits, no +)." }
+        profileUrl: { type: string, description: "instagram." }
+
+    TenantConfig:
+      type: object
+      required: [botToken, chatId]
+      description: >
+        The full tenant record `getTenant()` consumes. Returned in full only by the
+        secret-guarded GET /api/tenant/config.
+      properties:
+        botToken: { type: string, description: "Telegram bot token (BotFather)." }
+        chatId:
+          { type: string, description: "Supergroup id with Topics enabled, e.g. -1001234567890." }
+        systemPrompt: { type: string }
+        model: { type: string }
+        onboardingStep: { type: integer }
+        onboardingComplete: { type: boolean }
+        forms:
+          type: array
+          items: { $ref: "#/components/schemas/FormSpec" }
+        connectors:
+          type: array
+          items: { $ref: "#/components/schemas/Connector" }
+        theme: { $ref: "#/components/schemas/WidgetTheme" }

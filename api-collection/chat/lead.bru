@@ -1,0 +1,41 @@
+meta {
+  name: Chat - lead capture (fan-out)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/lead
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "sessionId": "sess-demo-1",
+    "tenantId": "self",
+    "formId": "book-a-call",
+    "values": {
+      "name": "Dana",
+      "email": "dana@example.com",
+      "budget": "5k-10k"
+    },
+    "history": []
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("acknowledges", function() {
+    expect(res.getBody().ok).to.equal(true);
+  });
+}
+
+docs {
+  The generalized lead endpoint: a data-driven form's `values` fan out to the tenant's
+  DELIVERY connectors (Telegram topic + email via Resend). `whatsapp`/`instagram` connectors
+  are CTA-only — nothing is delivered server-side for them. Rate-limited per (tenant, session):
+  over the limit → 429 `{ error: "rate_limited" }`. Missing `sessionId` → 400.
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Chat - visitor message
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/chat
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "sessionId": "sess-demo-1",
+    "message": "Hi, do you offer refunds?",
+    "tenantId": "self",
+    "history": []
+  }
+}
+
+tests {
+  test("responds 200 (self-host is always entitled)", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns the chat result shape", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("handoff");
+    expect(b).to.have.property("handedOff");
+  });
+}
+
+docs {
+  Visitor message → AI reply, mirrored to the owner's Telegram topic. Before answering
+  the Worker checks entitlement + plan limits: self-host (`"self"`) is always entitled and
+  unmetered; a non-self tenant without a valid snapshot gets 402, over its cap gets 429.
+  Missing `sessionId`/`message` → 400. Response: `{ reply, handoff, handedOff, degraded?,
+  formId?, form? }` — `reply` is null when a human operator is driving.
+}

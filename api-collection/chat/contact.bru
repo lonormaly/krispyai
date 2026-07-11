@@ -1,0 +1,37 @@
+meta {
+  name: Chat - contact capture (legacy)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/contact
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "sessionId": "sess-demo-1",
+    "tenantId": "self",
+    "name": "Dana",
+    "contact": "dana@example.com",
+    "message": "Please call me back."
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("acknowledges", function() {
+    expect(res.getBody().ok).to.equal(true);
+  });
+}
+
+docs {
+  Legacy contact-capture shim: drops name/contact/message into the visitor's existing
+  Telegram topic. Superseded by the generalized `/api/lead` fan-out; kept for older embeds.
+  Missing `sessionId` → 400. Delivery is best-effort — no topic/Telegram config → no-op but
+  still `{ ok: true }`.
+}
