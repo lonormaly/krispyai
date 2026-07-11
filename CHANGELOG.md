@@ -33,6 +33,7 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 ### Fixed
 
 - Dev servers run on fixed ports — edge (wrangler) + widget; portless is an alias only.
+- Docs deploy: `apps/docs` now fully static-exports (`output: 'export'`) and `./deploy.sh docs` uploads `out/` to CF Pages directly — replaces the broken `@cloudflare/next-on-pages` path (which required `runtime = 'edge'` on `/api/search` + `/docs/[[...slug]]` and then failed to edge-bundle `lib/source.ts`). Search switched to the build-time Orama static index (`staticGET` + `search.type: 'static'`); smoke now also checks `/api/search` for the docs site.
 
 ## [0.1.0] — baseline (backfilled)
 

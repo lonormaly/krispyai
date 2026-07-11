@@ -12,7 +12,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <RootProvider>{children}</RootProvider>
+        {/* `search.type: 'static'` points the search dialog at the build-time Orama
+            index (see app/api/search/route.ts) instead of a live `/api/search` endpoint. */}
+        <RootProvider search={{ options: { type: "static" } }}>
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

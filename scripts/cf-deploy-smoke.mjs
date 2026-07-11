@@ -1,7 +1,9 @@
 // Post-deploy smoke test. Run AFTER a wrangler deploy:
 //   node scripts/cf-deploy-smoke.mjs <kind> <baseUrl>
 //     kind = edge   → GET <baseUrl>/health must be 200 and { status: "ok" }
-//     kind = pages  → GET <baseUrl>/ must be 200 (docs site / widget bundle)
+//     kind = pages  → GET <baseUrl>/ must be 200 (docs site / widget bundle);
+//                     for the docs site also GET <baseUrl>/api/search → 200 JSON
+//                     (the build-time static Orama search index)
 //
 // Exits non-zero if the check fails, so the Tilt deploy resource turns red on a
 // broken go-live instead of reporting a false green.
@@ -24,6 +26,17 @@ async function main() {
     const r = await fetch(`${base}/`);
     if (r.status !== 200) throw new Error(`/ ${r.status} (expected 200)`);
     console.log(`✔ smoke OK — ${base}/ 200`);
+    // Docs static search: `output: 'export'` emits the Orama index to /api/search.
+    // Verify it's served (the client fetches this at build-time; a missing index =
+    // silently broken search). Only the docs site has it; the widget bundle does not.
+    if (/docs/.test(base)) {
+      const s = await fetch(`${base}/api/search`);
+      if (s.status !== 200)
+        throw new Error(`/api/search ${s.status} (expected 200 — static index)`);
+      const idx = await s.json().catch(() => null);
+      if (!idx) throw new Error(`/api/search returned no JSON index`);
+      console.log(`✔ smoke OK — ${base}/api/search 200 (static search index)`);
+    }
   }
 }
 
