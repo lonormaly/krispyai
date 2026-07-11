@@ -30,7 +30,7 @@ krispyai/
 │                                   /api/telegram/webhook, /api/tenant/config, GET /api/usage, /health
 ├── packages/
 │   ├── widget/      the embeddable widget.js (no build step — vanilla JS)
-│   └── cli/         @krispy/cli    the `krispy` bin (set-kbase, dev)
+│   └── cli/         @krispyai/cli    the `krispy` bin (set-kbase, dev)
 ├── agents/          skills + subagents + mcp.json
 ├── docs/            linting · secrets · agent-skills
 ├── api-collection/  Bruno API collection for the edge Worker
@@ -152,15 +152,15 @@ Deploy is a **button you press**, never a CI side effect. Under Tilt (`./tilt_up
 
 Secrets doctrine: **Infisical is the source of truth** ([`docs/secrets.md`](./docs/secrets.md)). Deploy creds + Worker runtime secrets originate in Infisical; nothing is hardcoded and no secret ever goes into GitHub Actions.
 
-### Release — publish `@krispy/cli` via npm Trusted Publishing
+### Release — publish `@krispyai/cli` via npm Trusted Publishing
 
-Only **`@krispy/cli`** is published (the Worker + widget are self-hosted, not npm packages — they stay `private`). Release flow:
+Only **`@krispyai/cli`** is published (the Worker + widget are self-hosted, not npm packages — they stay `private`). Release flow:
 
 1. Bump `packages/cli/package.json` `version` + add a `CHANGELOG.md` entry.
 2. Tag `vX.Y.Z` and push the tag (or run the workflow via `workflow_dispatch`).
 3. `.github/workflows/publish.yml` fires: typecheck + test the CLI, then `npx npm@latest publish --provenance --access public` from `packages/cli` with **`id-token: write`** — npm mints a short-lived, package-scoped credential from the workflow's OIDC identity. **There is NO npm token in the workflow or in GitHub Secrets.**
 
-The CLI is **Bun-native** (`#!/usr/bin/env bun`, `.ts` bin, `bun:test`) — it declares `engines.bun >= 1.1.34` and runs via `bunx @krispy/cli`, not plain `node`. npm's Node CLI only uploads the tarball; the package's runtime is Bun.
+The CLI is **Bun-native** (`#!/usr/bin/env bun`, `.ts` bin, `bun:test`) — it declares `engines.bun >= 1.1.34` and runs via `bunx @krispyai/cli`, not plain `node`. npm's Node CLI only uploads the tarball; the package's runtime is Bun.
 
 ## 11. One-time founder setup
 
@@ -168,10 +168,10 @@ Do these once to make the pipelines above work; agents don't (and can't) do them
 
 - **Cloudflare** — create the account + (optional) custom domain. Mint an API token with **Workers Scripts:Edit**, **Cloudflare Pages:Edit**, **Workers KV Storage:Edit** (Durable Objects are covered by Workers Scripts). Create the KV namespaces and paste their ids into `services/edge/wrangler.toml` (`REPLACE_WITH_*_KV_ID`).
 - **Infisical** — create the project, add `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` and the Worker runtime secrets per env; wire the Infisical→Cloudflare connector (or the `.env.local` feed) so nothing is hand-set. See [`docs/secrets.md`](./docs/secrets.md).
-- **npm — first-publish bootstrap for `@krispy/cli`** (Trusted Publishing can't be configured until the package exists):
+- **npm — first-publish bootstrap for `@krispyai/cli`** (Trusted Publishing can't be configured until the package exists):
   1. Create the npm org/scope (`@krispy`). Mint a **Classic Automation** token, store it as the repo secret `NPM_TOKEN`.
   2. Temporarily set `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` on the publish step (drop `--provenance` for this one run), tag `v0.1.0`, let it publish once.
-  3. On npmjs.com → the `@krispy/cli` package → **Trusted Publisher**: add this repo (`lonormaly/krispyai`) + workflow file `.github/workflows/publish.yml`.
+  3. On npmjs.com → the `@krispyai/cli` package → **Trusted Publisher**: add this repo (`lonormaly/krispyai`) + workflow file `.github/workflows/publish.yml`.
   4. **Delete** the `NPM_TOKEN` secret and revert step 2. Tokenless (OIDC) forever after.
 
 ## 12. Where to look next

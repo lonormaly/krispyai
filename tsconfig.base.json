@@ -14,7 +14,7 @@
     "noEmit": true,
     "paths": {
       "@krispy/edge": ["./services/edge/src/index.ts"],
-      "@krispy/cli": ["./packages/cli/src/index.ts"]
+      "@krispyai/cli": ["./packages/cli/src/index.ts"]
     }
   }
 }

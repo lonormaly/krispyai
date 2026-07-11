@@ -1,5 +1,5 @@
 {
-  "name": "@krispy/cli",
+  "name": "@krispyai/cli",
   "version": "0.1.0",
   "description": "The krispy CLI — manage your self-hosted Krispy bot's knowledge base (system prompt) and onboard via the edge Worker's tenant-config route.",
   "keywords": [

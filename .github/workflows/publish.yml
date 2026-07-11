@@ -1,4 +1,4 @@
-# Publish @krispy/cli to npm via TRUSTED PUBLISHING (OIDC) — no npm token.
+# Publish @krispyai/cli to npm via TRUSTED PUBLISHING (OIDC) — no npm token.
 #
 # npm mints a short-lived, package-scoped credential from this workflow's OIDC identity;
 # `--provenance` attaches a signed build-provenance attestation. There is NO npm token
@@ -9,7 +9,7 @@
 #   1. Create a Classic *Automation* npm token, store it as the repo secret NPM_TOKEN.
 #   2. Temporarily set NODE_AUTH_TOKEN in the publish step to ${{ secrets.NPM_TOKEN }}
 #      (drop --provenance for this first run), tag v0.1.0, let it publish once.
-#   3. On npmjs.com → the @krispy/cli package → Settings → Trusted Publisher:
+#   3. On npmjs.com → the @krispyai/cli package → Settings → Trusted Publisher:
 #      add THIS repo (lonormaly/krispyai) + workflow file `.github/workflows/publish.yml`.
 #   4. DELETE the NPM_TOKEN secret and revert step 2. Tokenless forever after.
 # Full checklist: AGENTS.md → "Release + publishing".
@@ -48,13 +48,13 @@ jobs:
 
       # Gate the release on the same checks as CI — never publish a red build.
       - name: Typecheck (cli)
-        run: bun --filter @krispy/cli typecheck
+        run: bun --filter @krispyai/cli typecheck
 
       - name: Test (cli)
-        run: bun --filter @krispy/cli test
+        run: bun --filter @krispyai/cli test
 
       # Trusted Publishing: no NODE_AUTH_TOKEN. npm@latest is required (the pinned npm in
       # older Node ships without OIDC publish). --provenance signs the build.
-      - name: Publish @krispy/cli (Trusted Publishing)
+      - name: Publish @krispyai/cli (Trusted Publishing)
         working-directory: packages/cli
         run: npx npm@latest publish --provenance --access public

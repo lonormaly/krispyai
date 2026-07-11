@@ -1,4 +1,4 @@
-# @krispy/cli
+# @krispyai/cli
 
 The `krispy` self-host CLI — manage your bot's knowledge base (its system prompt)
 without hand-writing `wrangler kv` calls. It talks to your [`@krispy/edge`](../../services/edge)
@@ -31,11 +31,11 @@ Needs a real terminal (TTY); in CI/piped input it exits with guidance instead of
 
 ## Config (env)
 
-| var | default | meaning |
-|-----|---------|---------|
-| `KRISPY_API` | `http://localhost:8787` | your edge Worker base URL |
-| `KRISPY_TENANT` | `self` | tenant id |
-| `TENANT_SYNC_SECRET` | — | must match the Worker's `TENANT_SYNC_SECRET` |
+| var                  | default                 | meaning                                      |
+| -------------------- | ----------------------- | -------------------------------------------- |
+| `KRISPY_API`         | `http://localhost:8787` | your edge Worker base URL                    |
+| `KRISPY_TENANT`      | `self`                  | tenant id                                    |
+| `TENANT_SYNC_SECRET` | —                       | must match the Worker's `TENANT_SYNC_SECRET` |
 
 ## Run it
 
