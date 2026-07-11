@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   check:
@@ -38,6 +38,21 @@ jobs:
 
       - name: Test
         run: bun run test
+
+      # Build gate — compile every workspace that ships a build artifact, so a broken
+      # build fails the PR (not the deploy). The docs site (apps/docs) is a standalone
+      # Next.js/Fumadocs app with its OWN bun.lockb, NOT part of the root bun workspace,
+      # so it installs + builds separately. Guarded on presence: a branch that predates
+      # the docs merge simply skips it rather than failing.
+      - name: Build (docs site)
+        run: |
+          if [ -f apps/docs/package.json ]; then
+            cd apps/docs
+            bun install --frozen-lockfile
+            bun run build
+          else
+            echo "apps/docs not present on this ref — skipping docs build."
+          fi
 
   # COMPLIANCE — dependency vulnerability scan (Google's OSV database). Runs as its own
   # job so a vuln finding is a distinct, visible gate.
