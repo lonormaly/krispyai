@@ -43,7 +43,7 @@ Tilt UI: http://localhost:10442
 | krispyai | tool 10440 · cloud 10441 · umbrella **10442** |
 | ringtail | tool 10450 · site 10451 · umbrella 10452 |
 
-Note: envoyage-cloud currently defaults to **10441/10442** too — a known collision with krispyai cloud/umbrella. Run only one of the colliding pair at a time; they do **not** coexist cleanly.
+Note: envoyage-cloud and its umbrella now run on their own UI ports (**10461** / **10462**) — no conflict with krispyai.
 
 ## Pre-flight
 

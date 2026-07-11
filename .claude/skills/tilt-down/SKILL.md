@@ -17,7 +17,7 @@ cd ~/Development/krispyai-org/krispyai
 
 ## What it does
 
-- Stops **only** krispyai's tracked Tilt (its own UI on port 10440). The edge Worker + widget bundle die with it and portless auto-cleans their routes. Other projects' Tilts (10370/10380/10441/10442/10450/…) are untouched.
+- Stops **only** krispyai's tracked Tilt (its own UI on port 10440). The edge Worker + widget bundle die with it and portless auto-cleans their routes. Other projects' Tilts (10370 · 10380 · 10441 · 10442 · 10450 · …) are untouched.
 - **Never** stops portless — it's the shared `:1355` proxy used by every project.
 
 ## Note on stray Tilts
