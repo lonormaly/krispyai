@@ -23,7 +23,7 @@ new_sqlite_classes = ["SessionDO"]
 # topic<->session map, tenant config, usage counters.
 [[kv_namespaces]]
 binding = "KRISPY_KV"
-id = "REPLACE_WITH_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV`
+id = "120c1cccc84c455eab7b9e30ca346379" # `bunx wrangler kv namespace create KRISPY_KV`
 
 # ── secrets (NOT here — set with `bunx wrangler secret put <NAME>`) ───────────
 #   TELEGRAM_BOT_TOKEN        BotFather token
@@ -52,7 +52,7 @@ tag = "v1"
 new_sqlite_classes = ["SessionDO"]
 [[env.preview.kv_namespaces]]
 binding = "KRISPY_KV"
-id = "REPLACE_WITH_PREVIEW_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV_preview`
+id = "a018c2ee187c4617ac218f06b83efe97" # `bunx wrangler kv namespace create KRISPY_KV_preview`
 [env.preview.vars]
 ALLOWED_ORIGIN = "*"
 
@@ -68,7 +68,7 @@ tag = "v1"
 new_sqlite_classes = ["SessionDO"]
 [[env.production.kv_namespaces]]
 binding = "KRISPY_KV"
-id = "REPLACE_WITH_PROD_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV_production`
+id = "727ff93f7785455ba71745b160dd4809" # `bunx wrangler kv namespace create KRISPY_KV_production`
 [env.production.vars]
 ALLOWED_ORIGIN = "*" # lock to your site origin in production
 # Custom domain edge.krispyai.com is attached in the CF dashboard (Workers →
