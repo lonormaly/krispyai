@@ -81,11 +81,27 @@ KRISPY_API=https://krispy-edge.YOU.workers.dev TENANT_SYNC_SECRET=... \
 - **Secrets are scanned in CI.** `gitleaks` (config `.gitleaks.toml`) fails the build on a committed secret. Never commit real keys.
 - **Dependencies are scanned.** An `osv-scanner` CI job runs on every PR.
 
-## 7. Agent tooling — MCP
+## 7. DOCUMENTATION SYNC — docs ship in the same change
+
+Any change that adds or modifies **behavior, API surface, config/env vars, or CLI flags** is **incomplete** until the matching docs are updated **in the same PR/commit**:
+
+- **Docs site** — the Fumadocs pages under `apps/docs/content/docs/**` (lands via the `docs/onboarding` branch; once merged, this is the canonical user-facing surface). Route in the map:
+  - edge routes / request-response shapes / error codes / auth → `reference/edge-routes.mdx`
+  - tenant-config schema (`TenantConfig`, theme, lead form, connectors) → `reference/tenant-config.mdx`
+  - CLI commands / flags → `reference/cli.mdx`
+  - widget embed attributes / theming → `reference/markers.mdx` + `guides/embed-and-theme.mdx`
+  - feature behavior → the matching `guides/*.mdx`, `concepts.mdx`, or `security.mdx`
+- **README** — update the touched-feature section of the root `README.md` (and `services/edge/README.md` / `packages/cli/README.md` when the change lives there).
+- **`CHANGELOG.md`** — add an entry under `[Unreleased]`, Keep-a-Changelog style (`Added` / `Changed` / `Fixed` / `Removed`).
+- **Bruno** — any change to an edge route (new endpoint, changed request/response shape, new error code, auth change) MUST update the matching `.bru` in `api-collection/` in the same change (one folder per domain, one `.bru` per endpoint, `{{baseUrl}}` only — never a hardcoded host). There is **no OpenAPI spec** in this repo and no auto-generation: the Bruno collection + `reference/edge-routes.mdx` *are* the API contract, and they only stay true if you edit them.
+
+A PR that changes any of the above without the matching docs + CHANGELOG update is **incomplete — do not merge it**.
+
+## 8. Agent tooling — MCP
 
 Copy [`agents/mcp.json`](./agents/mcp.json) → repo-root `.mcp.json` to give your agent context7 (up-to-date library docs) + filesystem (repo-scoped).
 
-### 7.1 Third-party skills / MCPs — vet before you install
+### 8.1 Third-party skills / MCPs — vet before you install
 
 A skill or MCP is **executable code running with your agent's permissions, plus a payload the model obeys** — treat it like a dependency you're about to `sudo`. It's the same caution that made us swap a SQL-injectable Postgres MCP for a read-only one. Before an unfamiliar one touches your agent, run the 5-step law:
 
@@ -97,16 +113,17 @@ A skill or MCP is **executable code running with your agent's permissions, plus 
 
 Full law + our curated, scan-gated recommended list (adapt / link-only / reject tiers): [`docs/agent-skills.md`](./docs/agent-skills.md). Scanner: [`scripts/scan-skill.sh`](./scripts/scan-skill.sh).
 
-## 8. Before you finish
+## 9. Before you finish
 
 - `bun run typecheck` passes (edge + CLI).
 - `bun run lint` (oxlint) clean and `bun run format:check` (oxfmt) clean.
 - `bun run test` green (edge tests must stay passing).
 - New env var is in `.env.example` (with a safe local default, no real secret).
 - Any change to a `functions`/route also updates the matching Bruno request in `api-collection/`.
+- **Docs synced (§7):** the matching Fumadocs page(s), the touched README section, and a `CHANGELOG.md` `[Unreleased]` entry are in this same change.
 - Conventional-commit message (`feat:`, `fix:`, `docs:` …). See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-## 9. Where to look next
+## 10. Where to look next
 
 - [`agents/skills/`](./agents/skills/) — generic scaffolding skills (add-a-service, add-a-lib, wire-a-payment-provider) for when you grow the repo back out.
 - [`agents/mcp.json`](./agents/mcp.json) — the MCP servers above.
