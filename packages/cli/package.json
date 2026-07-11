@@ -1,10 +1,32 @@
 {
   "name": "@krispy/cli",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
+  "version": "0.1.0",
+  "description": "The krispy CLI — manage your self-hosted Krispy bot's knowledge base (system prompt) and onboard via the edge Worker's tenant-config route.",
+  "keywords": [
+    "chatbot",
+    "cli",
+    "cloudflare",
+    "krispy",
+    "self-host",
+    "telegram"
+  ],
+  "homepage": "https://github.com/lonormaly/krispyai/tree/master/packages/cli#readme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lonormaly/krispyai.git",
+    "directory": "packages/cli"
+  },
   "bin": {
     "krispy": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -17,5 +39,8 @@
   "devDependencies": {
     "@types/bun": "^1.1.34",
     "typescript": "^5.7.0"
+  },
+  "engines": {
+    "bun": ">=1.1.34"
   }
 }
