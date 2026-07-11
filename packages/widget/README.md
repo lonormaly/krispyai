@@ -10,8 +10,8 @@ bucket) and drop one tag on any page:
 
 ```html
 <script
-  src="https://YOUR-HOST/widget.js"
-  data-api="https://krispy-edge.YOU.workers.dev"
+  src="https://widget.krispyai.com/widget.js"
+  data-api="https://edge.krispyai.com"
   data-tenant="self"
   async
 ></script>

@@ -71,3 +71,7 @@ binding = "KRISPY_KV"
 id = "REPLACE_WITH_PROD_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV_production`
 [env.production.vars]
 ALLOWED_ORIGIN = "*" # lock to your site origin in production
+# Custom domain edge.krispyai.com is attached in the CF dashboard (Workers →
+# Settings → Domains) AFTER the first deploy — not here, since the krispyai.com
+# zone lands in CF only once the NS transfer completes. Once attached, uncomment:
+# routes = [{ pattern = "edge.krispyai.com", custom_domain = true }]

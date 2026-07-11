@@ -166,10 +166,11 @@ The CLI is **Bun-native** (`#!/usr/bin/env bun`, `.ts` bin, `bun:test`) — it d
 
 Do these once to make the pipelines above work; agents don't (and can't) do them:
 
-- **Cloudflare** — create the account + (optional) custom domain. Mint an API token with **Workers Scripts:Edit**, **Cloudflare Pages:Edit**, **Workers KV Storage:Edit** (Durable Objects are covered by Workers Scripts). Create the KV namespaces and paste their ids into `services/edge/wrangler.toml` (`REPLACE_WITH_*_KV_ID`).
+- **Cloudflare** — create the account. Mint an API token with **Workers Scripts:Edit**, **Cloudflare Pages:Edit**, **Workers KV Storage:Edit** (Durable Objects are covered by Workers Scripts). Create the KV namespaces and paste their ids into `services/edge/wrangler.toml` (`REPLACE_WITH_*_KV_ID`).
+- **Custom domains (`krispyai.com`)** — attached in the CF dashboard **after the first deploy**, once the `krispyai.com` NS transfer to Cloudflare completes (the zone must exist in CF first). Prod hostnames: **edge.krispyai.com** (Workers → Settings → Domains), **docs.krispyai.com** + **widget.krispyai.com** (each Pages project → Custom domains). These are the smoke-check defaults in `deploy.sh`; preview stays on the `workers.dev`/`pages.dev` URL (set `EDGE_PREVIEW_URL` etc. in `.env.local` to smoke it). Runtime source never hardcodes a hostname — domains live in wrangler/CF config + smoke URLs only.
 - **Infisical** — create the project, add `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` and the Worker runtime secrets per env; wire the Infisical→Cloudflare connector (or the `.env.local` feed) so nothing is hand-set. See [`docs/secrets.md`](./docs/secrets.md).
 - **npm — first-publish bootstrap for `@krispyai/cli`** (Trusted Publishing can't be configured until the package exists):
-  1. Create the npm org/scope (`@krispy`). Mint a **Classic Automation** token, store it as the repo secret `NPM_TOKEN`.
+  1. Create the npm org/scope (`@krispyai`). Mint a **Classic Automation** token, store it as the repo secret `NPM_TOKEN`.
   2. Temporarily set `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` on the publish step (drop `--provenance` for this one run), tag `v0.1.0`, let it publish once.
   3. On npmjs.com → the `@krispyai/cli` package → **Trusted Publisher**: add this repo (`lonormaly/krispyai`) + workflow file `.github/workflows/publish.yml`.
   4. **Delete** the `NPM_TOKEN` secret and revert step 2. Tokenless (OIDC) forever after.

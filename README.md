@@ -160,8 +160,8 @@ Host the dependency-free `widget.js` anywhere static, then drop one tag on any p
 
 ```html
 <script
-  src="https://YOUR-HOST/widget.js"
-  data-api="https://krispy-edge.YOU.workers.dev"
+  src="https://widget.krispyai.com/widget.js"
+  data-api="https://edge.krispyai.com"
   data-tenant="self"
   async
 ></script>

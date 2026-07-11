@@ -24,6 +24,7 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 - API contract: `api-collection/openapi.yaml` (OpenAPI 3.1) covering the edge Worker's full HTTP surface; new Bruno requests for `/api/chat`, `/api/contact`, `/api/lead`, `/api/widget/config`, `/api/usage`. `AGENTS.md` §7 now requires OpenAPI + Bruno on any route change.
 - Deploy: Tilt `deploy:*` manual resources + `./deploy.sh <edge|docs|widget> <preview|production>` (preflight → build → `wrangler deploy` → smoke) with `scripts/cf-deploy-preflight.mjs` + `scripts/cf-deploy-smoke.mjs`; named `preview`/`production` wrangler envs for the edge Worker. Cloudflare creds sourced from Infisical-fed `.env.local`, never GitHub Actions.
 - Release: `@krispyai/cli` is now publishable (`0.1.0`, public) via npm Trusted Publishing (`.github/workflows/publish.yml`, OIDC, no npm token); other packages stay private. Founder setup + first-publish bootstrap documented in `AGENTS.md` §§10–11.
+- Domains: `krispyai.com` — prod hostnames `edge.krispyai.com` / `docs.krispyai.com` / `widget.krispyai.com` as `deploy.sh` smoke defaults, OpenAPI prod server, and embed-snippet examples. Custom domains attached in the CF dashboard after the first deploy (NS transfer pending); no hostname is hardcoded in runtime source.
 
 ### Changed
 

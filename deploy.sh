@@ -25,12 +25,19 @@ BUN="${BUN:-bun}"
 # 1) Preflight — assert CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (blocks on missing).
 node scripts/cf-deploy-preflight.mjs "$ENV"
 
-# The deployed base URL to smoke. Override per your account with these env vars
-# (set them in .env.local): EDGE_PREVIEW_URL / EDGE_PROD_URL / DOCS_*_URL / WIDGET_*_URL.
+# The deployed base URL to smoke. Prod defaults to the krispyai.com custom domains
+# (attached in the CF dashboard after first deploy — see AGENTS.md §11). Override any
+# via .env.local: EDGE_PRODUCTION_URL / DOCS_PRODUCTION_URL / WIDGET_*_URL, etc.
+# Preview has no default (workers.dev/pages.dev URL differs per account) — set it to smoke.
 url_for() {
   local t="$1" e="$2" var
   var="$(echo "${t}_${e}_URL" | tr '[:lower:]' '[:upper:]')"
-  echo "${!var:-}"
+  if [ -n "${!var:-}" ]; then echo "${!var}"; return; fi
+  [ "$e" = production ] && case "$t" in
+    edge) echo "https://edge.krispyai.com" ;;
+    docs) echo "https://docs.krispyai.com" ;;
+    widget) echo "https://widget.krispyai.com" ;;
+  esac
 }
 
 case "$TARGET" in

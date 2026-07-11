@@ -24,8 +24,8 @@ info:
 servers:
   - url: http://localhost:8787
     description: local (wrangler dev)
-  - url: https://krispy-edge.YOUR-SUBDOMAIN.workers.dev
-    description: deployed Worker (replace with your workers.dev / custom domain)
+  - url: https://edge.krispyai.com
+    description: production edge Worker (custom domain, attached in CF after first deploy)
 
 tags:
   - name: public
