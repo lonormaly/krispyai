@@ -51,13 +51,13 @@ case "$TARGET" in
     if [ ! -f apps/docs/package.json ]; then
       echo "✘ apps/docs not present on this ref — cannot deploy docs." >&2; exit 1
     fi
-    # apps/docs is a Next.js/Fumadocs app (SSG + a dynamic /docs/[[...slug]] route),
-    # NOT a plain `next export` static site — so it deploys to CF Pages via
-    # @cloudflare/next-on-pages, which emits .vercel/output/static. `bun run build`
-    # is the CI gate; next-on-pages re-runs the build under the CF adapter.
+    # apps/docs is a Fumadocs app that fully static-exports (`output: 'export'` →
+    # `out/`). All routes are SSG and search is a build-time Orama index (static
+    # client), so there's NO Node/edge runtime and NO next-on-pages — we just
+    # `next build` and upload `out/` to CF Pages, exactly like the widget target.
     ( cd apps/docs && "$BUN" install --frozen-lockfile \
-        && "$BUN" x @cloudflare/next-on-pages@1 \
-        && "$BUN" x wrangler pages deploy .vercel/output/static \
+        && "$BUN" run build \
+        && "$BUN" x wrangler pages deploy out \
              --project-name "krispy-docs-${ENV}" \
              --branch "$([ "$ENV" = production ] && echo main || echo preview)" )
     SMOKE_KIND=pages
