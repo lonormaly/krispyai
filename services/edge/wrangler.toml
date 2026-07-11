@@ -23,7 +23,7 @@ new_sqlite_classes = ["SessionDO"]
 # topic<->session map, tenant config, usage counters.
 [[kv_namespaces]]
 binding = "KRISPY_KV"
-id = "REPLACE_WITH_KV_ID"          # `bunx wrangler kv namespace create KRISPY_KV`
+id = "REPLACE_WITH_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV`
 
 # ── secrets (NOT here — set with `bunx wrangler secret put <NAME>`) ───────────
 #   TELEGRAM_BOT_TOKEN        BotFather token
@@ -31,6 +31,43 @@ id = "REPLACE_WITH_KV_ID"          # `bunx wrangler kv namespace create KRISPY_K
 #   TELEGRAM_WEBHOOK_SECRET   random string; also passed to setWebhook (secret_token)
 # ── optional vars ─────────────────────────────────────────────────────────────
 [vars]
-ALLOWED_ORIGIN = "*"               # lock to your site origin in production
+ALLOWED_ORIGIN = "*" # lock to your site origin in production
 # AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # SYSTEM_PROMPT = "You are ..."
+
+# ── deploy environments ──────────────────────────────────────────────────────
+# Two isolated Workers, one per env — a deploy targets one with `wrangler deploy
+# --env <preview|production>` (see deploy.sh / the Tilt deploy:edge-* resources).
+# Wrangler named envs do NOT inherit bindings, so each repeats AI/DO/KV. Give each
+# its OWN KV namespace id so preview and prod don't share tenant config/usage.
+[env.preview]
+name = "krispy-edge-preview"
+[env.preview.ai]
+binding = "AI"
+[[env.preview.durable_objects.bindings]]
+name = "SESSION"
+class_name = "SessionDO"
+[[env.preview.migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionDO"]
+[[env.preview.kv_namespaces]]
+binding = "KRISPY_KV"
+id = "REPLACE_WITH_PREVIEW_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV_preview`
+[env.preview.vars]
+ALLOWED_ORIGIN = "*"
+
+[env.production]
+name = "krispy-edge"
+[env.production.ai]
+binding = "AI"
+[[env.production.durable_objects.bindings]]
+name = "SESSION"
+class_name = "SessionDO"
+[[env.production.migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionDO"]
+[[env.production.kv_namespaces]]
+binding = "KRISPY_KV"
+id = "REPLACE_WITH_PROD_KV_ID" # `bunx wrangler kv namespace create KRISPY_KV_production`
+[env.production.vars]
+ALLOWED_ORIGIN = "*" # lock to your site origin in production

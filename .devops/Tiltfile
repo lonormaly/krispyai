@@ -102,6 +102,26 @@ local_resource(
     labels=['packages'],
 )
 
+# =============================================================================
+# Deploy (MANUAL buttons — one per target × env). NOT auto-run: a deploy is a
+# button you press, never something Tilt fires on file change. Each shells out to
+# the SAME ./deploy.sh the CLI uses (DRY), which runs preflight → build → wrangler
+# deploy → smoke. Cloudflare creds come from the Infisical-fed .env.local — nothing
+# is hardcoded here, and no secret ever touches GitHub Actions.
+# =============================================================================
+def deploy_resource(target, env):
+    local_resource(
+        'deploy:' + target + '-' + env,
+        cmd='cd ' + REPO_ROOT + ' && ./deploy.sh ' + target + ' ' + env,
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+        labels=['deploy'],
+    )
+
+for target in ['edge', 'docs', 'widget']:
+    for env in ['preview', 'production']:
+        deploy_resource(target, env)
+
 print("""
 ================================================================================
                     KRISPYAI (public core) LOCAL DEV (Portless)
