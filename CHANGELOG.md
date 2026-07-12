@@ -12,6 +12,7 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Added
 
+- Tilt: `KRISPY-CORE` banner resource in its own capitalized label group — names the dev dashboard (Tilt has no native project title).
 - Chat suite: lead capture + connectors — edge fan-out and a data-driven widget lead form.
 - Chat suite: widget theming — `:host` `--k-*` CSS vars, boot-fetch of tenant config, avatar/greeting/position, CSS-boundary sanitizers.
 - Chat suite: keyboard-aware floating widget card on mobile (visualViewport pin, safe-area, 16px inputs).
