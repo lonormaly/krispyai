@@ -9,7 +9,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -58,7 +58,7 @@ jobs:
   # COMPLIANCE — dependency vulnerability scan (Google's OSV database). Runs as its own
   # job so a vuln finding is a distinct, visible gate.
   vuln-scan:
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.2.4"
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8"
     permissions:
       contents: read
       security-events: write
