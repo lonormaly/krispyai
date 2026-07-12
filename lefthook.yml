@@ -1,6 +1,5 @@
 # Git hooks — so an agent (or human) literally can't COMMIT unformatted / unlinted
-# code, and can't PUSH code that doesn't typecheck. Fast by construction: staged
-# files only on commit; the edge Worker's typecheck on push.
+# code. Fast by construction: staged files only on commit. No pre-push gate (see below).
 #
 # Enable once after `bun install`:  bunx lefthook install
 # Skip in a pinch:                  LEFTHOOK=0 git commit …   (or `git commit --no-verify`)
@@ -18,7 +17,9 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
       run: bunx oxlint {staged_files}
 
-pre-push:
-  commands:
-    typecheck:
-      run: bun run typecheck
+# NO pre-push hook — deliberately. There WAS a `bun run typecheck` here (full-workspace
+# `bun --filter '@krispy*/*' typecheck` — every package, no affected/cache), removed
+# 2026-07-12. A whole-workspace tsc on every push is a minutes-long gate that trains
+# people to `--no-verify`, which is worse than no gate. Typecheck coverage lives in CI
+# (ci.yml runs `bun run typecheck` on every push/PR) and in editors. Don't re-add a
+# pre-push typecheck unless it's provably sub-30s cold from a fresh worktree.
