@@ -24,7 +24,7 @@
   // Default Buttr avatar — inline data-URI (self-contained; NEVER the private
   // ops/brand/stickers PNGs). A tiny croissant on cream, in brand gold/espresso.
   var BUTTR =
-    "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%23fbf6ee'/%3E%3Cpath%20d='M6%2022c3-1%205-4%206-7%201%203%203%206%206%207-3%201-6%201-6%201s-4-.3-6-1z'%20fill='%23e39a2b'%20stroke='%23241a12'%20stroke-width='1.4'%20stroke-linejoin='round'/%3E%3C/svg%3E";
+    "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='16'%20fill='%23fbf6ee'/%3E%3Cg%20transform='translate(16%2017)'%3E%3Cellipse%20cx='0'%20cy='0'%20rx='9'%20ry='5.5'%20fill='%23e39a2b'%20stroke='%23241a12'%20stroke-width='1.3'/%3E%3Cpath%20d='M-9%200%20C-7-6%200-9%209%200'%20fill='none'%20stroke='%23241a12'%20stroke-width='1.3'%20stroke-linecap='round'/%3E%3Cpath%20d='M-6-1%20C-4-3%200-4%204-2'%20fill='none'%20stroke='%23c9841c'%20stroke-width='0.9'%20stroke-linecap='round'%20opacity='0.7'/%3E%3Ccircle%20cx='-7.5'%20cy='0.5'%20r='2.5'%20fill='%23f6d9a8'%20stroke='%23241a12'%20stroke-width='1.1'/%3E%3Ccircle%20cx='7.5'%20cy='0.5'%20r='2.5'%20fill='%23f6d9a8'%20stroke='%23241a12'%20stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E";
 
   // Sanitizers at the CSS trust boundary — a tenant-controlled string is about to
   // land in a stylesheet, so anything that isn't a plain color/number/font is dropped.
@@ -65,52 +65,298 @@
   // still works as a pre-fetch default.
   root.innerHTML =
     "<style>" +
-    ":host{--k-primary:" +
+    // ── Design tokens (krispy boulangerie palette) ──
+    ":host{" +
+    "--k-primary:" +
     cfg.accent +
-    ";--k-launcher:var(--k-primary);--k-radius:14px;--k-font:-apple-system,Segoe UI,Roboto,sans-serif}" +
+    ";" +
+    "--k-launcher:var(--k-primary);" +
+    "--k-radius:12px;" +
+    "--k-font:Inter,-apple-system,'Segoe UI',Roboto,sans-serif;" +
+    // Palette
+    "--k-cream:#fbf6ee;" +
+    "--k-card:#fffdf9;" +
+    "--k-espresso:#241a12;" +
+    "--k-gold:#e39a2b;" +
+    "--k-gold-hover:#c9841c;" +
+    "--k-butter:#f6d9a8;" +
+    "--k-crust:#9e5a22;" +
+    "--k-muted:#f3ece0;" +
+    "--k-muted-fg:#6b5d4f;" +
+    "--k-border:#eadfcf;" +
+    "--k-jam:#f0426b;" +
+    "--k-pistachio:#2fbf9e;" +
+    "--k-pistachio-bg:#e7f7f2;" +
+    "--k-pistachio-border:#a8e3d4;" +
+    "--k-pistachio-text:#0d7560" +
+    "}" +
     "*{box-sizing:border-box;font-family:var(--k-font)}" +
-    ".btn{position:relative;width:56px;height:56px;border-radius:50%;border:0;background:var(--k-launcher)" +
-    ";color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:24px;margin-bottom:env(safe-area-inset-bottom,0)}" +
+    // ── Launcher button ──
+    ".btn{" +
+    "position:relative;width:56px;height:56px;border-radius:50%;border:0;" +
+    "background:var(--k-launcher);color:var(--k-espresso);cursor:pointer;" +
+    "box-shadow:0 8px 24px rgba(36,26,18,.22),0 2px 6px rgba(36,26,18,.12);" +
+    "display:flex;align-items:center;justify-content:center;" +
+    "margin-bottom:env(safe-area-inset-bottom,0);" +
+    "transition:box-shadow 0.2s,transform 0.15s;" +
+    "outline:none" +
+    "}" +
+    ".btn:hover{box-shadow:0 12px 32px rgba(36,26,18,.28),0 3px 8px rgba(36,26,18,.14);transform:translateY(-1px)}" +
+    ".btn:active{transform:translateY(0);box-shadow:0 4px 12px rgba(36,26,18,.18)}" +
+    ".btn svg{width:26px;height:26px;flex:0 0 auto}" +
+    // Unread dot (jam)
+    ".btn .dot{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:var(--k-jam);border:2px solid #fff;display:none}" +
+    ".btn.kunread .dot{display:block}" +
+    // Online dot (pistachio) — always shows on launcher
+    ".btn .online{position:absolute;bottom:1px;right:1px;width:11px;height:11px;border-radius:50%;background:var(--k-pistachio);border:2px solid #fff}" +
+    // Knudge pulse animation
     "@keyframes kpulse{0%,100%{transform:scale(1)}30%{transform:scale(1.12)}60%{transform:scale(.96)}}" +
     ".btn.knudge{animation:kpulse .6s ease-in-out 2}" +
     "@media (prefers-reduced-motion:reduce){.btn.knudge{animation:none}}" +
-    ".btn .dot{position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#f0426b;border:2px solid #fff;display:none}" +
-    ".btn.kunread .dot{display:block}" +
-    ".hd .mute{cursor:pointer;opacity:.85;font-size:16px;line-height:1;background:none;border:0;color:#fff;padding:0}" +
-    ".panel{display:none;flex-direction:column;width:380px;max-width:calc(100vw - 5.5rem);height:480px;max-height:min(500px,70dvh,var(--kvvh,100dvh));background:#fff;border-radius:var(--k-radius);overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.28)}" +
+    // ── Panel ──
+    ".panel{" +
+    "display:none;flex-direction:column;" +
+    "width:380px;max-width:calc(100vw - 5.5rem);" +
+    "height:520px;max-height:min(560px,80dvh,var(--kvvh,100dvh));" +
+    "background:var(--k-card);" +
+    "border-radius:var(--k-radius);" +
+    "overflow:hidden;" +
+    "box-shadow:0 24px 56px rgba(36,26,18,.18),0 4px 16px rgba(36,26,18,.10),0 0 0 1px var(--k-border);" +
+    "border:1px solid var(--k-border)" +
+    "}" +
     "@keyframes kslide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}" +
     ".panel.open{display:flex;animation:kslide .22s cubic-bezier(.16,1,.3,1)}" +
     "@media (prefers-reduced-motion:reduce){.panel.open{animation:none}}" +
-    ".hd{background:var(--k-primary)" +
-    ";color:#fff;padding:14px 16px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}" +
-    ".hd .av{width:24px;height:24px;border-radius:50%;flex:0 0 auto;object-fit:cover}" +
-    ".hd .ttl{flex:1}" +
-    ".hd .x{cursor:pointer;opacity:.85;font-size:20px;line-height:1}" +
-    ".log{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f7f7f8}" +
-    ".msg{max-width:80%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}" +
-    ".me{align-self:flex-end;background:var(--k-primary)" +
-    ";color:#fff;border-bottom-right-radius:3px}" +
-    ".bot{align-self:flex-start;background:#fff;color:#111;border:1px solid #e5e5e5;border-bottom-left-radius:3px}" +
-    ".op{align-self:flex-start;background:#e7f6ec;color:#0a3d20;border:1px solid #b8e6c8;border-bottom-left-radius:3px}" +
-    ".msg code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}" +
+    // ── Header (.hd) — warm cream surface, not flat gold bar ──
+    ".hd{" +
+    "background:var(--k-card);" +
+    "border-bottom:1px solid var(--k-border);" +
+    "padding:14px 16px 12px;" +
+    "display:flex;align-items:center;gap:10px;" +
+    "flex-shrink:0" +
+    "}" +
+    // Avatar circle (Buttr mark)
+    ".hd .av{" +
+    "width:36px;height:36px;border-radius:50%;" +
+    "flex:0 0 auto;object-fit:cover;" +
+    "border:1.5px solid var(--k-border);" +
+    "background:var(--k-butter)" +
+    "}" +
+    // Title + status block
+    ".hd .ttl-wrap{flex:1;min-width:0}" +
+    ".hd .ttl{" +
+    "display:block;" +
+    "font-family:'Fraunces',Georgia,'Times New Roman',serif;" +
+    "font-size:15px;font-weight:600;" +
+    "color:var(--k-espresso);" +
+    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" +
+    "line-height:1.2" +
+    "}" +
+    ".hd .sub{" +
+    "display:flex;align-items:center;gap:5px;" +
+    "font-size:11px;color:var(--k-muted-fg);" +
+    "margin-top:2px;line-height:1" +
+    "}" +
+    // Pistachio pulse dot in status line
+    ".hd .sub .pdot{" +
+    "display:inline-block;width:7px;height:7px;" +
+    "border-radius:50%;background:var(--k-pistachio);flex:0 0 auto" +
+    "}" +
+    "@keyframes kpdot{0%,100%{opacity:1}50%{opacity:.35}}" +
+    ".hd .sub .pdot{animation:kpdot 2.4s ease-in-out infinite}" +
+    "@media (prefers-reduced-motion:reduce){.hd .sub .pdot{animation:none}}" +
+    // Mute button (icon-only)
+    ".hd .mute{" +
+    "cursor:pointer;background:none;border:0;" +
+    "color:var(--k-muted-fg);padding:4px;" +
+    "border-radius:6px;line-height:1;font-size:15px;" +
+    "transition:color 0.15s,background 0.15s;flex-shrink:0" +
+    "}" +
+    ".hd .mute:hover{background:var(--k-muted);color:var(--k-espresso)}" +
+    // Close button
+    ".hd .x{" +
+    "cursor:pointer;background:none;border:0;" +
+    "color:var(--k-muted-fg);padding:4px;" +
+    "border-radius:6px;line-height:1;font-size:20px;" +
+    "transition:color 0.15s,background 0.15s;flex-shrink:0;display:flex;align-items:center;justify-content:center" +
+    "}" +
+    ".hd .x:hover{background:var(--k-muted);color:var(--k-espresso)}" +
+    // ── Message log (.log) ──
+    ".log{" +
+    "flex:1;overflow-y:auto;padding:16px 14px;" +
+    "display:flex;flex-direction:column;gap:10px;" +
+    "background:var(--k-cream);" +
+    // Subtle scrollbar
+    "scrollbar-width:thin;scrollbar-color:var(--k-border) transparent" +
+    "}" +
+    ".log::-webkit-scrollbar{width:4px}" +
+    ".log::-webkit-scrollbar-track{background:transparent}" +
+    ".log::-webkit-scrollbar-thumb{background:var(--k-border);border-radius:4px}" +
+    // ── Message bubbles ──
+    ".msg{" +
+    "max-width:82%;padding:10px 14px;" +
+    "font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;" +
+    "position:relative" +
+    "}" +
+    // Visitor bubble (gold, right-aligned)
+    ".me{" +
+    "align-self:flex-end;" +
+    "background:var(--k-gold);color:var(--k-espresso);" +
+    "border-radius:16px 16px 4px 16px;" +
+    "box-shadow:0 1px 4px rgba(36,26,18,.10)" +
+    "}" +
+    // Bot bubble (card/white, left-aligned)
+    ".bot{" +
+    "align-self:flex-start;" +
+    "background:var(--k-card);color:var(--k-espresso);" +
+    "border:1px solid var(--k-border);" +
+    "border-radius:16px 16px 16px 4px;" +
+    "box-shadow:0 1px 4px rgba(36,26,18,.07)" +
+    "}" +
+    // Operator/human bubble (pistachio-tinted, left-aligned)
+    ".op{" +
+    "align-self:flex-start;" +
+    "background:var(--k-pistachio-bg);color:var(--k-pistachio-text);" +
+    "border:1px solid var(--k-pistachio-border);" +
+    "border-radius:16px 16px 16px 4px;" +
+    "box-shadow:0 1px 4px rgba(47,191,158,.10)" +
+    "}" +
+    // Inline code in bubbles
+    ".msg code{" +
+    "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;" +
+    "font-size:.88em;background:rgba(36,26,18,.07);padding:1px 5px;border-radius:4px" +
+    "}" +
     ".msg a{color:inherit;text-decoration:underline;text-underline-offset:2px}" +
-    ".sys{align-self:center;font-size:12px;color:#888}" +
-    ".ft{display:flex;border-top:1px solid #eee;padding:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0));gap:6px}" +
-    ".ft input{flex:1;border:1px solid #ddd;border-radius:8px;padding:9px 11px;font-size:16px;outline:none}" +
-    ".ft button{border:0;background:var(--k-primary)" +
-    ";color:#fff;border-radius:8px;padding:0 14px;cursor:pointer;font-size:14px}" +
-    ".ft button:disabled{opacity:.5;cursor:default}" +
-    ".cap{padding:10px 12px;background:#fff;border-top:1px solid #eee;display:none;flex-direction:column;gap:6px}" +
-    ".cap.show{display:flex}.cap input{border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:16px}" +
-    ".cap button{border:0;background:#111;color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-size:13px}" +
+    // System text (centered, muted)
+    ".sys{" +
+    "align-self:center;font-size:11px;color:var(--k-muted-fg);" +
+    "text-align:center;padding:0 8px;max-width:90%" +
+    "}" +
+    // Bubble enter animation
+    "@keyframes kmsg{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}" +
+    ".msg{animation:kmsg .2s cubic-bezier(.16,1,.3,1) both}" +
+    "@media (prefers-reduced-motion:reduce){.msg{animation:none}}" +
+    // ── Typing indicator (three bouncing dots) ──
+    "@keyframes kbounce{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-5px);opacity:1}}" +
+    ".typing{" +
+    "align-self:flex-start;" +
+    "background:var(--k-card);border:1px solid var(--k-border);" +
+    "border-radius:16px 16px 16px 4px;" +
+    "padding:10px 14px;display:flex;gap:4px;align-items:center;" +
+    "box-shadow:0 1px 4px rgba(36,26,18,.07)" +
+    "}" +
+    ".typing span{" +
+    "display:inline-block;width:7px;height:7px;border-radius:50%;" +
+    "background:var(--k-muted-fg);" +
+    "animation:kbounce 1.2s ease-in-out infinite" +
+    "}" +
+    ".typing span:nth-child(2){animation-delay:.2s}" +
+    ".typing span:nth-child(3){animation-delay:.4s}" +
+    "@media (prefers-reduced-motion:reduce){.typing span{animation:none;opacity:.6}}" +
+    // ── Composer (.ft) ──
+    ".ft{" +
+    "display:flex;border-top:1px solid var(--k-border);" +
+    "padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0));" +
+    "gap:8px;align-items:center;background:var(--k-card);flex-shrink:0" +
+    "}" +
+    ".ft input{" +
+    "flex:1;border:1.5px solid var(--k-border);" +
+    "border-radius:22px;" +
+    "padding:9px 14px;font-size:16px;outline:none;" +
+    "background:var(--k-cream);color:var(--k-espresso);" +
+    "transition:border-color 0.15s,box-shadow 0.15s;" +
+    "line-height:1.4" +
+    "}" +
+    ".ft input::placeholder{color:var(--k-muted-fg)}" +
+    ".ft input:focus{" +
+    "border-color:var(--k-gold);" +
+    "box-shadow:0 0 0 3px rgba(227,154,43,.15);" +
+    "background:var(--k-card)" +
+    "}" +
+    // Send button — gold circle with paper-plane SVG
+    ".ft button{" +
+    "flex:0 0 auto;width:38px;height:38px;border:0;" +
+    "background:var(--k-gold);color:var(--k-espresso);" +
+    "border-radius:50%;cursor:pointer;" +
+    "display:flex;align-items:center;justify-content:center;" +
+    "transition:background 0.15s,transform 0.1s,box-shadow 0.15s;" +
+    "box-shadow:0 2px 8px rgba(227,154,43,.35)" +
+    "}" +
+    ".ft button:hover{background:var(--k-gold-hover);box-shadow:0 4px 12px rgba(201,132,28,.4);transform:translateY(-1px)}" +
+    ".ft button:active{transform:translateY(0)}" +
+    ".ft button:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}" +
+    ".ft button svg{width:17px;height:17px;flex:0 0 auto}" +
+    // ── Contact capture (.cap) ──
+    ".cap{" +
+    "padding:12px 14px;background:var(--k-card);" +
+    "border-top:1px solid var(--k-border);" +
+    "display:none;flex-direction:column;gap:8px;flex-shrink:0" +
+    "}" +
+    ".cap.show{display:flex}" +
+    ".cap input{" +
+    "border:1.5px solid var(--k-border);border-radius:8px;" +
+    "padding:9px 12px;font-size:16px;background:var(--k-cream);color:var(--k-espresso);outline:none;" +
+    "transition:border-color 0.15s" +
+    "}" +
+    ".cap input:focus{border-color:var(--k-gold)}" +
+    ".cap input::placeholder{color:var(--k-muted-fg)}" +
+    ".cap button{" +
+    "border:0;background:var(--k-espresso);color:var(--k-cream);" +
+    "border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;" +
+    "font-weight:600;letter-spacing:0.02em;" +
+    "transition:background 0.15s" +
+    "}" +
+    ".cap button:hover{background:#3d2e22}" +
     "</style>" +
+    // ── Panel markup ──
     '<div class="panel" part="panel">' +
-    '<div class="hd"><img class="av" alt="" hidden><span class="ttl"></span><button type="button" class="mute" aria-label="Mute notifications"></button><span class="x">&times;</span></div>' +
+    // Header: avatar + title/status + mute + close
+    // Avatar shows the BUTTR mark by default; applyTheme can replace src or hide
+    '<div class="hd">' +
+    '<img class="av" alt="Krispy">' +
+    '<div class="ttl-wrap">' +
+    '<span class="ttl"></span>' +
+    '<span class="sub"><span class="pdot"></span>we usually reply in minutes</span>' +
+    "</div>" +
+    '<button type="button" class="mute" aria-label="Mute notifications"></button>' +
+    // Close button: inline SVG X (no innerHTML for user data — this is static chrome)
+    '<button type="button" class="x" aria-label="Close chat">' +
+    '<svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18">' +
+    '<path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    "</svg>" +
+    "</button>" +
+    "</div>" +
     '<div class="log"></div>' +
     '<form class="cap"><input class="cn" placeholder="Your name"><input class="cc" placeholder="Email or phone"><button type="submit">Leave contact</button></form>' +
-    '<form class="ft"><input class="in" placeholder="Type a message…" autocomplete="off"><button type="submit">Send</button></form>' +
+    // Composer: text input + paper-plane send button
+    '<form class="ft">' +
+    '<input class="in" placeholder="Type a message…" autocomplete="off">' +
+    '<button type="submit" aria-label="Send message">' +
+    '<svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M17 10L3 3l3.5 7L3 17l14-7z" fill="currentColor"/>' +
+    "</svg>" +
+    "</button>" +
+    "</form>" +
     "</div>" +
-    '<button class="btn" aria-label="Open chat">💬<span class="dot"></span></button>';
+    // Launcher button: inline croissant SVG + unread dot + online dot
+    '<button class="btn" aria-label="Open chat">' +
+    // Buttr croissant mark — tasteful ~24px croissant path, gold fill + espresso outline
+    '<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    // Main body — crescent/croissant shape
+    '<path d="M14 6C9.5 6 5.5 9 4 13.5C5.5 12 7.5 11 10 11C11.5 8.5 13.5 7 16 7C15.4 6.3 14.7 6 14 6z" fill="#e39a2b" stroke="#241a12" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<path d="M14 22C18.5 22 22.5 19 24 14.5C22.5 16 20.5 17 18 17C16.5 19.5 14.5 21 12 21C12.6 21.7 13.3 22 14 22z" fill="#e39a2b" stroke="#241a12" stroke-width="1.2" stroke-linejoin="round"/>' +
+    // Center body — the bulk of the croissant
+    '<ellipse cx="14" cy="14" rx="6" ry="4.5" fill="#f6d9a8" stroke="#241a12" stroke-width="1.2"/>' +
+    // Score lines (the ridges)
+    '<path d="M10.5 13.5C11.5 12.5 13 12 14.5 12.5" stroke="#c9841c" stroke-width="0.9" stroke-linecap="round" opacity="0.8"/>' +
+    '<path d="M11 15.5C12 14.5 13.5 14 15 14.5" stroke="#c9841c" stroke-width="0.9" stroke-linecap="round" opacity="0.6"/>' +
+    // Tip highlights
+    '<circle cx="5.5" cy="12.5" r="2" fill="#f6d9a8" stroke="#241a12" stroke-width="1.1"/>' +
+    '<circle cx="22.5" cy="15.5" r="2" fill="#f6d9a8" stroke="#241a12" stroke-width="1.1"/>' +
+    "</svg>" +
+    '<span class="dot"></span>' +
+    '<span class="online"></span>' +
+    "</button>";
 
   var $ = function (s) {
     return root.querySelector(s);
@@ -123,6 +369,8 @@
   var capForm = $(".cap");
   var avatarEl = $(".av");
   $(".ttl").textContent = cfg.title;
+  // Default avatar: BUTTR croissant mark. applyTheme can replace with a tenant URL.
+  avatarEl.src = BUTTR;
 
   // ── theme (boot fetch, init-gated, NO poll — decorative → never blocks chat) ──
   var greeting = ""; // optional first bot bubble on open; set by theme
@@ -145,13 +393,10 @@
     if (typeof th.headerTitle === "string" && th.headerTitle)
       $(".ttl").textContent = th.headerTitle;
     if (typeof th.greeting === "string") greeting = th.greeting.trim();
-    // avatar: literal "buttr" → inline default; an https URL → that; else nothing.
+    // avatar: literal "buttr" → inline default; an https URL → that; else keep default.
     var isHttps = typeof th.avatar === "string" && th.avatar.startsWith("https://");
     var av = th.avatar === "buttr" ? BUTTR : isHttps ? th.avatar : null;
-    if (av) {
-      avatarEl.src = av;
-      avatarEl.hidden = false;
-    }
+    if (av) avatarEl.src = av;
   }
   fetch(cfg.api + "/api/widget/config?t=" + encodeURIComponent(cfg.tenant))
     .then(function (r) {
@@ -286,6 +531,18 @@
   }
 
   function add(cls, text) {
+    // Typing indicator: return a special node with animated dots for "…" placeholder
+    if (cls === "bot" && text === "…") {
+      var t = document.createElement("div");
+      t.className = "typing";
+      // Three bouncing dot spans — purely CSS-animated, no text
+      t.appendChild(document.createElement("span"));
+      t.appendChild(document.createElement("span"));
+      t.appendChild(document.createElement("span"));
+      log.appendChild(t);
+      log.scrollTop = log.scrollHeight;
+      return t; // .remove() contract preserved — caller does typing.remove()
+    }
     var d = document.createElement("div");
     d.className = "msg " + cls;
     // Only AI-emitted bubbles get markdown; visitor (me) + system (sys) stay
