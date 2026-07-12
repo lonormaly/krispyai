@@ -20,6 +20,7 @@ interface TenantConfig {
   forms?: FormSpec[]; // lead forms
   connectors?: Connector[]; // delivery / CTA connectors
   theme?: WidgetTheme; // widget appearance
+  operators?: Operator[]; // humans to @mention on handoff (auto-learned; NEVER public)
 }
 ```
 
@@ -62,6 +63,26 @@ interface Connector {
 
 `telegram` + `email` are delivered server-side; `whatsapp` + `instagram` are CTA links only.
 see [lead forms + connectors](/docs/guides/lead-forms-and-connectors).
+
+## `Operator`
+
+```ts
+interface Operator {
+  id: number; // Telegram user id — enough for a text_mention (no public @username needed)
+  name?: string; // display name (first_name), used as the mention label when no username
+  username?: string; // public @username (preferred — a plain @mention, no entity)
+}
+```
+
+the humans the bot `@mentions` on **handoff** (the "quiet ops" workflow — mute the group,
+get pinged only when a person is needed). **Auto-learned:** whoever replies (non-bot) in a
+managed topic is upserted into this list, capped at 10 (FIFO). Zero-config — no need to set
+it by hand, though you can via `POST /api/tenant/config`. With an empty list the handoff
+alert still fires, just without a mention.
+
+`operators` is **secret-adjacent** (Telegram user ids) and is **never** exposed to the public
+`GET /api/widget/config`. see [connect Telegram](/docs/guides/connect-telegram) and
+[security](/docs/security).
 
 ## `WidgetTheme`
 

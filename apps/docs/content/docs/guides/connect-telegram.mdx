@@ -62,6 +62,31 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 - the Worker ignores its own bot echoes, service messages (topic-created), and messages in
   the group's General topic — only a real typed reply in a visitor topic counts.
 
+## quiet ops: mute the group, get pinged only on handoff
+
+by default every routine mirror (visitor messages, AI replies) is posted **silently**
+(`disable_notification`) — it lands in the thread but never buzzes your phone. so you can
+**mute the whole group** in Telegram and still have a full transcript to scroll when you want.
+
+the **only** loud message is the handoff alert: when the AI escalates (`[!HANDOFF]`, a
+too-long chat, or an AI outage), the Worker posts one notification-on message into the topic
+that **@mentions your operators** — so your phone rings exactly when a human is needed.
+
+- **operators are auto-learned.** the first time you (or a teammate) reply in any visitor
+  topic, your Telegram user is added to the tenant's `operators` list — from then on you're
+  taggable. zero config. even works if you have no public `@username` (it uses a
+  `text_mention` entity carrying your user id).
+- the list is capped at **10** (oldest evicted). you can also set it explicitly via
+  `POST /api/tenant/config` — see the [TenantConfig `operators`](/docs/reference/tenant-config#operator)
+  field.
+- **no operators known yet?** the handoff alert still fires — it just carries no mention until
+  someone has replied once.
+
+<Callout>
+  `operators` holds Telegram user ids and is **never** exposed to the public widget config —
+  it's secret-adjacent, same tier as your bot token.
+</Callout>
+
 <Callout>
   honest about the effort: BotFather, the supergroup-with-Topics, and admin rights are a real five
   minutes of clicking. there's no way around a bot token if you want replies on your phone.

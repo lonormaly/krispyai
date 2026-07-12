@@ -12,6 +12,7 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Added
 
+- Edge: Telegram **quiet ops** — routine mirrors post silently (`disable_notification`), and a handoff `@mentions` the tenant's operators (via `text_mention` entities, no public username needed) so notifications fire only when a human is needed. New `TenantConfig.operators` (auto-learned from topic replies, capped at 10, never exposed to the public widget config).
 - Tilt: `KRISPY-CORE` banner resource in its own capitalized label group — names the dev dashboard (Tilt has no native project title).
 - Chat suite: lead capture + connectors — edge fan-out and a data-driven widget lead form.
 - Chat suite: widget theming — `:host` `--k-*` CSS vars, boot-fetch of tenant config, avatar/greeting/position, CSS-boundary sanitizers.

@@ -22,6 +22,14 @@ owner replies in topic ──POST /api/telegram/webhook──▶ Worker
                                              + set handedOff=true → AI goes silent
 ```
 
+**Quiet ops.** Routine mirrors (visitor msgs, AI replies) post to the topic
+**silently** (`disable_notification`) — mute the group and you still get a full
+transcript without your phone buzzing. The **only** loud message is the handoff
+alert, which `@mentions` the tenant's `operators` (via `text_mention` entities —
+works with no public username). Operators are **auto-learned**: whoever replies in
+a managed topic is upserted (capped at 10). No operators yet → the alert still
+fires, just without a mention. See `docs → connect Telegram`.
+
 ## Endpoints
 
 | method | path                             | purpose                                                                                                  |

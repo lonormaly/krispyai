@@ -552,6 +552,17 @@ components:
         phone: { type: string, description: "whatsapp (E.164 digits, no +)." }
         profileUrl: { type: string, description: "instagram." }
 
+    Operator:
+      type: object
+      required: [id]
+      description: >
+        A human the bot @mentions on handoff (quiet-ops). Auto-learned from topic replies;
+        secret-adjacent (Telegram user ids) — never returned by GET /api/widget/config.
+      properties:
+        id: { type: integer, format: int64, description: "Telegram user id (enough for a text_mention)." }
+        name: { type: string, description: "display name; mention label when no username." }
+        username: { type: string, description: "public @username (preferred — plain @mention)." }
+
     TenantConfig:
       type: object
       required: [botToken, chatId]
@@ -573,3 +584,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Connector" }
         theme: { $ref: "#/components/schemas/WidgetTheme" }
+        operators:
+          type: array
+          description: "Handoff-mention operators (auto-learned, capped at 10). NEVER exposed to the public widget config."
+          items: { $ref: "#/components/schemas/Operator" }

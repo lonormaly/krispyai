@@ -35,8 +35,8 @@ this is the load-bearing distinction:
   call it.
 - **`GET /api/widget/config`** is the public read the browser uses. it returns **only** the
   theme whitelist via `publicWidgetConfig()`, which projects explicit keys and **never
-  spreads** the config — so `botToken` / `chatId` / `systemPrompt` are structurally
-  impossible to leak. a leak-guard unit test enforces this.
+  spreads** the config — so `botToken` / `chatId` / `systemPrompt` / `operators` (Telegram
+  user ids) are structurally impossible to leak. a leak-guard unit test enforces this.
 
 the write route (`POST /api/tenant/config`) **merges** — unset fields are preserved, so a
 partial write can't wipe your creds.
