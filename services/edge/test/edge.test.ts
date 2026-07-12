@@ -11,7 +11,7 @@ import {
 } from "../src/system-prompt";
 import { renderLeadEmail } from "../src/email";
 import { deliverLead } from "../src/index";
-import { parseOwnerReply } from "../src/telegram";
+import { parseOwnerReply, sendToTopic, buildMentions, sendHandoffAlert } from "../src/telegram";
 import { broadcast, SessionDO } from "../src/session-do";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
@@ -39,6 +39,9 @@ import {
   readEntitlement,
   readTenantConfig,
   mergeTenantConfig,
+  getOperators,
+  upsertOperator,
+  OPERATORS_MAX,
   checkLeadRate,
   LEAD_RATE_MAX,
   DO_INTERNAL_HEADER,
@@ -82,7 +85,19 @@ describe("parseOwnerReply", () => {
     expect(parseOwnerReply({ message: { text: "on my way", message_thread_id: 42 } })).toEqual({
       threadId: 42,
       text: "on my way",
+      from: undefined,
     });
+  });
+  test("surfaces `from` (id/name/username) for operator auto-learn", () => {
+    expect(
+      parseOwnerReply({
+        message: {
+          text: "on it",
+          message_thread_id: 42,
+          from: { is_bot: false, id: 777, first_name: "Shai", username: "shaisnir" },
+        },
+      }),
+    ).toEqual({ threadId: 42, text: "on it", from: { id: 777, name: "Shai", username: "shaisnir" } });
   });
   test("bot's own echo → ignored", () => {
     expect(
@@ -96,6 +111,113 @@ describe("parseOwnerReply", () => {
   });
   test("General topic (no thread id) → ignored", () => {
     expect(parseOwnerReply({ message: { text: "hi" } })).toBeNull();
+  });
+});
+
+// ── quiet-ops: silent mirrors + loud handoff mention ─────────────────────────
+// A fetch fake that records the parsed JSON body of every Telegram call, so we can
+// assert disable_notification and the mention entities (URLs alone can't show either).
+function captureTgBodies(): { bodies: any[]; fetchImpl: typeof fetch } {
+  const bodies: any[] = [];
+  const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(init?.body ? JSON.parse(String(init.body)) : null);
+    return new Response(JSON.stringify({ ok: true, result: { message_thread_id: 1 } }), {
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+  return { bodies, fetchImpl };
+}
+
+describe("sendToTopic silent flag", () => {
+  test("routine mirror is SILENT by default (disable_notification=true)", async () => {
+    const { bodies, fetchImpl } = captureTgBodies();
+    await sendToTopic("tok", "-100", 5, "👤 hi", fetchImpl);
+    expect(bodies[0].disable_notification).toBe(true);
+    expect(bodies[0].message_thread_id).toBe(5);
+  });
+  test("explicit silent=false → loud", async () => {
+    const { bodies, fetchImpl } = captureTgBodies();
+    await sendToTopic("tok", "-100", 5, "loud", fetchImpl, false);
+    expect(bodies[0].disable_notification).toBe(false);
+  });
+});
+
+describe("buildMentions", () => {
+  test("username → plain @mention, no entity", () => {
+    const { text, entities } = buildMentions([{ id: 1, username: "shaisnir", name: "Shai" }]);
+    expect(text).toBe("@shaisnir");
+    expect(entities).toEqual([]);
+  });
+  test("no username → text_mention entity carries the user id, offset over the name", () => {
+    const { text, entities } = buildMentions([{ id: 777, name: "Shai" }]);
+    expect(text).toBe("Shai");
+    expect(entities).toEqual([{ type: "text_mention", offset: 0, length: 4, user: { id: 777 } }]);
+  });
+  test("mixed list → correct per-operator offsets", () => {
+    const { text, entities } = buildMentions([
+      { id: 1, username: "a" }, // "@a"
+      { id: 2, name: "Bo" }, // entity over "Bo"
+    ]);
+    expect(text).toBe("@a Bo");
+    expect(entities).toEqual([{ type: "text_mention", offset: 3, length: 2, user: { id: 2 } }]);
+  });
+  test("no name, no username → synthesized userN label with entity", () => {
+    const { text, entities } = buildMentions([{ id: 55 }]);
+    expect(text).toBe("user55");
+    expect(entities[0]).toEqual({ type: "text_mention", offset: 0, length: 6, user: { id: 55 } });
+  });
+});
+
+describe("sendHandoffAlert", () => {
+  test("LOUD (disable_notification=false) with mention entities prepended", async () => {
+    const { bodies, fetchImpl } = captureTgBodies();
+    await sendHandoffAlert("tok", "-100", 5, "🙋 needs a human", [{ id: 777, name: "Shai" }], fetchImpl);
+    const b = bodies[0];
+    expect(b.disable_notification).toBe(false);
+    expect(b.text).toBe("Shai\n🙋 needs a human");
+    expect(b.entities).toEqual([{ type: "text_mention", offset: 0, length: 4, user: { id: 777 } }]);
+  });
+  test("NO operators → still fires (loud), no mention/entities (fallback)", async () => {
+    const { bodies, fetchImpl } = captureTgBodies();
+    await sendHandoffAlert("tok", "-100", 5, "🙋 needs a human", [], fetchImpl);
+    const b = bodies[0];
+    expect(b.disable_notification).toBe(false);
+    expect(b.text).toBe("🙋 needs a human");
+    expect(b.entities).toBeUndefined();
+  });
+});
+
+// ── quiet-ops: operator auto-learn (store) ───────────────────────────────────
+describe("upsertOperator", () => {
+  test("learns a new operator; getOperators reads it back", async () => {
+    const env = fakeEnv();
+    await mergeTenantConfig(env, "self", { botToken: "t", chatId: "-1" });
+    await upsertOperator(env, "self", { id: 1, name: "Shai", username: "shaisnir" });
+    expect(await getOperators(env, "self")).toEqual([{ id: 1, name: "Shai", username: "shaisnir" }]);
+  });
+  test("idempotent on id — refreshes name/username in place, no duplicate", async () => {
+    const env = fakeEnv();
+    await upsertOperator(env, "self", { id: 1, name: "Old" });
+    await upsertOperator(env, "self", { id: 1, name: "New", username: "shai" });
+    const ops = await getOperators(env, "self");
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toEqual({ id: 1, name: "New", username: "shai" });
+  });
+  test("caps at OPERATORS_MAX, evicting the oldest (FIFO)", async () => {
+    const env = fakeEnv();
+    for (let i = 1; i <= OPERATORS_MAX + 3; i++) await upsertOperator(env, "self", { id: i });
+    const ops = await getOperators(env, "self");
+    expect(ops).toHaveLength(OPERATORS_MAX);
+    expect(ops[0]!.id).toBe(4); // ids 1-3 evicted
+    expect(ops[ops.length - 1]!.id).toBe(OPERATORS_MAX + 3);
+  });
+  test("preserves other tenant-config fields (doesn't clobber botToken)", async () => {
+    const env = fakeEnv();
+    await mergeTenantConfig(env, "self", { botToken: "keep", chatId: "-1" });
+    await upsertOperator(env, "self", { id: 9 });
+    const cfg = await readTenantConfig(env, "self");
+    expect(cfg?.botToken).toBe("keep");
+    expect(cfg?.operators).toEqual([{ id: 9 }]);
   });
 });
 

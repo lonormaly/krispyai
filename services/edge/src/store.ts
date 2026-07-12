@@ -1,12 +1,13 @@
 // KV-backed state: tenant config, the topic<->session map, and usage metering.
 // Key builders are pure (unit-tested); the KV calls are thin wrappers so the flow
 // code never hand-rolls a key string.
-import type { Env, TenantConfig } from "./types";
+import type { Env, Operator, TenantConfig } from "./types";
 
 // ── public widget config (secret-free whitelist) ─────────────────────────────
 // The ONLY fields the unauthenticated public widget may read. Secret-free by
-// construction: botToken/chatId/systemPrompt/model are structurally excluded (we
-// project explicit theme keys, never spread cfg). The leak-guard test enforces this.
+// construction: botToken/chatId/systemPrompt/model AND operators (Telegram user ids)
+// are structurally excluded (we project explicit theme keys, never spread cfg). The
+// leak-guard test enforces this.
 export function publicWidgetConfig(cfg: Partial<TenantConfig> | null) {
   const th = cfg?.theme ?? {};
   return {
@@ -104,6 +105,38 @@ export async function mergeTenantConfig(
   }
   await env.KRISPY_KV.put(kTenant(tenantId), JSON.stringify(next));
   return next;
+}
+
+// ── operators (quiet-ops handoff mention) ────────────────────────────────────
+// Cap the auto-learned list so a busy group can't grow it unbounded in KV. 10 is plenty
+// of humans to tag; a new operator past the cap evicts the oldest (FIFO).
+export const OPERATORS_MAX = 10;
+
+export async function getOperators(env: Env, tenantId: string): Promise<Operator[]> {
+  const cfg = await readTenantConfig(env, tenantId);
+  return cfg?.operators ?? [];
+}
+
+/**
+ * Learn (or refresh) an operator from a topic reply: whoever replies in a managed topic
+ * becomes taggable on the next handoff — zero config. Idempotent on `id` (updates
+ * name/username in place); appends new ids up to OPERATORS_MAX (FIFO eviction).
+ * ponytail: read-modify-write on eventually-consistent KV, same race class as meter() —
+ * a rare concurrent reply could lose one learn; the next reply from that operator fixes it.
+ */
+export async function upsertOperator(env: Env, tenantId: string, op: Operator): Promise<void> {
+  const cfg = (await readTenantConfig(env, tenantId)) ?? {};
+  const list = cfg.operators ?? [];
+  const i = list.findIndex((o) => o.id === op.id);
+  if (i >= 0) {
+    // Already known — refresh name/username only if they actually changed (skip the write otherwise).
+    if (list[i]!.name === op.name && list[i]!.username === op.username) return;
+    list[i] = op;
+  } else {
+    list.push(op);
+    if (list.length > OPERATORS_MAX) list.shift(); // evict oldest
+  }
+  await env.KRISPY_KV.put(kTenant(tenantId), JSON.stringify({ ...cfg, operators: list }));
 }
 
 // ── topic <-> session map ────────────────────────────────────────────────────

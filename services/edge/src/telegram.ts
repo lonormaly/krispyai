@@ -39,18 +39,87 @@ export async function createForumTopic(
   return r.message_thread_id;
 }
 
-/** Send a message into a visitor's topic. */
+/**
+ * Send a message into a visitor's topic. SILENT by default (`disable_notification`):
+ * routine mirrors (visitor msgs, bot replies) land in the thread without buzzing the
+ * operator's phone — notifications are reserved for handoff (see sendHandoffAlert).
+ */
 export async function sendToTopic(
   token: string,
   chatId: string,
   threadId: number,
   text: string,
   fetchImpl?: FetchLike,
+  silent = true,
 ): Promise<void> {
   await call(
     token,
     "sendMessage",
-    { chat_id: chatId, message_thread_id: threadId, text },
+    { chat_id: chatId, message_thread_id: threadId, text, disable_notification: silent },
+    fetchImpl,
+  );
+}
+
+// ── handoff mention (loud) ────────────────────────────────────────────────────
+export interface MentionOperator {
+  id: number;
+  name?: string;
+  username?: string;
+}
+
+/**
+ * Build the mention prefix + Telegram entities for a set of operators. A `@username`
+ * (when known) is a plain text mention needing no entity; otherwise a `text_mention`
+ * entity over the operator's name carries the user id, so tagging works without a public
+ * username. Returns the leading text and the entities positioned over it. Pure/testable.
+ */
+export function buildMentions(operators: MentionOperator[]): {
+  text: string;
+  entities: { type: "text_mention"; offset: number; length: number; user: { id: number } }[];
+} {
+  let text = "";
+  const entities: { type: "text_mention"; offset: number; length: number; user: { id: number } }[] =
+    [];
+  for (const op of operators) {
+    if (text) text += " ";
+    if (op.username) {
+      text += `@${op.username}`;
+    } else {
+      const label = op.name?.trim() || `user${op.id}`;
+      entities.push({ type: "text_mention", offset: text.length, length: label.length, user: { id: op.id } });
+      text += label;
+    }
+  }
+  return { text, entities };
+}
+
+/**
+ * Post the LOUD handoff alert into a topic: mentions the operators (so their phone
+ * buzzes) and never sets disable_notification. With no operators known, still posts —
+ * the alert must fire; it just carries no mention (fallback path).
+ */
+export async function sendHandoffAlert(
+  token: string,
+  chatId: string,
+  threadId: number,
+  message: string,
+  operators: MentionOperator[],
+  fetchImpl?: FetchLike,
+): Promise<void> {
+  const { text: mentionText, entities } = buildMentions(operators);
+  const text = mentionText ? `${mentionText}\n${message}` : message;
+  // Entities are offset from the start of `text`; the mention block sits at offset 0,
+  // so buildMentions' offsets are already correct.
+  await call(
+    token,
+    "sendMessage",
+    {
+      chat_id: chatId,
+      message_thread_id: threadId,
+      text,
+      entities: entities.length ? entities : undefined,
+      disable_notification: false,
+    },
     fetchImpl,
   );
 }
@@ -59,6 +128,8 @@ export async function sendToTopic(
 export interface OwnerReply {
   threadId: number;
   text: string;
+  /** The human who replied — used to auto-learn a taggable operator (see upsertOperator). */
+  from?: { id: number; name?: string; username?: string };
 }
 
 interface TgUpdate {
@@ -66,13 +137,14 @@ interface TgUpdate {
     text?: string;
     message_thread_id?: number;
     forum_topic_created?: unknown;
-    from?: { is_bot?: boolean };
+    from?: { is_bot?: boolean; id?: number; first_name?: string; username?: string };
   };
 }
 
 /**
  * Extract an owner's typed reply from a Telegram update, or null if it's not one
  * (bot echo, service message like topic-created, non-thread message, no text).
+ * Surfaces `from` (id/name/username) so the reply's author can be learned as an operator.
  */
 export function parseOwnerReply(update: TgUpdate): OwnerReply | null {
   const m = update.message;
@@ -82,5 +154,9 @@ export function parseOwnerReply(update: TgUpdate): OwnerReply | null {
   if (typeof m.message_thread_id !== "number") return null; // General topic — not a visitor thread
   const text = m.text?.trim();
   if (!text) return null;
-  return { threadId: m.message_thread_id, text };
+  const from =
+    typeof m.from?.id === "number"
+      ? { id: m.from.id, name: m.from.first_name, username: m.from.username }
+      : undefined;
+  return { threadId: m.message_thread_id, text, from };
 }

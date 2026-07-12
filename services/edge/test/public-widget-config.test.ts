@@ -10,6 +10,7 @@ describe("publicWidgetConfig", () => {
       chatId: "y",
       systemPrompt: "z",
       model: "m",
+      operators: [{ id: 424242, name: "Shai", username: "shaisnir" }],
       theme: { primaryColor: "#fff" },
     });
     // theme passes through
@@ -20,9 +21,14 @@ describe("publicWidgetConfig", () => {
     expect(flat).not.toContain("chatId");
     expect(flat).not.toContain("systemPrompt");
     expect(flat).not.toContain("x"); // botToken value
+    // operators (Telegram user ids) must NEVER reach the public widget config
+    expect(flat).not.toContain("operators");
+    expect(flat).not.toContain("424242");
+    expect(flat).not.toContain("shaisnir");
     expect((out as Record<string, unknown>).botToken).toBeUndefined();
     expect((out as Record<string, unknown>).chatId).toBeUndefined();
     expect((out as Record<string, unknown>).systemPrompt).toBeUndefined();
+    expect((out as Record<string, unknown>).operators).toBeUndefined();
   });
 
   test("null config → all-undefined theme (graceful fallback)", () => {

@@ -57,6 +57,19 @@ export interface TenantConfig {
   connectors?: Connector[];
   /** Feature B — widget appearance. */
   theme?: WidgetTheme;
+  /** Quiet-ops — operators to @mention on handoff. Auto-learned from topic replies
+   * (see upsertOperator). SECRET-ADJACENT: never expose to the public widget config. */
+  operators?: Operator[];
+}
+
+// ── Quiet ops (handoff mention) ───────────────────────────────────────────
+// A human the bot can tag when a conversation needs a person. `id` is the Telegram
+// user id — enough for a `text_mention` entity, so tagging works even for users with
+// no public @username. `username` (if set) is preferred (a plain @mention, no entity).
+export interface Operator {
+  id: number;
+  name?: string;
+  username?: string;
 }
 
 export interface Env {

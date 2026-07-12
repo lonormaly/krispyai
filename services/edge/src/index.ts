@@ -15,7 +15,7 @@ import { workersAiRunner } from "./ai";
 import { chatFlow } from "./chat";
 import { SessionDO } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
-import { parseOwnerReply, createForumTopic, sendToTopic } from "./telegram";
+import { parseOwnerReply, createForumTopic, sendToTopic, sendHandoffAlert } from "./telegram";
 import { renderLeadEmail, sendLeadEmail } from "./email";
 import type { Connector, Env, FormSpec, TenantConfig } from "./types";
 import {
@@ -26,6 +26,8 @@ import {
   meter,
   getUsage,
   getTokens,
+  getOperators,
+  upsertOperator,
   entitled,
   withinPlan,
   writeEntitlement,
@@ -174,9 +176,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     { sessionId: body.sessionId, message: body.message.trim() },
   );
 
-  // If the AI escalated, nudge the visitor's browser to open contact capture.
-  if (result.handoff)
+  // If the AI escalated, nudge the visitor's browser to open contact capture AND fire
+  // the ONE loud handoff alert into the topic — @mentioning the tenant's operators so a
+  // human's phone buzzes (routine mirrors above are all silent). No operators known yet →
+  // the alert still posts, just without a mention (fallback path).
+  if (result.handoff) {
     await doFetch(env, tenantId, body.sessionId, "https://do/handoff", { method: "POST" });
+    if (tenant) {
+      const threadId = await getThreadForSession(env, tenantId, body.sessionId);
+      if (threadId) {
+        const operators = await getOperators(env, tenantId);
+        await sendHandoffAlert(
+          tenant.botToken,
+          tenant.chatId,
+          threadId,
+          "🙋 A visitor needs a human here.",
+          operators,
+        ).catch((e) => console.error("telegram handoff alert failed (best-effort):", e));
+      }
+    }
+  }
 
   // Resolve the FormSpec (+ its visitor-facing CTA connectors) so the widget — which
   // holds no tenant config — can render the form and its wa.me/instagram links.
@@ -311,6 +330,15 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const tenantId = DEFAULT_TENANT;
   const sessionId = await getSessionForThread(env, tenantId, reply.threadId);
   if (sessionId) {
+    // Auto-learn: whoever replies in a managed topic becomes a taggable operator for the
+    // next handoff (zero-config). Only in managed topics so random group chatter isn't learned.
+    if (reply.from) {
+      await upsertOperator(env, tenantId, {
+        id: reply.from.id,
+        name: reply.from.name,
+        username: reply.from.username,
+      });
+    }
     await doFetch(env, tenantId, sessionId, "https://do/operator", {
       method: "POST",
       body: JSON.stringify({ text: reply.text }),
