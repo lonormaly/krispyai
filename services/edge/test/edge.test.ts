@@ -12,7 +12,8 @@ import {
 import { renderLeadEmail } from "../src/email";
 import { deliverLead } from "../src/index";
 import { parseOwnerReply, sendToTopic, buildMentions, sendHandoffAlert } from "../src/telegram";
-import { broadcast, SessionDO } from "../src/session-do";
+import { broadcast, SessionDO, RING_MAX, type RingMsg } from "../src/session-do";
+import { pushToApp } from "../src/push";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
   chatFlow,
@@ -57,9 +58,48 @@ function fakeEnv(extra: Partial<Env> = {}): Env {
     KRISPY_KV: {
       get: async (k: string) => kv.get(k) ?? null,
       put: async (k: string, v: string) => void kv.set(k, v),
+      list: async ({ prefix }: { prefix?: string } = {}) => ({
+        keys: [...kv.keys()]
+          .filter((k) => !prefix || k.startsWith(prefix))
+          .map((name) => ({ name })),
+        list_complete: true,
+      }),
     },
     ...extra,
   } as unknown as Env;
+}
+
+// ── a Map-backed fake DurableObjectState (storage only; sockets are no-ops) ──
+function fakeDOState(): DurableObjectState {
+  const store = new Map<string, unknown>();
+  return {
+    acceptWebSocket: () => {},
+    getWebSockets: () => [],
+    storage: {
+      get: async (k: string) => store.get(k),
+      put: async (k: string, v: unknown) => void store.set(k, v),
+    },
+  } as unknown as DurableObjectState;
+}
+
+/** Wire env.SESSION to REAL SessionDO instances (one per idFromName), so worker
+ * routes that doFetch into the DO run end-to-end in tests. */
+function wireSessionNS(env: Env): Env {
+  const dos = new Map<string, SessionDO>();
+  (env as { SESSION: unknown }).SESSION = {
+    idFromName: (name: string) => name,
+    get: (name: string) => ({
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        let d = dos.get(name);
+        if (!d) {
+          d = new SessionDO(fakeDOState(), env);
+          dos.set(name, d);
+        }
+        return d.fetch(input instanceof Request ? input : new Request(String(input), init));
+      },
+    }),
+  };
+  return env;
 }
 
 // ── [!HANDOFF] contract ──────────────────────────────────────────────────────
@@ -835,17 +875,7 @@ describe("checkLeadRate", () => {
 
 // ── SessionDO internal auth (Worker-only /state,/operator,/handoff) ──────────
 describe("SessionDO internal auth", () => {
-  function fakeState() {
-    const store = new Map<string, unknown>();
-    return {
-      acceptWebSocket: () => {},
-      getWebSockets: () => [],
-      storage: {
-        get: async (k: string) => store.get(k),
-        put: async (k: string, v: unknown) => void store.set(k, v),
-      },
-    } as unknown as DurableObjectState;
-  }
+  const fakeState = fakeDOState; // shared module helper
   const env = fakeEnv();
   const secret = doInternalSecret(env);
 
@@ -881,5 +911,327 @@ describe("SessionDO internal auth", () => {
     );
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ handedOff: false });
+  });
+});
+
+// ── SessionDO ring buffer (operator-app thread read + inbox preview) ─────────
+describe("SessionDO ring buffer", () => {
+  const env = fakeEnv();
+  const authed = { [DO_INTERNAL_HEADER]: doInternalSecret(env) };
+  const post = (do_: SessionDO, path: string, body: unknown) =>
+    do_.fetch(
+      new Request(`https://do${path}`, {
+        method: "POST",
+        headers: authed,
+        body: JSON.stringify(body),
+      }),
+    );
+  const get = (do_: SessionDO, path: string) =>
+    do_.fetch(new Request(`https://do${path}`, { headers: authed }));
+  const msgs = async (do_: SessionDO): Promise<RingMsg[]> =>
+    ((await (await get(do_, "/log")).json()) as { messages: RingMsg[] }).messages;
+
+  test("appends and reads back, stamping ts when absent", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    const res = await post(do_, "/log", {
+      messages: [
+        { role: "visitor", text: "hi" },
+        { role: "ai", text: "hello!" },
+      ],
+    });
+    expect(await res.json()).toEqual({ ok: true, size: 2 });
+    const log = await msgs(do_);
+    expect(log.map((m) => [m.role, m.text])).toEqual([
+      ["visitor", "hi"],
+      ["ai", "hello!"],
+    ]);
+    expect(typeof log[0]!.ts).toBe("number");
+  });
+
+  test(`trims to RING_MAX (${RING_MAX}) — oldest evicted`, async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    for (let i = 0; i < RING_MAX + 5; i++) {
+      await post(do_, "/log", { messages: [{ role: "visitor", text: `m${i}` }] });
+    }
+    const log = await msgs(do_);
+    expect(log).toHaveLength(RING_MAX);
+    expect(log[0]!.text).toBe("m5"); // m0–m4 evicted
+    expect(log[log.length - 1]!.text).toBe(`m${RING_MAX + 4}`);
+  });
+
+  test("/operator reply appends to the ring (and still flips handedOff)", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    await post(do_, "/operator", { text: "on my way" });
+    expect(await msgs(do_)).toMatchObject([{ role: "operator", text: "on my way" }]);
+    expect(await (await get(do_, "/state")).json()).toEqual({ handedOff: true });
+  });
+
+  test("seed only fills an EMPTY ring (per-turn appends beat it)", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    await post(do_, "/log", { messages: [{ role: "visitor", text: "old" }], seed: true });
+    expect((await msgs(do_)).map((m) => m.text)).toEqual(["old"]); // empty → seeded
+    const res = await post(do_, "/log", {
+      messages: [{ role: "visitor", text: "dupe" }],
+      seed: true,
+    });
+    expect(await res.json()).toEqual({ ok: true, seeded: false }); // non-empty → no-op
+    expect((await msgs(do_)).map((m) => m.text)).toEqual(["old"]);
+  });
+
+  test("/summary = handoff flag + ring tail (empty ring → nulls)", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    expect(await (await get(do_, "/summary")).json()).toEqual({
+      handedOff: false,
+      lastMessage: null,
+      ts: null,
+    });
+    await post(do_, "/log", {
+      messages: [
+        { role: "visitor", text: "first" },
+        { role: "ai", text: "last" },
+      ],
+    });
+    await post(do_, "/operator", { text: "human here" });
+    const s = (await (await get(do_, "/summary")).json()) as Record<string, unknown>;
+    expect(s.handedOff).toBe(true);
+    expect(s.lastMessage).toBe("human here");
+    expect(typeof s.ts).toBe("number");
+  });
+
+  test("ring routes are internal-auth gated like the rest", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    expect((await do_.fetch(new Request("https://do/log"))).status).toBe(403);
+    expect((await do_.fetch(new Request("https://do/summary"))).status).toBe(403);
+  });
+});
+
+// ── operator app routes (Buttr §3a–§3c) ──────────────────────────────────────
+describe("operator app routes", () => {
+  const post = (path: string, body: unknown) =>
+    new Request(`https://edge.test${path}`, { method: "POST", body: JSON.stringify(body) });
+
+  test("POST /api/operator/reply → DO operator broadcast + ring + app operator learned + metered", async () => {
+    const env = wireSessionNS(fakeEnv());
+    const res = await worker.fetch(
+      post("/api/operator/reply", {
+        tenantId: "acme",
+        sessionId: "s1",
+        text: "on my way",
+        operatorName: "Dana",
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, delivered: true });
+    // the operator is learned with channel 'app' (so Telegram @mentions skip them)
+    expect(await getOperators(env, "acme")).toEqual([{ id: 0, name: "Dana", channel: "app" }]);
+    // metered as a handoff (same as the Telegram reply path)
+    expect((await getUsage(env, "acme")).handoff).toBe(1);
+    // the reply landed in the session's ring (thread read sees it)
+    const thread = await worker.fetch(
+      post("/api/operator/thread", { tenantId: "acme", sessionId: "s1" }),
+      env,
+    );
+    const { messages } = (await thread.json()) as { messages: RingMsg[] };
+    expect(messages.map((m) => [m.role, m.text])).toEqual([["operator", "on my way"]]);
+  });
+
+  test("reply/thread/handoffs with missing fields → 400", async () => {
+    const env = wireSessionNS(fakeEnv());
+    for (const [path, body] of [
+      ["/api/operator/reply", { tenantId: "a", sessionId: "s" }], // no text
+      ["/api/operator/reply", { sessionId: "s", text: "x" }], // no tenant
+      ["/api/operator/thread", { tenantId: "a" }], // no session
+      ["/api/operator/handoffs", {}], // no tenant
+    ] as const) {
+      expect((await worker.fetch(post(path, body), env)).status).toBe(400);
+    }
+  });
+
+  test("POST /api/operator/handoffs lists ONLY handed-off sessions of the tenant, with preview", async () => {
+    const env = wireSessionNS(fakeEnv());
+    // three known sessions (the session→thread KV map is the index)
+    await linkThreadSession(env, "acme", 1, "s-live");
+    await linkThreadSession(env, "acme", 2, "s-quiet");
+    await linkThreadSession(env, "other", 3, "s-foreign");
+    // hand one off via the reply route
+    await worker.fetch(
+      post("/api/operator/reply", { tenantId: "acme", sessionId: "s-live", text: "hello there" }),
+      env,
+    );
+    const res = await worker.fetch(post("/api/operator/handoffs", { tenantId: "acme" }), env);
+    expect(res.status).toBe(200);
+    const { conversations } = (await res.json()) as {
+      conversations: { sessionId: string; lastMessage: string; handedOff: true; ts: number }[];
+    };
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0]).toMatchObject({
+      sessionId: "s-live",
+      lastMessage: "hello there",
+      handedOff: true,
+    });
+    expect(typeof conversations[0]!.ts).toBe("number");
+  });
+
+  test("thread of an untouched session → empty messages", async () => {
+    const env = wireSessionNS(fakeEnv());
+    const res = await worker.fetch(
+      post("/api/operator/thread", { tenantId: "acme", sessionId: "nope" }),
+      env,
+    );
+    expect(await res.json()).toEqual({ messages: [] });
+  });
+});
+
+// ── pushToApp (Expo push, failure-tolerant by contract) ──────────────────────
+describe("pushToApp", () => {
+  function capture(tokens: string[] | "fail" = ["ExponentPushToken[abc]"]) {
+    const calls: { url: string; headers?: Record<string, string>; body?: unknown }[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        headers: init?.headers as Record<string, string> | undefined,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if (String(input).includes("exp.host")) return Response.json({ data: [] });
+      if (tokens === "fail") return new Response("boom", { status: 500 });
+      return Response.json({ tokens });
+    }) as unknown as typeof fetch;
+    return { calls, fetchImpl };
+  }
+
+  test("no PUSH_TOKENS_URL → silent no-op, zero fetches", async () => {
+    const { calls, fetchImpl } = capture();
+    expect(await pushToApp(fakeEnv(), "t", "s", "text", fetchImpl)).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("fetches tokens (secret header, tenant param) and pushes one message per device", async () => {
+    const { calls, fetchImpl } = capture(["ExponentPushToken[a]", "ExponentPushToken[b]"]);
+    const env = fakeEnv({
+      PUSH_TOKENS_URL: "https://cloud.test/internal/push-tokens",
+      PUSH_TOKENS_SECRET: "shh",
+    });
+    const n = await pushToApp(env, "acme", "s-42", "help me\nsecond line ignored", fetchImpl);
+    expect(n).toBe(2);
+    expect(calls[0]!.url).toBe("https://cloud.test/internal/push-tokens?t=acme");
+    expect(calls[0]!.headers).toEqual({ "x-push-tokens-secret": "shh" });
+    expect(calls[1]!.url).toBe("https://exp.host/--/api/v2/push/send");
+    expect(calls[1]!.body).toEqual([
+      {
+        to: "ExponentPushToken[a]",
+        title: "🙋 someone needs you",
+        body: "help me", // first line only
+        sound: "default",
+        data: { sessionId: "s-42" },
+      },
+      {
+        to: "ExponentPushToken[b]",
+        title: "🙋 someone needs you",
+        body: "help me",
+        sound: "default",
+        data: { sessionId: "s-42" },
+      },
+    ]);
+  });
+
+  test("token-endpoint failure → 0, never throws (handoff unaffected)", async () => {
+    const { calls, fetchImpl } = capture("fail");
+    const env = fakeEnv({ PUSH_TOKENS_URL: "https://cloud.test/x" });
+    expect(await pushToApp(env, "t", "s", "text", fetchImpl)).toBe(0);
+    expect(calls.some((c) => c.url.includes("exp.host"))).toBe(false);
+  });
+
+  test("no registered devices → 0, no exp.host call", async () => {
+    const { calls, fetchImpl } = capture([]);
+    const env = fakeEnv({ PUSH_TOKENS_URL: "https://cloud.test/x" });
+    expect(await pushToApp(env, "t", "s", "text", fetchImpl)).toBe(0);
+    expect(calls.some((c) => c.url.includes("exp.host"))).toBe(false);
+  });
+});
+
+// ── handoff integration: ring seed + app push + Telegram mention skip ────────
+describe("handoff → push + mention skip (integration)", () => {
+  test("[!HANDOFF]: history seeds the ring, app op pushed (not @mentioned), tg op mentioned", async () => {
+    const env = wireSessionNS(
+      fakeEnv({
+        TELEGRAM_BOT_TOKEN: "tok",
+        TELEGRAM_CHAT_ID: "-100",
+        PUSH_TOKENS_URL: "https://cloud.test/internal/push-tokens",
+        PUSH_TOKENS_SECRET: "shh",
+        AI: { run: async () => ({ response: "One sec. [!HANDOFF]" }) } as unknown as Ai,
+      }),
+    );
+    // one Telegram operator + one app operator already known
+    await upsertOperator(env, "self", { id: 777, username: "tgop" });
+    await upsertOperator(env, "self", { id: 0, name: "AppOp", channel: "app" });
+
+    // capture every outbound fetch: Telegram, the push-token fetch, exp.host
+    const calls: { url: string; body: any }[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes("push-tokens")) return Response.json({ tokens: ["ExponentPushToken[x]"] });
+      return Response.json({ ok: true, result: { message_thread_id: 9 } });
+    }) as typeof fetch;
+    try {
+      const res = await worker.fetch(
+        new Request("https://edge.test/api/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId: "s-esc",
+            tenantId: "self",
+            message: "I need a human",
+            history: [
+              { role: "user", content: "earlier question" },
+              { role: "assistant", content: "earlier answer" },
+            ],
+          }),
+        }),
+        env,
+      );
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { handoff: boolean }).handoff).toBe(true);
+    } finally {
+      globalThis.fetch = orig;
+    }
+
+    // 1. the LOUD Telegram alert mentions the tg operator, NOT the app operator
+    const alert = calls.find(
+      (c) => c.url.includes("sendMessage") && c.body?.disable_notification === false,
+    );
+    expect(alert).toBeDefined();
+    expect(alert!.body.text).toContain("@tgop");
+    expect(alert!.body.text).not.toContain("AppOp");
+
+    // 2. the app got the push instead — one Expo message with the deep-link payload
+    const push = calls.find((c) => c.url.includes("exp.host"));
+    expect(push).toBeDefined();
+    expect(push!.body).toEqual([
+      {
+        to: "ExponentPushToken[x]",
+        title: "🙋 someone needs you",
+        body: "I need a human",
+        sound: "default",
+        data: { sessionId: "s-esc" },
+      },
+    ]);
+
+    // 3. the ring was seeded from history + this turn appended (thread read = §3c)
+    const thread = await worker.fetch(
+      new Request("https://edge.test/api/operator/thread", {
+        method: "POST",
+        body: JSON.stringify({ tenantId: "self", sessionId: "s-esc" }),
+      }),
+      env,
+    );
+    const { messages } = (await thread.json()) as { messages: RingMsg[] };
+    expect(messages.map((m) => [m.role, m.text])).toEqual([
+      ["visitor", "earlier question"],
+      ["ai", "earlier answer"],
+      ["visitor", "I need a human"],
+      ["ai", "One sec."],
+    ]);
   });
 });

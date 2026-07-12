@@ -8,6 +8,11 @@ declare global {
   interface KVNamespace {
     get(key: string): Promise<string | null>;
     put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+    list(opts?: {
+      prefix?: string;
+      cursor?: string;
+      limit?: number;
+    }): Promise<{ keys: { name: string }[]; list_complete: boolean; cursor?: string }>;
   }
 
   interface DurableObjectId {
@@ -25,8 +30,8 @@ declare global {
     put(key: string, value: unknown): Promise<void>;
   }
   interface DurableObjectState {
-    acceptWebSocket(ws: WebSocket): void;
-    getWebSockets(): WebSocket[];
+    acceptWebSocket(ws: WebSocket, tags?: string[]): void;
+    getWebSockets(tag?: string): WebSocket[];
     readonly storage: DurableObjectStorage;
   }
 

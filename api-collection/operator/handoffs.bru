@@ -1,0 +1,34 @@
+meta {
+  name: Operator - handoff inbox
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/operator/handoffs
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "tenantId": "self"
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns the conversations list", function() {
+    expect(res.getBody().conversations).to.be.an("array");
+  });
+}
+
+docs {
+  The operator app's inbox: every handed-off session for the tenant, newest activity
+  first, each with a `lastMessage` preview from the session's ring buffer. No dedicated
+  handoff index exists — the Worker scans the session→thread KV map (first page, 1000
+  sessions) and asks each SessionDO for a one-shot summary. Missing `tenantId` → 400.
+  Response: `{ conversations: [{ sessionId, lastMessage, handedOff: true, ts }] }`.
+}

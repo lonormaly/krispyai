@@ -1,0 +1,35 @@
+meta {
+  name: Operator - read one thread
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/operator/thread
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "tenantId": "self",
+    "sessionId": "sess-demo-1"
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns the messages array", function() {
+    expect(res.getBody().messages).to.be.an("array");
+  });
+}
+
+docs {
+  One session's messages from the SessionDO's 20-message ring buffer (visitor msgs, AI
+  replies, operator replies) — zero Telegram round-trips. The ring holds the last 20
+  turns; on handoff it is seeded from the history the widget re-sends on /api/chat.
+  Missing `tenantId`/`sessionId` → 400. Response:
+  `{ messages: [{ role: "visitor" | "ai" | "operator", text, ts }] }`.
+}

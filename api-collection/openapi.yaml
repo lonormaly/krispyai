@@ -194,6 +194,9 @@ paths:
         A WebSocket upgrade request; the Worker forwards it to the `(tenant, session)` DO. The
         visitor receives `{ type: "ready", handedOff }` on connect, then `operator` / `handoff`
         / `resume` events. Not a normal JSON response — this row documents the upgrade contract.
+        With `role=operator` the DO tags the socket as an operator's (the Buttr app's in-thread
+        live channel) — it receives the same full event union; the tag exists so operator-only
+        events can be added without touching the visitor fan-out.
       security: [] # public — no auth
       parameters:
         - name: id
@@ -202,6 +205,11 @@ paths:
           schema: { type: string }
           description: The visitor's session id.
         - $ref: "#/components/parameters/Tenant"
+        - name: role
+          in: query
+          required: false
+          schema: { type: string, enum: [operator] }
+          description: Tag the socket as an operator's (Buttr app). Omit for the visitor widget.
         - name: Upgrade
           in: header
           required: true
@@ -211,6 +219,106 @@ paths:
           description: Switching Protocols — WebSocket established (handled by the DO).
         "426":
           description: Upgrade Required — the request was not a WebSocket upgrade.
+
+  /api/operator/reply:
+    post:
+      tags: [public]
+      summary: Operator app reply into a live visitor thread
+      operationId: operatorReply
+      description: >
+        The Buttr operator app's reply — the second trigger of the same SessionDO handoff spine
+        Telegram uses. Sets `handedOff`, appends the reply to the session's 20-message ring
+        buffer, and broadcasts `{ type: "operator", text }` to the visitor's WebSocket. The
+        replying operator is learned with `channel: 'app'`, so the Telegram handoff @mention
+        skips them (they get the push instead). Metered as a handoff. Auth model: the app
+        bearer-auths against the cloud services/api and passes `tenantId`; in-Worker bearer
+        verification is day-2 hardening.
+      security: [] # tonight — see auth note in the description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperatorReplyRequest" }
+      responses:
+        "200":
+          description: Delivered to the session's DO (visitor sockets notified).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, delivered]
+                properties:
+                  ok: { type: boolean, const: true }
+                  delivered: { type: boolean, const: true }
+        "400":
+          description: Missing `tenantId`, `sessionId` or `text`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/operator/handoffs:
+    post:
+      tags: [public]
+      summary: Operator app inbox — the tenant's handed-off sessions
+      operationId: operatorHandoffs
+      description: >
+        Every handed-off session for the tenant, newest activity first, each with a
+        `lastMessage` preview from the session's ring buffer. No dedicated handoff index
+        exists — the Worker scans the session→thread KV map (first page, 1000 sessions) and
+        asks each SessionDO for a one-shot summary.
+      security: [] # tonight — see /api/operator/reply auth note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId: { type: string }
+      responses:
+        "200":
+          description: The inbox list.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorHandoffsResponse" }
+        "400":
+          description: Missing `tenantId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/operator/thread:
+    post:
+      tags: [public]
+      summary: One session's messages from the DO ring buffer
+      operationId: operatorThread
+      description: >
+        The session's last 20 messages (visitor / AI / operator) from the SessionDO ring
+        buffer — zero Telegram round-trips. On handoff the ring is seeded from the history
+        the widget re-sends on `/api/chat`, so pre-handoff turns are present.
+      security: [] # tonight — see /api/operator/reply auth note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, sessionId]
+              properties:
+                tenantId: { type: string }
+                sessionId: { type: string }
+      responses:
+        "200":
+          description: The thread messages, oldest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorThreadResponse" }
+        "400":
+          description: Missing `tenantId` or `sessionId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/telegram/webhook:
     post:
@@ -384,6 +492,56 @@ components:
       properties:
         role: { type: string, enum: [user, assistant, system] }
         content: { type: string }
+
+    RingMessage:
+      type: object
+      required: [role, text, ts]
+      description: One entry of the SessionDO's 20-message ring buffer.
+      properties:
+        role: { type: string, enum: [visitor, ai, operator] }
+        text: { type: string }
+        ts:
+          type: integer
+          description: Unix epoch millis, stamped at append time.
+
+    OperatorReplyRequest:
+      type: object
+      required: [tenantId, sessionId, text]
+      properties:
+        tenantId: { type: string }
+        sessionId: { type: string }
+        text: { type: string, minLength: 1 }
+        operatorName:
+          type: string
+          description: Display name learned onto the tenant's operator list (channel 'app').
+
+    OperatorHandoffsResponse:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          description: Newest activity first.
+          items:
+            type: object
+            required: [sessionId, lastMessage, handedOff, ts]
+            properties:
+              sessionId: { type: string }
+              lastMessage:
+                type: [string, "null"]
+                description: The ring-buffer tail (null when the ring is empty).
+              handedOff: { type: boolean, const: true }
+              ts:
+                type: [integer, "null"]
+                description: Epoch millis of the last message (null when the ring is empty).
+
+    OperatorThreadResponse:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/RingMessage" }
 
     ChatRequest:
       type: object

@@ -1,0 +1,41 @@
+meta {
+  name: Operator - reply into a live thread
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/operator/reply
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "tenantId": "self",
+    "sessionId": "sess-demo-1",
+    "text": "Hi, a human here — how can I help?",
+    "operatorName": "Dana"
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("acknowledges delivery", function() {
+    const b = res.getBody();
+    expect(b.ok).to.equal(true);
+    expect(b.delivered).to.equal(true);
+  });
+}
+
+docs {
+  The Buttr operator app's reply into a live visitor thread — the second trigger of the
+  same SessionDO handoff spine Telegram uses. Sets `handedOff`, appends the reply to the
+  session's 20-message ring buffer, and broadcasts `{ type: "operator", text }` to the
+  visitor's WebSocket. The replying operator is learned with `channel: 'app'` so the
+  Telegram handoff @mention skips them (they get the push instead). Metered as a handoff.
+  Missing `tenantId`/`sessionId`/`text` → 400. Auth: the app bearer-auths against the
+  cloud services/api and passes `tenantId`; in-Worker bearer verification is day-2.
+}

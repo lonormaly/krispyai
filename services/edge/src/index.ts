@@ -7,7 +7,10 @@
 //   POST /api/chat                     visitor msg → AI + mirror to Telegram topic
 //   POST /api/contact                  [!HANDOFF] contact-capture → owner's topic
 //   POST /api/telegram/webhook         owner replies in a topic → push to visitor
-//   GET  /api/session/:id/ws           visitor's live channel (→ SessionDO)
+//   POST /api/operator/reply           operator app reply → visitor (same DO spine)
+//   POST /api/operator/handoffs        operator app inbox (handed-off sessions)
+//   POST /api/operator/thread          one session's ring-buffer messages
+//   GET  /api/session/:id/ws           live channel (→ SessionDO; ?role=operator tags)
 //   GET  /api/usage?t=<tenant>         metering readout (plan/usage hooks)
 //   GET  /health
 import type { ChatMessage } from "./ai";
@@ -16,6 +19,7 @@ import { chatFlow } from "./chat";
 import { SessionDO } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
 import { parseOwnerReply, createForumTopic, sendToTopic, sendHandoffAlert } from "./telegram";
+import { pushToApp } from "./push";
 import { renderLeadEmail, sendLeadEmail } from "./email";
 import type { Connector, Env, FormSpec, TenantConfig } from "./types";
 import {
@@ -95,6 +99,12 @@ export default {
     if (request.method === "POST" && path === "/api/lead") return handleLead(request, env);
     if (request.method === "POST" && path === "/api/telegram/webhook")
       return handleWebhook(request, env);
+    if (request.method === "POST" && path === "/api/operator/reply")
+      return handleOperatorReply(request, env);
+    if (request.method === "POST" && path === "/api/operator/handoffs")
+      return handleOperatorHandoffs(request, env);
+    if (request.method === "POST" && path === "/api/operator/thread")
+      return handleOperatorThread(request, env);
     if (request.method === "POST" && path === "/api/billing/entitlement")
       return handleEntitlementSync(request, env);
     if (request.method === "GET" && path === "/api/tenant/config")
@@ -106,6 +116,8 @@ export default {
     if (request.method === "GET" && path === "/api/usage") return handleUsage(request, env);
 
     // GET /api/session/:sessionId/ws  → forward the upgrade to the session's DO.
+    // The full request (query string included) is forwarded, so ?role=operator
+    // rides through to the DO's socket tagging (§3d) with no extra plumbing here.
     const ws = path.match(/^\/api\/session\/([^/]+)\/ws$/);
     if (ws) {
       if (request.headers.get("Upgrade") !== "websocket") {
@@ -176,16 +188,48 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     { sessionId: body.sessionId, message: body.message.trim() },
   );
 
+  // Mirror the turn into the session's ring buffer (operator-app inbox preview +
+  // thread read) — best-effort, same posture as the Telegram mirror. On handoff,
+  // seed the ring from the widget's re-sent history FIRST (the DO no-ops the seed
+  // unless the ring is still empty), so pre-ring turns aren't lost.
+  {
+    const seed = result.handoff
+      ? (body.history ?? [])
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+          .map((m) => ({ role: m.role === "user" ? "visitor" : "ai", text: m.content }))
+      : [];
+    const turn: { role: "visitor" | "ai"; text: string }[] = [
+      { role: "visitor", text: body.message.trim() },
+    ];
+    if (result.reply) turn.push({ role: "ai", text: result.reply });
+    if (seed.length) {
+      await doFetch(env, tenantId, body.sessionId, "https://do/log", {
+        method: "POST",
+        body: JSON.stringify({ messages: seed, seed: true }),
+      }).catch((e) => console.error("ring seed failed (best-effort):", e));
+    }
+    await doFetch(env, tenantId, body.sessionId, "https://do/log", {
+      method: "POST",
+      body: JSON.stringify({ messages: turn }),
+    }).catch((e) => console.error("ring mirror failed (best-effort):", e));
+  }
+
   // If the AI escalated, nudge the visitor's browser to open contact capture AND fire
   // the ONE loud handoff alert into the topic — @mentioning the tenant's operators so a
   // human's phone buzzes (routine mirrors above are all silent). No operators known yet →
   // the alert still posts, just without a mention (fallback path).
   if (result.handoff) {
     await doFetch(env, tenantId, body.sessionId, "https://do/handoff", { method: "POST" });
+    // Wake the Buttr operator app — the push channel parallel to the Telegram alert.
+    // Deliberately OUTSIDE the tenant/Telegram guard (an app-only tenant has no
+    // Telegram config) and failure-tolerant by contract (push.ts never throws).
+    await pushToApp(env, tenantId, body.sessionId, body.message.trim());
     if (tenant) {
       const threadId = await getThreadForSession(env, tenantId, body.sessionId);
       if (threadId) {
-        const operators = await getOperators(env, tenantId);
+        // 'app' operators get the push above — skip them here so they aren't
+        // double-pinged (push + Telegram @mention). Absent channel = telegram.
+        const operators = (await getOperators(env, tenantId)).filter((o) => o.channel !== "app");
         await sendHandoffAlert(
           tenant.botToken,
           tenant.chatId,
@@ -346,6 +390,88 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     await meter(env, tenantId, "handoff");
   }
   return new Response("ok");
+}
+
+// ── operator app routes (Buttr) ──────────────────────────────────────────────
+// The native operator app's surface onto the SAME SessionDO handoff spine Telegram
+// uses — a second trigger, zero Telegram interference. Auth model (buttr-app-plan
+// §3/§4): the app bearer-auths against the cloud services/api and passes tenantId;
+// in-Worker bearer verification is day-2 hardening (tonight the app is the only caller).
+
+// ponytail: single app-operator sentinel id per tenant (Operator.id is a Telegram
+// numeric id; the app has none). Per-operator ids when the app grows multi-operator auth.
+const APP_OPERATOR_ID = 0;
+
+// POST /api/operator/reply { tenantId, sessionId, text, operatorName? }
+// → visitor's widget receives { type: "operator", text } over its existing WS.
+async function handleOperatorReply(request: Request, env: Env): Promise<Response> {
+  const b = (await request.json().catch(() => null)) as {
+    tenantId?: string;
+    sessionId?: string;
+    text?: string;
+    operatorName?: string;
+  } | null;
+  if (!b?.tenantId || !b.sessionId || !b.text?.trim()) {
+    return json(env, { error: "tenantId, sessionId and text required" }, 400);
+  }
+  // Learn the app operator (channel:'app' → the Telegram @mention path skips them).
+  await upsertOperator(env, b.tenantId, {
+    id: APP_OPERATOR_ID,
+    name: b.operatorName,
+    channel: "app",
+  });
+  await doFetch(env, b.tenantId, b.sessionId, "https://do/operator", {
+    method: "POST",
+    body: JSON.stringify({ text: b.text.trim() }),
+  });
+  await meter(env, b.tenantId, "handoff");
+  return json(env, { ok: true, delivered: true });
+}
+
+// POST /api/operator/handoffs { tenantId } → the operator app's inbox.
+// No dedicated handoff index exists — the session→thread KV map doubles as the
+// session index; each session's DO answers one /summary (handoff flag + ring tail).
+// ponytail: first KV page only (1000 sessions) + one DO subrequest per session —
+// fine for an operator inbox; add a real handoff index if a tenant outgrows it.
+async function handleOperatorHandoffs(request: Request, env: Env): Promise<Response> {
+  const b = (await request.json().catch(() => null)) as { tenantId?: string } | null;
+  if (!b?.tenantId) return json(env, { error: "tenantId required" }, 400);
+  const tenantId = b.tenantId;
+  const prefix = `session:${tenantId}:`;
+  const list = await env.KRISPY_KV.list({ prefix });
+  const rows = await Promise.all(
+    list.keys.map(async ({ name }) => {
+      const sessionId = name.slice(prefix.length);
+      const r = await doFetch(env, tenantId, sessionId, "https://do/summary");
+      const s = (await r.json()) as {
+        handedOff: boolean;
+        lastMessage: string | null;
+        ts: number | null;
+      };
+      return s.handedOff
+        ? { sessionId, lastMessage: s.lastMessage, handedOff: true as const, ts: s.ts }
+        : null;
+    }),
+  );
+  const conversations = rows
+    .filter((c): c is NonNullable<typeof c> => c !== null)
+    // eslint-disable-next-line unicorn/no-array-sort -- rows is local; in-place sort is fine (toSorted needs a newer TS lib)
+    .sort((a, z) => (z.ts ?? 0) - (a.ts ?? 0)); // newest activity first
+  return json(env, { conversations });
+}
+
+// POST /api/operator/thread { tenantId, sessionId } → the session's ring buffer.
+async function handleOperatorThread(request: Request, env: Env): Promise<Response> {
+  const b = (await request.json().catch(() => null)) as {
+    tenantId?: string;
+    sessionId?: string;
+  } | null;
+  if (!b?.tenantId || !b.sessionId) {
+    return json(env, { error: "tenantId and sessionId required" }, 400);
+  }
+  const r = await doFetch(env, b.tenantId, b.sessionId, "https://do/log");
+  const { messages } = (await r.json()) as { messages: unknown[] };
+  return json(env, { messages });
 }
 
 // ── POST /api/billing/entitlement ──────────────────────────────────────────

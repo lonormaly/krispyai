@@ -129,8 +129,13 @@ export async function upsertOperator(env: Env, tenantId: string, op: Operator): 
   const list = cfg.operators ?? [];
   const i = list.findIndex((o) => o.id === op.id);
   if (i >= 0) {
-    // Already known — refresh name/username only if they actually changed (skip the write otherwise).
-    if (list[i]!.name === op.name && list[i]!.username === op.username) return;
+    // Already known — refresh name/username/channel only if they actually changed (skip the write otherwise).
+    if (
+      list[i]!.name === op.name &&
+      list[i]!.username === op.username &&
+      list[i]!.channel === op.channel
+    )
+      return;
     list[i] = op;
   } else {
     list.push(op);

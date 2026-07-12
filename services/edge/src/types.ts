@@ -110,6 +110,12 @@ export interface Env {
    * a build-time default is used when unset — DOs aren't publicly addressable). */
   DO_INTERNAL_SECRET?: string;
 
+  // --- operator-app push (Buttr; optional — unset → pushToApp no-ops) ---
+  /** Cloud endpoint returning a tenant's Expo push tokens (see push.ts contract). */
+  PUSH_TOKENS_URL?: string;
+  /** Shared secret sent as x-push-tokens-secret on the token fetch. */
+  PUSH_TOKENS_SECRET?: string;
+
   // --- lead email (Feature A; optional — no key → email delivery no-ops) ---
   /** Resend API key for lead-email delivery (reuses the cloud's existing key). */
   RESEND_API_KEY?: string;
