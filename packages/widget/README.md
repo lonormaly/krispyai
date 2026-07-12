@@ -23,6 +23,7 @@ bucket) and drop one tag on any page:
 | `data-tenant` | no       | `self`         | tenant id (multi-tenant SaaS uses this)              |
 | `data-title`  | no       | `Chat with us` | header text                                          |
 | `data-accent` | no       | `#e39a2b`      | brand color (used before the KV `theme` fetch lands) |
+| `data-position` | no     | `br`           | launcher corner: `br` (bottom-right) or `bl` (bottom-left) |
 
 ## The loop
 

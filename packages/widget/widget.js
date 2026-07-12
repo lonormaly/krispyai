@@ -18,6 +18,9 @@
     tenant: (script && script.getAttribute("data-tenant")) || "self",
     title: (script && script.getAttribute("data-title")) || "Chat with us",
     accent: (script && script.getAttribute("data-accent")) || "#e39a2b",
+    // "bl" = bottom-left, anything else = bottom-right (default). The boot-fetch
+    // theme.position still overrides this at runtime.
+    position: (script && script.getAttribute("data-position")) || "br",
   };
   if (!cfg.api) return console.error("[krispy] missing data-api on <script>");
 
@@ -57,7 +60,10 @@
 
   // ── UI (Shadow DOM) ─────────────────────────────────────────────────────
   var host = document.createElement("div");
-  host.style.cssText = "position:fixed;bottom:20px;right:20px;left:auto;z-index:2147483000";
+  host.style.cssText =
+    cfg.position === "bl"
+      ? "position:fixed;bottom:20px;left:20px;right:auto;z-index:2147483000"
+      : "position:fixed;bottom:20px;right:20px;left:auto;z-index:2147483000";
   document.body.appendChild(host);
   var root = host.attachShadow({ mode: "open" });
   // Theme lives in :host custom properties → defaults render with NO fetch; the
