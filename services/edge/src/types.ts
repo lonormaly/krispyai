@@ -70,6 +70,10 @@ export interface Operator {
   id: number;
   name?: string;
   username?: string;
+  /** Which channel this operator works from. Absent = 'telegram' (back-compat —
+   * every pre-existing KV row has no channel). 'app' operators are skipped by the
+   * Telegram @mention path so they aren't double-pinged (push + mention). */
+  channel?: "telegram" | "app";
 }
 
 export interface Env {
