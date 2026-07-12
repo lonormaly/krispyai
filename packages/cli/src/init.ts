@@ -46,7 +46,7 @@ async function connectTelegram(): Promise<void> {
     const token = bail(
       await p.password({
         message: "Paste your bot token",
-        validate: (v) => (v.trim() ? undefined : "Token can't be empty"),
+        validate: (v) => (v?.trim() ? undefined : "Token can't be empty"),
       }),
     ).trim();
     const s = p.spinner();
@@ -75,7 +75,7 @@ async function connectTelegram(): Promise<void> {
     await p.text({
       message: "Group chat id",
       placeholder: "-1001234567890",
-      validate: (v) => (v.trim() ? undefined : "Chat id can't be empty"),
+      validate: (v) => (v?.trim() ? undefined : "Chat id can't be empty"),
     }),
   ).trim();
   await postTenantConfig({ chatId });
@@ -107,7 +107,7 @@ async function trainBot(): Promise<void> {
         await p.text({
           message: "Path to your knowledge-base file",
           placeholder: "./kbase.md",
-          validate: (v) => (v.trim() ? undefined : "Path can't be empty"),
+          validate: (v) => (v?.trim() ? undefined : "Path can't be empty"),
         }),
       ).trim();
       try {
