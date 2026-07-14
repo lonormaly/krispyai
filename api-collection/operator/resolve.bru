@@ -10,6 +10,10 @@ post {
   auth: none
 }
 
+headers {
+  Authorization: Bearer {{operatorToken}}
+}
+
 body:json {
   {
     "tenantId": "self",
@@ -28,6 +32,11 @@ tests {
 }
 
 docs {
+  Auth (in-Worker, enforced): send the operator app's bearer (`Authorization: Bearer
+  <session token>` — verified against the cloud API's GET /me; the resolved user.id must
+  equal `tenantId`, else 403) OR the server-to-server `x-tenant-sync-secret`. No/invalid
+  credentials → 401. Verified bearers are cached in-isolate for 60s.
+
   Toggle a session's `resolved` flag (operator inbox hygiene). Resolving ALSO hands the
   session back to the AI: `handedOff` flips false and `{ type: "resume" }` is broadcast
   to the session's WebSockets, so the bot answers the visitor's next message. Resolved

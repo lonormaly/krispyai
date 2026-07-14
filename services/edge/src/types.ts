@@ -107,8 +107,14 @@ export interface Env {
   AI_API_KEY?: string;
   /** Shared secret guarding POST /api/billing/entitlement (billing → gate push). */
   BILLING_SYNC_SECRET?: string;
-  /** Shared secret guarding /api/tenant/config (dashboard → tenant-config sync). */
+  /** Shared secret guarding /api/tenant/config (dashboard → tenant-config sync).
+   * ALSO accepted on /api/operator/* as the server-to-server credential
+   * (x-tenant-sync-secret — see operator-auth.ts). */
   TENANT_SYNC_SECRET?: string;
+  /** Origin of the cloud API that verifies operator bearers (GET /me), e.g.
+   * https://api.krispyai.com. Unset → operator bearer auth fails closed (a
+   * self-host without the operator app doesn't need it). Var, not secret. */
+  API_ORIGIN?: string;
   /** Shared secret the Worker attaches to internal Worker→SessionDO calls (rotatable;
    * a build-time default is used when unset — DOs aren't publicly addressable). */
   DO_INTERNAL_SECRET?: string;

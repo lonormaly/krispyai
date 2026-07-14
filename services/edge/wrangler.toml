@@ -34,6 +34,11 @@ id = "120c1cccc84c455eab7b9e30ca346379" # `bunx wrangler kv namespace create KRI
 ALLOWED_ORIGIN = "*" # lock to your site origin in production
 # AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # SYSTEM_PROMPT = "You are ..."
+# Cloud API origin that verifies operator bearer tokens (GET /me) for the
+# /api/operator/* routes + the ?role=operator WS upgrade. Unset → operator
+# bearer auth FAILS CLOSED (self-host without the Buttr app doesn't need it).
+# Local dev: point at your local cloud API (e.g. via portless). NEVER a secret.
+# API_ORIGIN = "http://api.krispy.localhost:1355"
 
 # ── deploy environments ──────────────────────────────────────────────────────
 # Two isolated Workers, one per env — a deploy targets one with `wrangler deploy
@@ -55,6 +60,9 @@ binding = "KRISPY_KV"
 id = "a018c2ee187c4617ac218f06b83efe97" # `bunx wrangler kv namespace create KRISPY_KV_preview`
 [env.preview.vars]
 ALLOWED_ORIGIN = "*"
+# Set to the preview cloud API's URL (workers.dev URL differs per account —
+# same posture as EDGE_PREVIEW_URL in deploy.sh). Unset = bearer auth fails closed.
+# API_ORIGIN = "https://<your-preview-api>.workers.dev"
 
 [env.production]
 name = "krispy-edge"
@@ -71,6 +79,7 @@ binding = "KRISPY_KV"
 id = "727ff93f7785455ba71745b160dd4809" # `bunx wrangler kv namespace create KRISPY_KV_production`
 [env.production.vars]
 ALLOWED_ORIGIN = "*" # lock to your site origin in production
+API_ORIGIN = "https://api.krispyai.com" # prod cloud API (operator bearer verification)
 # Custom domain edge.krispyai.com is attached in the CF dashboard (Workers →
 # Settings → Domains) AFTER the first deploy — not here, since the krispyai.com
 # zone lands in CF only once the NS transfer completes. Once attached, uncomment:

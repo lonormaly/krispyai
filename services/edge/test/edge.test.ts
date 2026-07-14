@@ -21,6 +21,12 @@ import {
   type RingMsg,
 } from "../src/session-do";
 import { pushToApp } from "../src/push";
+import {
+  authorizeOperator,
+  verifyBearer,
+  _authCache,
+  AUTH_CACHE_TTL_MS,
+} from "../src/operator-auth";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
   chatFlow,
@@ -1228,7 +1234,13 @@ describe("telegram /done hand-back", () => {
   }
 
   test("'/done' resolves + hands back, acks in the topic, never reaches the visitor", async () => {
-    const env = wireSessionNS(fakeEnv({ TELEGRAM_BOT_TOKEN: "tok", TELEGRAM_CHAT_ID: "-100" }));
+    const env = wireSessionNS(
+      fakeEnv({
+        TELEGRAM_BOT_TOKEN: "tok",
+        TELEGRAM_CHAT_ID: "-100",
+        TENANT_SYNC_SECRET: OP_SECRET,
+      }),
+    );
     await linkThreadSession(env, "self", 9, "s-tg");
     // hand off via a real operator reply first
     await webhookSend(env, "a human is here now");
@@ -1252,6 +1264,7 @@ describe("telegram /done hand-back", () => {
       const thread = await worker.fetch(
         new Request("https://edge.test/api/operator/thread", {
           method: "POST",
+          headers: { "x-tenant-sync-secret": OP_SECRET },
           body: JSON.stringify({ tenantId: "self", sessionId: "s-tg" }),
         }),
         env,
@@ -1273,7 +1286,13 @@ describe("telegram /done hand-back", () => {
   });
 
   test("'resolved' (case-insensitive) works too; normal replies still forward", async () => {
-    const env = wireSessionNS(fakeEnv({ TELEGRAM_BOT_TOKEN: "tok", TELEGRAM_CHAT_ID: "-100" }));
+    const env = wireSessionNS(
+      fakeEnv({
+        TELEGRAM_BOT_TOKEN: "tok",
+        TELEGRAM_CHAT_ID: "-100",
+        TENANT_SYNC_SECRET: OP_SECRET,
+      }),
+    );
     await linkThreadSession(env, "self", 9, "s-tg2");
     await webhookSend(env, "taking this");
     const orig = globalThis.fetch;
@@ -1296,12 +1315,22 @@ describe("telegram /done hand-back", () => {
 });
 
 // ── operator app routes (Buttr §3a–§3c) ──────────────────────────────────────
+// These exercise the route logic via the server-to-server credential (the
+// tenant-sync secret); the bearer/401/403 matrix has its own suite below.
+const OP_SECRET = "op-sync-secret";
+const opEnv = (extra: Partial<Env> = {}) =>
+  wireSessionNS(fakeEnv({ TENANT_SYNC_SECRET: OP_SECRET, ...extra }));
+
 describe("operator app routes", () => {
   const post = (path: string, body: unknown) =>
-    new Request(`https://edge.test${path}`, { method: "POST", body: JSON.stringify(body) });
+    new Request(`https://edge.test${path}`, {
+      method: "POST",
+      headers: { "x-tenant-sync-secret": OP_SECRET },
+      body: JSON.stringify(body),
+    });
 
   test("POST /api/operator/reply → DO operator broadcast + ring + app operator learned + metered", async () => {
-    const env = wireSessionNS(fakeEnv());
+    const env = opEnv();
     const res = await worker.fetch(
       post("/api/operator/reply", {
         tenantId: "acme",
@@ -1327,7 +1356,7 @@ describe("operator app routes", () => {
   });
 
   test("reply/thread/handoffs with missing fields → 400", async () => {
-    const env = wireSessionNS(fakeEnv());
+    const env = opEnv();
     for (const [path, body] of [
       ["/api/operator/reply", { tenantId: "a", sessionId: "s" }], // no text
       ["/api/operator/reply", { sessionId: "s", text: "x" }], // no tenant
@@ -1341,7 +1370,7 @@ describe("operator app routes", () => {
   });
 
   test("POST /api/operator/handoffs lists ONLY handed-off sessions of the tenant, with preview", async () => {
-    const env = wireSessionNS(fakeEnv());
+    const env = opEnv();
     // three known sessions (the session→thread KV map is the index)
     await linkThreadSession(env, "acme", 1, "s-live");
     await linkThreadSession(env, "acme", 2, "s-quiet");
@@ -1366,7 +1395,7 @@ describe("operator app routes", () => {
   });
 
   test("resolve drops a session from the default inbox; includeResolved returns it; a new visitor message revives it", async () => {
-    const env = wireSessionNS(fakeEnv());
+    const env = opEnv();
     await linkThreadSession(env, "self", 1, "s-live");
     await worker.fetch(
       post("/api/operator/reply", { tenantId: "self", sessionId: "s-live", text: "done!" }),
@@ -1416,12 +1445,210 @@ describe("operator app routes", () => {
   });
 
   test("thread of an untouched session → empty messages", async () => {
-    const env = wireSessionNS(fakeEnv());
+    const env = opEnv();
     const res = await worker.fetch(
       post("/api/operator/thread", { tenantId: "acme", sessionId: "nope" }),
       env,
     );
     expect(await res.json()).toEqual({ messages: [] });
+  });
+});
+
+// ── operator-surface auth (bearer via cloud /me + secret + WS ?auth) ─────────
+describe("operator route auth", () => {
+  const API = "https://api.test";
+
+  /** fetch fake standing in for the cloud API: GET /me → the given user id (or 401). */
+  function meFetch(userId: string | null) {
+    const calls: { url: string; auth: string | null }[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        auth: (init?.headers as Record<string, string>)?.authorization ?? null,
+      });
+      return userId ? Response.json({ id: userId }) : new Response("unauthorized", { status: 401 });
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  }
+
+  const req = (headers: Record<string, string> = {}) =>
+    new Request("https://edge.test/api/operator/reply", { method: "POST", headers });
+
+  test("no credentials → 401", async () => {
+    _authCache.clear();
+    const env = fakeEnv({ API_ORIGIN: API });
+    expect(await authorizeOperator(req(), env, "acme")).toEqual({
+      status: 401,
+      error: "authorization required",
+    });
+  });
+
+  test("invalid bearer (cloud /me 401) → 401", async () => {
+    _authCache.clear();
+    const { fetchImpl } = meFetch(null);
+    const env = fakeEnv({ API_ORIGIN: API });
+    const denied = await authorizeOperator(req(), env, "acme", "bad-token", fetchImpl);
+    expect(denied?.status).toBe(401);
+  });
+
+  test("valid bearer for ANOTHER tenant → 403 (the live curl hole, closed)", async () => {
+    _authCache.clear();
+    const { fetchImpl } = meFetch("mallory");
+    const env = fakeEnv({ API_ORIGIN: API });
+    const denied = await authorizeOperator(req(), env, "acme", "mallorys-token", fetchImpl);
+    expect(denied).toEqual({ status: 403, error: "token does not match tenantId" });
+  });
+
+  test("valid bearer for the claimed tenant → allowed; token forwarded to /me", async () => {
+    _authCache.clear();
+    const { calls, fetchImpl } = meFetch("acme");
+    const env = fakeEnv({ API_ORIGIN: API });
+    expect(await authorizeOperator(req(), env, "acme", "tok-1", fetchImpl)).toBeNull();
+    expect(calls).toEqual([{ url: `${API}/me`, auth: "Bearer tok-1" }]);
+  });
+
+  test("cache: second verification within the TTL costs zero /me subrequests", async () => {
+    _authCache.clear();
+    const { calls, fetchImpl } = meFetch("acme");
+    const env = fakeEnv({ API_ORIGIN: API });
+    expect(await verifyBearer(env, "tok-c", fetchImpl)).toBe("acme");
+    expect(await verifyBearer(env, "tok-c", fetchImpl)).toBe("acme");
+    expect(calls).toHaveLength(1);
+    // and the entry carries the 60s TTL
+    expect(_authCache.get("tok-c")!.exp).toBeGreaterThan(Date.now());
+    expect(AUTH_CACHE_TTL_MS).toBe(60_000);
+  });
+
+  test("expired cache entry → re-verified against /me", async () => {
+    _authCache.clear();
+    const { calls, fetchImpl } = meFetch("acme");
+    const env = fakeEnv({ API_ORIGIN: API });
+    await verifyBearer(env, "tok-e", fetchImpl);
+    _authCache.get("tok-e")!.exp = Date.now() - 1; // force expiry
+    await verifyBearer(env, "tok-e", fetchImpl);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("no API_ORIGIN → bearer auth fails CLOSED (401), zero fetches", async () => {
+    _authCache.clear();
+    const { calls, fetchImpl } = meFetch("acme");
+    const denied = await authorizeOperator(req(), fakeEnv(), "acme", "tok", fetchImpl);
+    expect(denied?.status).toBe(401);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("/me network failure → 401, not a throw", async () => {
+    _authCache.clear();
+    const boom = (async () => {
+      throw new Error("net down");
+    }) as unknown as typeof fetch;
+    const env = fakeEnv({ API_ORIGIN: API });
+    const denied = await authorizeOperator(req(), env, "acme", "tok", boom);
+    expect(denied?.status).toBe(401);
+  });
+
+  test("x-tenant-sync-secret (server-to-server) → allowed for any tenant, no /me call", async () => {
+    _authCache.clear();
+    const { calls, fetchImpl } = meFetch(null);
+    const env = fakeEnv({ TENANT_SYNC_SECRET: "s3cr3t", API_ORIGIN: API });
+    const r = req({ "x-tenant-sync-secret": "s3cr3t" });
+    expect(await authorizeOperator(r, env, "anyone", null, fetchImpl)).toBeNull();
+    expect(calls).toHaveLength(0);
+    // wrong secret does NOT fall through as authorized
+    const wrong = req({ "x-tenant-sync-secret": "nope" });
+    expect((await authorizeOperator(wrong, env, "anyone", null, fetchImpl))?.status).toBe(401);
+  });
+
+  test("worker route end-to-end: bare curl with a victim tenantId → 401 JSON", async () => {
+    _authCache.clear();
+    const env = wireSessionNS(fakeEnv({ API_ORIGIN: API }));
+    for (const path of [
+      "/api/operator/reply",
+      "/api/operator/handoffs",
+      "/api/operator/thread",
+      "/api/operator/resolve",
+    ]) {
+      const res = await worker.fetch(
+        new Request(`https://edge.test${path}`, {
+          method: "POST",
+          body: JSON.stringify({ tenantId: "victim", sessionId: "s", text: "pwn" }),
+        }),
+        env,
+      );
+      expect(res.status).toBe(401);
+      expect(((await res.json()) as { error: string }).error).toBe("authorization required");
+    }
+  });
+
+  test("worker route end-to-end: valid bearer → 200 (fetch to /me mocked)", async () => {
+    _authCache.clear();
+    const env = wireSessionNS(fakeEnv({ API_ORIGIN: API }));
+    const orig = globalThis.fetch;
+    globalThis.fetch = meFetch("acme").fetchImpl;
+    try {
+      const res = await worker.fetch(
+        new Request("https://edge.test/api/operator/thread", {
+          method: "POST",
+          headers: { authorization: "Bearer tok-app" },
+          body: JSON.stringify({ tenantId: "acme", sessionId: "s1" }),
+        }),
+        env,
+      );
+      expect(res.status).toBe(200);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  // ── WS upgrade auth (?auth=<token> — RN/browsers can't set WS headers) ─────
+  function wsEnv(extra: Partial<Env> = {}) {
+    const env = fakeEnv({ API_ORIGIN: API, ...extra });
+    (env as { SESSION: unknown }).SESSION = {
+      idFromName: (n: string) => n,
+      get: () => ({ fetch: async () => new Response("do-reached", { status: 200 }) }),
+    };
+    return env;
+  }
+  const wsReq = (qs: string) =>
+    new Request(`https://edge.test/api/session/s1/ws?t=acme${qs}`, {
+      headers: { Upgrade: "websocket" },
+    });
+
+  test("WS role=operator without ?auth → 401, DO never reached", async () => {
+    _authCache.clear();
+    const res = await worker.fetch(wsReq("&role=operator"), wsEnv());
+    expect(res.status).toBe(401);
+    expect(await res.text()).not.toBe("do-reached");
+  });
+
+  test("WS role=operator with a foreign tenant's token → 403", async () => {
+    _authCache.clear();
+    const orig = globalThis.fetch;
+    globalThis.fetch = meFetch("mallory").fetchImpl;
+    try {
+      const res = await worker.fetch(wsReq("&role=operator&auth=tok-m"), wsEnv());
+      expect(res.status).toBe(403);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  test("WS role=operator with a valid ?auth token → forwarded to the DO", async () => {
+    _authCache.clear();
+    const orig = globalThis.fetch;
+    globalThis.fetch = meFetch("acme").fetchImpl;
+    try {
+      const res = await worker.fetch(wsReq("&role=operator&auth=tok-ok"), wsEnv());
+      expect(await res.text()).toBe("do-reached");
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  test("visitor WS (no role) stays unauthenticated — forwarded as today", async () => {
+    _authCache.clear();
+    const res = await worker.fetch(wsReq(""), wsEnv());
+    expect(await res.text()).toBe("do-reached");
   });
 });
 
@@ -1501,6 +1728,7 @@ describe("handoff → push + mention skip (integration)", () => {
         TELEGRAM_CHAT_ID: "-100",
         PUSH_TOKENS_URL: "https://cloud.test/internal/push-tokens",
         PUSH_TOKENS_SECRET: "shh",
+        TENANT_SYNC_SECRET: OP_SECRET,
         AI: { run: async () => ({ response: "One sec. [!HANDOFF]" }) } as unknown as Ai,
       }),
     );
@@ -1564,6 +1792,7 @@ describe("handoff → push + mention skip (integration)", () => {
     const thread = await worker.fetch(
       new Request("https://edge.test/api/operator/thread", {
         method: "POST",
+        headers: { "x-tenant-sync-secret": OP_SECRET },
         body: JSON.stringify({ tenantId: "self", sessionId: "s-esc" }),
       }),
       env,
