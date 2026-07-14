@@ -15,7 +15,14 @@ bunx wrangler secret put TELEGRAM_BOT_TOKEN
 bunx wrangler secret put TELEGRAM_CHAT_ID
 bunx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 bunx wrangler secret put TENANT_SYNC_SECRET     # optional: gates /api/tenant/config
+                                                # (also the server-to-server credential
+                                                # accepted on /api/operator/*)
 ```
+
+Related but NOT a secret: `API_ORIGIN` (the cloud API origin that verifies operator
+bearer tokens via `GET /me` — e.g. `https://api.krispyai.com`). It's a plain var in
+`wrangler.toml` per env; unset means operator bearer auth **fails closed** (a
+self-host without the operator app doesn't need it).
 
 Local `wrangler dev` reads them from a git-ignored `.dev.vars` in `services/edge` if you want to iterate without deploying.
 

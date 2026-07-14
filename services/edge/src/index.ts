@@ -18,9 +18,10 @@
 import type { ChatMessage } from "./ai";
 import { workersAiRunner } from "./ai";
 import { chatFlow } from "./chat";
-import { SessionDO } from "./session-do";
+import { SessionDO, type RingMsg } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
 import { parseOwnerReply, createForumTopic, sendToTopic, sendHandoffAlert } from "./telegram";
+import { authorizeOperator } from "./operator-auth";
 import { pushToApp } from "./push";
 import { renderLeadEmail, sendLeadEmail } from "./email";
 import type { Connector, Env, FormSpec, TenantConfig } from "./types";
@@ -50,6 +51,34 @@ export { SessionDO };
 
 const DEFAULT_TENANT = "self";
 
+// ── DO-ring memory (chat context) ────────────────────────────────────────────
+// The SessionDO's 20-msg ring is the bot's authoritative memory: the client's
+// history array is spoofable, capped at 10 by the widget, and lost across devices.
+
+/** Hard ceiling on the ring read — a slow/erroring DO must never make chat slower
+ * than the old client-history path. On timeout/failure we warn + fall back. */
+export const RING_READ_TIMEOUT_MS = 1_500;
+
+/** Cap on ring-derived history — mirrors the widget's own `history.slice(-10)`, so
+ * prompt size and the turn-tax guard keep exactly the pre-ring posture. */
+export const RING_HISTORY_MAX = 10;
+
+/** Ring → AI context. `visitor` → user; `ai` AND `operator` → assistant (the visitor
+ * heard operator turns as "the business speaking", and the bot must know what the
+ * human said after a hand-back). */
+export function ringToHistory(
+  msgs: { role: "visitor" | "ai" | "operator"; text: string }[],
+  cap = RING_HISTORY_MAX,
+): ChatMessage[] {
+  return msgs
+    .filter((m) => m.text)
+    .map((m) => ({
+      role: m.role === "visitor" ? ("user" as const) : ("assistant" as const),
+      content: m.text,
+    }))
+    .slice(-cap);
+}
+
 /** Parse a positive-integer env knob; undefined (→ code default) when unset/invalid. */
 const numEnv = (v?: string): number | undefined => {
   const n = Number(v);
@@ -60,7 +89,7 @@ function cors(env: Env): Record<string, string> {
   return {
     "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type",
+    "access-control-allow-headers": "content-type,authorization",
   };
 }
 
@@ -122,12 +151,26 @@ export default {
     // GET /api/session/:sessionId/ws  → forward the upgrade to the session's DO.
     // The full request (query string included) is forwarded, so ?role=operator
     // rides through to the DO's socket tagging (§3d) with no extra plumbing here.
+    // Operator sockets must authenticate: browsers/RN can't set headers on a WS
+    // upgrade, so the bearer rides as ?auth=<token> and is verified against the
+    // claimed tenant BEFORE the upgrade reaches the DO. The visitor path (no
+    // role param) stays open — visitors are anonymous by design; their session
+    // id is the capability they hold.
     const ws = path.match(/^\/api\/session\/([^/]+)\/ws$/);
     if (ws) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
       }
       const tenantId = url.searchParams.get("t") || DEFAULT_TENANT;
+      if (url.searchParams.get("role") === "operator") {
+        const denied = await authorizeOperator(
+          request,
+          env,
+          tenantId,
+          url.searchParams.get("auth"),
+        );
+        if (denied) return json(env, { error: denied.error }, denied.status);
+      }
       return sessionStub(env, tenantId, decodeURIComponent(ws[1]!)).fetch(request);
     }
 
@@ -161,21 +204,42 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const tenant = await getTenant(env, tenantId);
 
+  // Authoritative memory: one combined DO read (handoff flag + ring) replaces the
+  // /state read the flow made anyway — same subrequest count, and the AI context
+  // now comes from the server-side ring instead of the client's claim. GUARDED:
+  // timeout + any failure falls back to the client-sent history exactly as before
+  // (warn-logged so drift is observable); a slow DO never slows chat down.
+  let ctx: { handedOff: boolean; messages: RingMsg[] } | null = null;
+  try {
+    const r = await doFetch(env, tenantId, body.sessionId, "https://do/context", {
+      signal: AbortSignal.timeout(RING_READ_TIMEOUT_MS),
+    });
+    ctx = (await r.json()) as { handedOff: boolean; messages: RingMsg[] };
+  } catch (e) {
+    console.warn("ring context read failed — falling back to client history:", e);
+  }
+  // Client history is a SEED only: used when the ring is empty (first message of a
+  // legacy session) or when the ring read failed (fallback path above).
+  const history = ctx?.messages.length ? ringToHistory(ctx.messages) : body.history;
+
   // Telegram is optional: no config → topic ops no-op, chat still answers.
   const result = await chatFlow(
     {
       systemPrompt: buildSystemPrompt(tenant?.systemPrompt, tenant?.forms),
-      // Full history in; chatFlow applies the sliding window + counts turns (chokepoint).
-      history: body.history,
+      // Ring-derived (or seed) history in; chatFlow applies the sliding window +
+      // counts turns (chokepoint).
+      history,
       maxHistoryMsgs: numEnv(env.MAX_HISTORY_MSGS),
       maxAiTurns: numEnv(env.MAX_AI_TURNS),
       ai: workersAiRunner(env, tenant?.model || env.AI_MODEL),
       meter: (kind) => meter(env, tenantId, kind),
       meterTokens: (n) => meter(env, tenantId, "tokens", n),
-      isHandedOff: async (sessionId) => {
-        const r = await doFetch(env, tenantId, sessionId, "https://do/state");
-        return ((await r.json()) as { handedOff: boolean }).handedOff;
-      },
+      isHandedOff: ctx
+        ? async () => ctx.handedOff // already read in the combined /context fetch
+        : async (sessionId) => {
+            const r = await doFetch(env, tenantId, sessionId, "https://do/state");
+            return ((await r.json()) as { handedOff: boolean }).handedOff;
+          },
       ensureTopic: async (sessionId, firstMessage) => {
         if (!tenant) return 0;
         const existing = await getThreadForSession(env, tenantId, sessionId);
@@ -419,9 +483,12 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
 // ── operator app routes (Buttr) ──────────────────────────────────────────────
 // The native operator app's surface onto the SAME SessionDO handoff spine Telegram
-// uses — a second trigger, zero Telegram interference. Auth model (buttr-app-plan
-// §3/§4): the app bearer-auths against the cloud services/api and passes tenantId;
-// in-Worker bearer verification is day-2 hardening (tonight the app is the only caller).
+// uses — a second trigger, zero Telegram interference. Auth (operator-auth.ts):
+// every route verifies the app's bearer against the cloud API's /me and asserts
+// the resolved user IS the claimed tenant (401/403 otherwise); server-to-server
+// callers may use the tenant-sync shared secret instead. Field validation runs
+// first (400 on malformed bodies), auth second — nothing tenant-scoped happens
+// before the auth gate.
 
 // ponytail: single app-operator sentinel id per tenant (Operator.id is a Telegram
 // numeric id; the app has none). Per-operator ids when the app grows multi-operator auth.
@@ -439,6 +506,8 @@ async function handleOperatorReply(request: Request, env: Env): Promise<Response
   if (!b?.tenantId || !b.sessionId || !b.text?.trim()) {
     return json(env, { error: "tenantId, sessionId and text required" }, 400);
   }
+  const denied = await authorizeOperator(request, env, b.tenantId);
+  if (denied) return json(env, { error: denied.error }, denied.status);
   // Learn the app operator (channel:'app' → the Telegram @mention path skips them).
   await upsertOperator(env, b.tenantId, {
     id: APP_OPERATOR_ID,
@@ -466,6 +535,8 @@ async function handleOperatorHandoffs(request: Request, env: Env): Promise<Respo
     includeResolved?: boolean;
   } | null;
   if (!b?.tenantId) return json(env, { error: "tenantId required" }, 400);
+  const denied = await authorizeOperator(request, env, b.tenantId);
+  if (denied) return json(env, { error: denied.error }, denied.status);
   const tenantId = b.tenantId;
   const includeResolved = b.includeResolved === true;
   const prefix = `session:${tenantId}:`;
@@ -506,6 +577,8 @@ async function handleOperatorThread(request: Request, env: Env): Promise<Respons
   if (!b?.tenantId || !b.sessionId) {
     return json(env, { error: "tenantId and sessionId required" }, 400);
   }
+  const denied = await authorizeOperator(request, env, b.tenantId);
+  if (denied) return json(env, { error: denied.error }, denied.status);
   const r = await doFetch(env, b.tenantId, b.sessionId, "https://do/log");
   const { messages } = (await r.json()) as { messages: unknown[] };
   return json(env, { messages });
@@ -524,6 +597,8 @@ async function handleOperatorResolve(request: Request, env: Env): Promise<Respon
   if (!b?.tenantId || !b.sessionId) {
     return json(env, { error: "tenantId and sessionId required" }, 400);
   }
+  const denied = await authorizeOperator(request, env, b.tenantId);
+  if (denied) return json(env, { error: denied.error }, denied.status);
   const r = await doFetch(env, b.tenantId, b.sessionId, "https://do/resolve", { method: "POST" });
   const { resolved } = (await r.json()) as { resolved: boolean };
   return json(env, { ok: true, resolved });

@@ -6,9 +6,12 @@
 # services/edge/src/types.ts (TenantConfig / WidgetTheme / FormSpec / Connector),
 # the Bruno collection in api-collection/, and apps/docs/content/docs/reference/edge-routes.mdx.
 #
-# Auth model: per-route shared-secret HEADERS (NOT a single bearer). Public routes are
-# CORS-* and secret-free; secret-guarded routes carry a bot token or mutate config, so a
-# missing/wrong secret returns 401 (config routes) or 403 (webhook, billing) and leaks nothing.
+# Auth model: per-route shared-secret HEADERS, plus a bearer on the operator surface.
+# Public routes are CORS-* and secret-free; secret-guarded routes carry a bot token or
+# mutate config, so a missing/wrong secret returns 401 (config routes) or 403 (webhook,
+# billing) and leaks nothing. The /api/operator/* routes (and the ?role=operator WS
+# upgrade) take the operator app's bearer, verified in-Worker against the cloud API's
+# GET /me (see `operatorBearer`), OR the tenant-sync secret for server-to-server callers.
 openapi: 3.1.0
 info:
   title: Krispy edge Worker API
@@ -203,7 +206,11 @@ paths:
         live channel) — it receives the full event union PLUS the operator-only
         `{ type: "message", role: "visitor" | "ai", text, ts }` mirror of live ring appends
         (seed replays stay silent). The visitor fan-out is untouched.
-      security: [] # public — no auth
+        With `role=operator` the upgrade REQUIRES `auth=<bearer token>` — RN/browsers can't
+        set headers on a WS upgrade, so the operator app's bearer rides as a query param and
+        is verified exactly like the `operatorBearer` header scheme (401 invalid/missing,
+        403 token↔tenant mismatch) before the upgrade reaches the DO.
+      security: [] # public for visitors — operator sockets authenticate via ?auth
       parameters:
         - name: id
           in: path
@@ -216,6 +223,13 @@ paths:
           required: false
           schema: { type: string, enum: [operator] }
           description: Tag the socket as an operator's (Buttr app). Omit for the visitor widget.
+        - name: auth
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            Operator bearer token (REQUIRED when `role=operator`, ignored otherwise).
+            Same token/verification as the `operatorBearer` scheme.
         - name: Upgrade
           in: header
           required: true
@@ -223,6 +237,16 @@ paths:
       responses:
         "101":
           description: Switching Protocols — WebSocket established (handled by the DO).
+        "401":
+          description: "`role=operator` without a valid `auth` token."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: "`role=operator` with a valid token that belongs to another tenant."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "426":
           description: Upgrade Required — the request was not a WebSocket upgrade.
 
@@ -236,10 +260,12 @@ paths:
         Telegram uses. Sets `handedOff`, appends the reply to the session's 20-message ring
         buffer, and broadcasts `{ type: "operator", text }` to the visitor's WebSocket. The
         replying operator is learned with `channel: 'app'`, so the Telegram handoff @mention
-        skips them (they get the push instead). Metered as a handoff. Auth model: the app
-        bearer-auths against the cloud services/api and passes `tenantId`; in-Worker bearer
-        verification is day-2 hardening.
-      security: [] # tonight — see auth note in the description
+        skips them (they get the push instead). Metered as a handoff. Auth: the app's bearer
+        is verified in-Worker against the cloud API's `GET /me` and must resolve to the
+        claimed `tenantId`; server-to-server callers may send `x-tenant-sync-secret` instead.
+      security:
+        - operatorBearer: []
+        - tenantSyncSecret: []
       requestBody:
         required: true
         content:
@@ -261,6 +287,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/invalid credentials (no bearer or secret, expired token, or no `API_ORIGIN` verifier configured — auth fails closed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Valid bearer, but the token's user is not the claimed `tenantId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/operator/handoffs:
     post:
@@ -275,7 +311,9 @@ paths:
         the AI). No dedicated handoff index
         exists — the Worker scans the session→thread KV map (first page, 1000 sessions) and
         asks each SessionDO for a one-shot summary.
-      security: [] # tonight — see /api/operator/reply auth note
+      security:
+        - operatorBearer: []
+        - tenantSyncSecret: []
       requestBody:
         required: true
         content:
@@ -300,6 +338,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/invalid credentials (no bearer or secret, expired token, or no `API_ORIGIN` verifier configured — auth fails closed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Valid bearer, but the token's user is not the claimed `tenantId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/operator/thread:
     post:
@@ -310,7 +358,9 @@ paths:
         The session's last 20 messages (visitor / AI / operator) from the SessionDO ring
         buffer — zero Telegram round-trips. On handoff the ring is seeded from the history
         the widget re-sends on `/api/chat`, so pre-handoff turns are present.
-      security: [] # tonight — see /api/operator/reply auth note
+      security:
+        - operatorBearer: []
+        - tenantSyncSecret: []
       requestBody:
         required: true
         content:
@@ -332,6 +382,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/invalid credentials (no bearer or secret, expired token, or no `API_ORIGIN` verifier configured — auth fails closed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Valid bearer, but the token's user is not the claimed `tenantId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/operator/resolve:
     post:
@@ -348,7 +408,9 @@ paths:
         over. A NEW live visitor message on a resolved session un-resolves it
         automatically (also without re-handing-off — the conversation is live again,
         answered by the AI).
-      security: [] # tonight — see /api/operator/reply auth note
+      security:
+        - operatorBearer: []
+        - tenantSyncSecret: []
       requestBody:
         required: true
         content:
@@ -374,6 +436,16 @@ paths:
                     description: The state AFTER the toggle.
         "400":
           description: Missing `tenantId` or `sessionId`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Missing/invalid credentials (no bearer or secret, expired token, or no `API_ORIGIN` verifier configured — auth fails closed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Valid bearer, but the token's user is not the claimed `tenantId`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -510,6 +582,16 @@ components:
       description: Tenant id (self-host default = `self`).
 
   securitySchemes:
+    operatorBearer:
+      type: http
+      scheme: bearer
+      description: >
+        The operator app's session token (krispyai-cloud Better Auth bearer). The Worker
+        verifies it against the cloud API's `GET /me` (`API_ORIGIN`) and requires the
+        resolved `user.id` to equal the request's `tenantId` — a valid token for a
+        DIFFERENT tenant is 403. Verified tokens are cached in-isolate for 60s.
+        On the WebSocket upgrade the same token is passed as the `auth` query parameter
+        (RN/browsers cannot set headers on a WS upgrade).
     tenantSyncSecret:
       type: apiKey
       in: header
@@ -625,6 +707,11 @@ components:
         history:
           type: array
           items: { $ref: "#/components/schemas/ChatMessage" }
+          description: >
+            SEED/FALLBACK ONLY. The bot's authoritative context is the server-side
+            SessionDO ring; client history is used only when the ring is empty (first
+            message of a legacy session) or when the ring read fails/times out
+            (~1.5s guard). A non-empty ring always wins — spoofed history is ignored.
 
     ChatResult:
       type: object

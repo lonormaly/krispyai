@@ -10,6 +10,10 @@ post {
   auth: none
 }
 
+headers {
+  Authorization: Bearer {{operatorToken}}
+}
+
 body:json {
   {
     "tenantId": "self",
@@ -31,11 +35,15 @@ tests {
 }
 
 docs {
+  Auth (in-Worker, enforced): send the operator app's bearer (`Authorization: Bearer
+  <session token>` — verified against the cloud API's GET /me; the resolved user.id must
+  equal `tenantId`, else 403) OR the server-to-server `x-tenant-sync-secret`. No/invalid
+  credentials → 401. Verified bearers are cached in-isolate for 60s.
+
   The Buttr operator app's reply into a live visitor thread — the second trigger of the
   same SessionDO handoff spine Telegram uses. Sets `handedOff`, appends the reply to the
   session's 20-message ring buffer, and broadcasts `{ type: "operator", text }` to the
   visitor's WebSocket. The replying operator is learned with `channel: 'app'` so the
   Telegram handoff @mention skips them (they get the push instead). Metered as a handoff.
-  Missing `tenantId`/`sessionId`/`text` → 400. Auth: the app bearer-auths against the
-  cloud services/api and passes `tenantId`; in-Worker bearer verification is day-2.
+  Missing `tenantId`/`sessionId`/`text` → 400.
 }

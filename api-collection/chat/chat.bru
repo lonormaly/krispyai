@@ -36,4 +36,9 @@ docs {
   unmetered; a non-self tenant without a valid snapshot gets 402, over its cap gets 429.
   Missing `sessionId`/`message` → 400. Response: `{ reply, handoff, handedOff, degraded?,
   formId?, form? }` — `reply` is null when a human operator is driving.
+
+  Memory: the AI's context comes from the session's server-side ring buffer (SessionDO),
+  NOT from `history`. `history` is a seed/fallback only — used when the ring is empty
+  (legacy first message) or the ring read fails/times out (~1.5s guard). A non-empty
+  ring always wins, so spoofed client history cannot steer the bot.
 }

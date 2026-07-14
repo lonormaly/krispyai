@@ -8,7 +8,9 @@
 // Internal HTTP surface (called by the Worker, never the browser directly):
 //   GET  (Upgrade: websocket)  → visitor connects; gets {type:"ready", handedOff}
 //                                (?role=operator tags the socket — Buttr app, §3d)
-//   GET  /state                → { handedOff }   (chat flow reads this)
+//   GET  /state                → { handedOff }   (legacy read; chat's fallback path)
+//   GET  /context              → { handedOff, messages }  (one combined read — the chat
+//                                flow's authoritative memory + handoff flag per turn)
 //   GET  /summary              → { handedOff, resolved, lastMessage, ts }  (operator inbox row)
 //   GET  /log                  → { messages }    (the 20-msg ring — thread read)
 //   POST /log {messages,seed?} → append to the ring (seed: only if the ring is empty)
@@ -152,6 +154,13 @@ export class SessionDO {
 
     if (request.method === "GET" && url.pathname.endsWith("/state")) {
       return Response.json({ handedOff: await this.handedOff() });
+    }
+
+    // One combined read for the chat flow: the handoff flag + the ring, so the
+    // bot's memory costs the same single subrequest /state used to.
+    if (request.method === "GET" && url.pathname.endsWith("/context")) {
+      const [handedOff, messages] = await Promise.all([this.handedOff(), this.ring()]);
+      return Response.json({ handedOff, messages });
     }
 
     // One inbox-row read: handoff flag + the ring tail — halves the per-session
