@@ -5,7 +5,7 @@
 //   silent (operator drives) → else ask the AI → parse the [!HANDOFF] signal →
 //   mirror the AI reply to the topic → answer the visitor. If the AI throws, we
 //   degrade to a human handoff rather than dropping the visitor.
-import type { ChatMessage } from "./ai";
+import type { ChatMessage, AiResult, TokenUsage } from "./ai";
 import { parseHandoff, parseForm, detectPromptLeak } from "./system-prompt";
 import type { FormSpec } from "./types";
 
@@ -35,11 +35,11 @@ export interface ChatDeps {
   /** True if an operator has already taken over this session (bot must stay silent). */
   isHandedOff: (sessionId: string) => Promise<boolean>;
   /** Run the AI. May throw → graceful degradation. */
-  ai: (messages: ChatMessage[]) => Promise<string>;
+  ai: (messages: ChatMessage[]) => Promise<AiResult>;
   /** Increment a usage counter. */
   meter: (kind: "ai" | "handoff") => Promise<void>;
-  /** Add `n` to the approximate-token usage counter (optional; no-op if unwired). */
-  meterTokens?: (n: number) => Promise<void>;
+  /** Record real (or estimated) token usage for this turn (optional; no-op if unwired). */
+  meterTokens?: (usage: TokenUsage) => Promise<void>;
   systemPrompt: string;
   /** Prior turns for context (optional). */
   history?: ChatMessage[];
@@ -118,11 +118,17 @@ export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatRe
 
   let raw: string;
   try {
-    raw = await deps.ai(messages);
+    const res = await deps.ai(messages);
+    raw = res.text;
     await deps.meter("ai");
-    // Approx token metering (provider seam returns text only → estimate in + out).
-    const tokens = messages.reduce((n, m) => n + estTokens(m.content), 0) + estTokens(raw);
-    await deps.meterTokens?.(tokens);
+    // Prefer the provider's REAL usage; fall back to chars/4 (labelled estimated) only
+    // when the model omits it — so cost analytics knows which counts to trust.
+    const usage: TokenUsage = res.usage ?? {
+      promptTokens: messages.reduce((n, m) => n + estTokens(m.content), 0),
+      completionTokens: estTokens(raw),
+      estimated: true,
+    };
+    await deps.meterTokens?.(usage);
   } catch {
     // AI down — keep the loop alive by routing to a human.
     await toTopic(threadId, "⚠️ AI unavailable — visitor is waiting for you.");

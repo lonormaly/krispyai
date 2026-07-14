@@ -41,6 +41,7 @@ import {
   kUsage,
   monthKey,
   meter,
+  meterUsage,
   getUsage,
   getTokens,
   getThreadForSession,
@@ -522,7 +523,7 @@ describe("chatFlow", () => {
       ensureTopic: async () => 5,
       toTopic: async (_t, text) => void topic.push(text),
       isHandedOff: async () => false,
-      ai: async () => "Sure, 9am.",
+      ai: async () => ({ text: "Sure, 9am." }),
       meter: async (k) => void metered.push(k),
       ...over,
     };
@@ -545,7 +546,7 @@ describe("chatFlow", () => {
       isHandedOff: async () => true,
       ai: async () => {
         aiCalled = true;
-        return "x";
+        return { text: "x" };
       },
     });
     const r = await chatFlow(base, { sessionId: "s", message: "still there?" });
@@ -557,7 +558,9 @@ describe("chatFlow", () => {
   });
 
   test("[!HANDOFF] in reply → handoff true, handoff metered", async () => {
-    const { base, metered } = deps({ ai: async () => `A teammate will help. ${HANDOFF_MARKER}` });
+    const { base, metered } = deps({
+      ai: async () => ({ text: `A teammate will help. ${HANDOFF_MARKER}` }),
+    });
     const r = await chatFlow(base, { sessionId: "s", message: "refund please" });
     expect(r.handoff).toBe(true);
     expect(r.reply).toBe("A teammate will help.");
@@ -573,7 +576,7 @@ describe("chatFlow", () => {
       toTopic: async () => {
         throw new Error("telegram down");
       },
-      ai: async () => "We open at 9am.",
+      ai: async () => ({ text: "We open at 9am." }),
     });
     const r = await chatFlow(base, { sessionId: "s", message: "hours?" });
     expect(r.reply).toBe("We open at 9am.");
@@ -646,10 +649,10 @@ describe("chatFlow turn-tax bounds", () => {
       isHandedOff: async () => false,
       ai: async (msgs) => {
         sawMessages = msgs;
-        return "ok";
+        return { text: "ok" };
       },
       meter: async (k) => void metered.push(k),
-      meterTokens: async (n) => void (tokensMetered += n),
+      meterTokens: async (u) => void (tokensMetered += u.promptTokens + u.completionTokens),
       ...over,
     };
     return { base, sawMessages: () => sawMessages, metered, tokens: () => tokensMetered };
@@ -692,7 +695,7 @@ describe("chatFlow turn-tax bounds", () => {
       history,
       ai: async () => {
         aiCalled = true;
-        return "should not run";
+        return { text: "should not run" };
       },
     });
     const r = await chatFlow(h.base, { sessionId: "s", message: "still stuck" });
@@ -723,6 +726,73 @@ describe("token usage counter", () => {
     expect(await getTokens(env, "self")).toBe(150);
     // getUsage shape stays {ai, handoff} — backward compatible
     expect(await getUsage(env, "self")).toEqual({ ai: 0, handoff: 0 });
+  });
+
+  test("meterUsage splits into total + in/out counters", async () => {
+    const env = fakeEnv();
+    await meterUsage(env, "self", { promptTokens: 900, completionTokens: 100 });
+    expect(await getTokens(env, "self")).toBe(1000); // total = in + out
+    const m = monthKey();
+    expect(Number(await env.KRISPY_KV.get(kUsage("self", "tokens_in", m)))).toBe(900);
+    expect(Number(await env.KRISPY_KV.get(kUsage("self", "tokens_out", m)))).toBe(100);
+  });
+});
+
+// ── real token telemetry (Fix 1) ─────────────────────────────────────────────
+describe("token telemetry — real usage vs estimate fallback", () => {
+  const runner = (aiResp: unknown) => {
+    const env = { AI: { run: async () => aiResp } } as unknown as Env;
+    return workersAiRunner(env);
+  };
+
+  test("workersAiRunner surfaces the provider's real usage (estimated:false)", async () => {
+    const res = await runner({
+      response: "hi",
+      usage: { prompt_tokens: 812, completion_tokens: 47, total_tokens: 859 },
+    })([{ role: "user", content: "hey" }]);
+    expect(res.text).toBe("hi");
+    expect(res.usage).toEqual({ promptTokens: 812, completionTokens: 47, estimated: false });
+  });
+
+  test("workersAiRunner returns usage:undefined when the model omits it", async () => {
+    const res = await runner({ response: "hi" })([{ role: "user", content: "hey" }]);
+    expect(res.usage).toBeUndefined();
+  });
+
+  // chatFlow: the metered counts must come from real usage when present…
+  function capture(over: Partial<ChatDeps> = {}) {
+    let seen: { promptTokens: number; completionTokens: number; estimated: boolean } | null = null;
+    const base: ChatDeps = {
+      systemPrompt: "sys",
+      ensureTopic: async () => 0,
+      toTopic: async () => {},
+      isHandedOff: async () => false,
+      ai: async () => ({ text: "ok" }),
+      meter: async () => {},
+      meterTokens: async (u) => void (seen = u),
+      ...over,
+    };
+    return { base, seen: () => seen };
+  }
+
+  test("chatFlow meters REAL usage when the runner supplies it", async () => {
+    const h = capture({
+      ai: async () => ({
+        text: "ok",
+        usage: { promptTokens: 500, completionTokens: 20, estimated: false },
+      }),
+    });
+    await chatFlow(h.base, { sessionId: "s", message: "hi" });
+    expect(h.seen()).toEqual({ promptTokens: 500, completionTokens: 20, estimated: false });
+  });
+
+  test("chatFlow falls back to a labelled chars/4 estimate when usage is absent", async () => {
+    const h = capture({ ai: async () => ({ text: "a".repeat(40) }) }); // no usage
+    await chatFlow(h.base, { sessionId: "s", message: "hi" });
+    const u = h.seen()!;
+    expect(u.estimated).toBe(true);
+    expect(u.promptTokens).toBeGreaterThan(0); // system + user, chars/4
+    expect(u.completionTokens).toBe(10); // 40 chars / 4
   });
 });
 

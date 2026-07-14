@@ -45,9 +45,10 @@ export const kTenant = (t: string) => `tenant:${t}`;
 export const kUsage = (t: string, kind: UsageKind, yyyymm: string) =>
   `usage:${t}:${yyyymm}:${kind}`;
 
-// "tokens" tracks approximate LLM tokens (chars/4 estimate), not a call count — so the
-// meter takes an increment `n`. "ai"/"handoff" stay +1-per-call (n defaults to 1).
-export type UsageKind = "ai" | "handoff" | "tokens";
+// "tokens" is the monthly total LLM tokens (prompt+completion); "tokens_in"/"tokens_out"
+// split it so cost analytics can price input vs output separately (output ~8× pricier).
+// All three take an increment `n`; "ai"/"handoff" stay +1-per-call (n defaults to 1).
+export type UsageKind = "ai" | "handoff" | "tokens" | "tokens_in" | "tokens_out";
 
 export function monthKey(now = new Date()): string {
   return `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -199,6 +200,19 @@ export async function getUsage(env: Env, t: string): Promise<{ ai: number; hando
 /** Approximate tokens metered this month (separate from getUsage to keep its shape). */
 export async function getTokens(env: Env, t: string): Promise<number> {
   return Number((await env.KRISPY_KV.get(kUsage(t, "tokens", monthKey()))) ?? 0);
+}
+
+/** Record a turn's real (or estimated) token usage: total + input/output split. */
+export async function meterUsage(
+  env: Env,
+  t: string,
+  u: { promptTokens: number; completionTokens: number },
+): Promise<void> {
+  await Promise.all([
+    meter(env, t, "tokens", u.promptTokens + u.completionTokens),
+    meter(env, t, "tokens_in", u.promptTokens),
+    meter(env, t, "tokens_out", u.completionTokens),
+  ]);
 }
 
 // ── lead rate limit ──────────────────────────────────────────────────────────

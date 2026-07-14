@@ -16,7 +16,7 @@
 //   GET  /api/usage?t=<tenant>         metering readout (plan/usage hooks)
 //   GET  /health
 import type { ChatMessage } from "./ai";
-import { workersAiRunner } from "./ai";
+import { workersAiRunner, DEFAULT_MODEL } from "./ai";
 import { chatFlow } from "./chat";
 import { SessionDO, type RingMsg } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
@@ -31,6 +31,7 @@ import {
   getSessionForThread,
   linkThreadSession,
   meter,
+  meterUsage,
   getUsage,
   getTokens,
   getOperators,
@@ -268,7 +269,21 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       maxAiTurns: numEnv(env.MAX_AI_TURNS),
       ai: workersAiRunner(env, tenant?.model || env.AI_MODEL),
       meter: (kind) => meter(env, tenantId, kind),
-      meterTokens: (n) => meter(env, tenantId, "tokens", n),
+      // Real per-turn usage → monthly counters (total + in/out split) AND a structured
+      // log line (model + counts + estimated flag) for cost analytics via Logpush/tail.
+      meterTokens: async (usage) => {
+        await meterUsage(env, tenantId, usage);
+        console.log(
+          "chat_usage",
+          JSON.stringify({
+            tenant: tenantId,
+            model: tenant?.model || env.AI_MODEL || DEFAULT_MODEL,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            estimated: usage.estimated,
+          }),
+        );
+      },
       isHandedOff: ctx
         ? async () => ctx.handedOff // already read in the combined /context fetch
         : async (sessionId) => {
