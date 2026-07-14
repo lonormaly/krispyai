@@ -43,6 +43,7 @@ import {
   meter,
   meterUsage,
   getUsage,
+  getUsageDetail,
   getTokens,
   getThreadForSession,
   linkThreadSession,
@@ -1997,5 +1998,49 @@ describe("ring-as-context (chat memory)", () => {
     expect(last.length).toBeLessThanOrEqual(1 + MAX_HISTORY_MSGS + 1);
     expect(last[0]!.role).toBe("system");
     expect(last.at(-1)).toEqual({ role: "user", content: "turn 6" });
+  });
+});
+
+// ── GET /internal/usage — admin cross-tenant cost readout (secret-authed) ─────
+describe("GET /internal/usage (admin cost readout)", () => {
+  const SECRET = "usage-shh";
+  const req = (path: string, headers: Record<string, string> = {}) =>
+    new Request(`https://edge.test${path}`, { method: "GET", headers });
+
+  test("fails closed when ADMIN_USAGE_SECRET is unset → 403, counters never read", async () => {
+    const env = fakeEnv(); // no ADMIN_USAGE_SECRET
+    await meterUsage(env, "t1", { promptTokens: 100, completionTokens: 10 });
+    const res = await worker.fetch(req("/internal/usage?t=t1", { "x-admin-usage-secret": "x" }), env);
+    expect(res.status).toBe(403);
+  });
+
+  test("403 on a wrong/missing secret header", async () => {
+    const env = fakeEnv({ ADMIN_USAGE_SECRET: SECRET });
+    expect((await worker.fetch(req("/internal/usage?t=t1"), env)).status).toBe(403);
+    expect(
+      (await worker.fetch(req("/internal/usage?t=t1", { "x-admin-usage-secret": "nope" }), env))
+        .status,
+    ).toBe(403);
+  });
+
+  test("400 when ?t is missing", async () => {
+    const env = fakeEnv({ ADMIN_USAGE_SECRET: SECRET });
+    const res = await worker.fetch(req("/internal/usage", { "x-admin-usage-secret": SECRET }), env);
+    expect(res.status).toBe(400);
+  });
+
+  test("200 returns per-tenant in/out split for a comma-separated batch", async () => {
+    const env = fakeEnv({ ADMIN_USAGE_SECRET: SECRET });
+    await meterUsage(env, "a", { promptTokens: 900, completionTokens: 100 });
+    await meter(env, "a", "ai", 5);
+    await meterUsage(env, "b", { promptTokens: 200, completionTokens: 50 });
+    const res = await worker.fetch(
+      req("/internal/usage?t=a,b", { "x-admin-usage-secret": SECRET }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { usage: Record<string, Awaited<ReturnType<typeof getUsageDetail>>> };
+    expect(body.usage.a).toEqual({ ai: 5, handoff: 0, tokens: 1000, tokensIn: 900, tokensOut: 100 });
+    expect(body.usage.b).toEqual({ ai: 0, handoff: 0, tokens: 250, tokensIn: 200, tokensOut: 50 });
   });
 });

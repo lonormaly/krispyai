@@ -196,6 +196,46 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/UsageResponse" }
 
+  /internal/usage:
+    get:
+      tags: [internal]
+      summary: Cross-tenant cost readout for the Krispy Cloud admin (secret-authed)
+      operationId: internalUsage
+      description: >
+        The founder admin's per-tenant token counters (in/out split) so the Cloud app can
+        price input vs output separately. workerd (the Cloud app) can't read the edge's KV
+        directly, so the admin cost view fetches over this one guarded call. Fail-closed: no
+        `ADMIN_USAGE_SECRET` configured, or a missing/mismatched header → 403 (the counters
+        carry no auth of their own — never leaked unauthenticated). `t` accepts one tenant id
+        or a comma-separated batch, so N tenants are fetched in one round-trip.
+      security:
+        - adminUsageSecret: []
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: One tenant id, or a comma-separated batch (`a,b,c`).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Month-to-date counters keyed by tenant id.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usage]
+                properties:
+                  usage:
+                    type: object
+                    additionalProperties: { $ref: "#/components/schemas/UsageDetail" }
+        "400":
+          description: Missing `t`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Missing/wrong `x-admin-usage-secret` (or the secret is not configured).
+
   /api/session/{id}/ws:
     get:
       tags: [public]
@@ -605,6 +645,13 @@ components:
       in: header
       name: x-tenant-sync-secret
       description: Must equal the Worker's `TENANT_SYNC_SECRET`.
+    adminUsageSecret:
+      type: apiKey
+      in: header
+      name: x-admin-usage-secret
+      description: >
+        Must equal the Worker's `ADMIN_USAGE_SECRET`. Fail-closed: if the secret is unset the
+        endpoint 403s (never serves counters unauthenticated).
     billingSyncSecret:
       type: apiKey
       in: header
@@ -628,6 +675,17 @@ components:
       required: [error]
       properties:
         error: { type: string }
+
+    UsageDetail:
+      type: object
+      description: One tenant's month-to-date counters (missing keys read as 0).
+      required: [ai, handoff, tokens, tokensIn, tokensOut]
+      properties:
+        ai: { type: integer, description: AI conversations this month. }
+        handoff: { type: integer, description: Handoffs to a human this month. }
+        tokens: { type: integer, description: Total LLM tokens (in + out). }
+        tokensIn: { type: integer, description: Prompt (input) tokens. }
+        tokensOut: { type: integer, description: Completion (output) tokens. }
 
     EntitlementError:
       type: object

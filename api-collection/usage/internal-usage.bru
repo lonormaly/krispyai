@@ -1,0 +1,35 @@
+meta {
+  name: Usage - internal admin cost readout
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/internal/usage?t=self
+  auth: none
+}
+
+headers {
+  x-admin-usage-secret: {{adminUsageSecret}}
+}
+
+tests {
+  test("responds 200 with the secret", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("returns per-tenant in/out split", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("usage");
+    expect(b.usage).to.have.property("self");
+    expect(b.usage.self).to.have.property("tokensIn");
+    expect(b.usage.self).to.have.property("tokensOut");
+  });
+}
+
+docs {
+  Founder-only cross-tenant cost readout for the Krispy Cloud admin. workerd (the Cloud
+  app) can't read the edge KV directly, so the admin cost view fetches per-tenant token
+  counters (in/out split) over this guarded call. `?t=` takes one tenant id or a
+  comma-separated batch (`a,b,c`). Requires `x-admin-usage-secret` (== ADMIN_USAGE_SECRET);
+  fail-closed → 403 when the secret is unset or the header is missing/wrong. 400 without `t`.
+}
