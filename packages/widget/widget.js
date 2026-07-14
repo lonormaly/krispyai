@@ -828,8 +828,17 @@
     history.push({ role: "user", content: text });
     sendBtn.disabled = true;
     var typing = handedOff ? null : add("bot", "…");
+    // 30s guard: a hung request (e.g. mid-deploy) must never leave typing dots
+    // forever — abort → the catch shows the retry line.
+    var chatAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var chatTimer =
+      chatAbort &&
+      setTimeout(function () {
+        chatAbort.abort();
+      }, 30000);
     fetch(cfg.api + "/api/chat", {
       method: "POST",
+      signal: chatAbort ? chatAbort.signal : undefined,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         sessionId: sessionId,
@@ -861,6 +870,7 @@
         add("sys", "Connection issue — please try again.");
       })
       .finally(function () {
+        if (chatTimer) clearTimeout(chatTimer);
         sendBtn.disabled = false;
         input.focus();
       });
