@@ -663,6 +663,12 @@
           notifyInbound();
         } else if (ev.type === "handoff") {
           showCapture();
+        } else if (ev.type === "resume") {
+          // The AI took the session back (operator resolved it or went quiet).
+          // Reset the human framing so a later takeover announces itself again.
+          handedOff = false;
+          humanMarked = false;
+          add("sys", "You're back with the AI assistant. A human can rejoin anytime.");
         }
       };
       ws.onclose = function () {
