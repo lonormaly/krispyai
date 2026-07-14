@@ -10,7 +10,8 @@
 //   POST /api/operator/reply           operator app reply → visitor (same DO spine)
 //   POST /api/operator/handoffs        operator app inbox (handed-off sessions)
 //   POST /api/operator/thread          one session's ring-buffer messages
-//   POST /api/operator/resolve         toggle a session's resolved flag (inbox hygiene)
+//   POST /api/operator/resolve         toggle a session's resolved flag (inbox hygiene;
+//                                      resolving also hands the session back to the AI)
 //   GET  /api/session/:id/ws           live channel (→ SessionDO; ?role=operator tags)
 //   GET  /api/usage?t=<tenant>         metering readout (plan/usage hooks)
 //   GET  /health
@@ -237,7 +238,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
           tenant.botToken,
           tenant.chatId,
           threadId,
-          "🙋 A visitor needs a human here.",
+          "🙋 A visitor needs a human here.\nReply in this topic to answer them · send /done when finished to hand back to the AI.",
           operators,
         ).catch((e) => console.error("telegram handoff alert failed (best-effort):", e));
       }
@@ -386,6 +387,27 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
         username: reply.from.username,
       });
     }
+    // "/done" (or "resolved") in the topic = the operator is finished → resolve the
+    // session AND hand it back to the AI (the DO clears handedOff + broadcasts
+    // {type:"resume"}). Force-set (not toggle) so a repeat /done can't un-resolve.
+    // The command is documented in the handoff alert (see sendHandoffAlert call).
+    const cmd = reply.text.toLowerCase();
+    if (cmd === "/done" || cmd === "resolved") {
+      await doFetch(env, tenantId, sessionId, "https://do/resolve", {
+        method: "POST",
+        body: JSON.stringify({ resolved: true }),
+      });
+      const tenant = await getTenant(env, tenantId);
+      if (tenant) {
+        await sendToTopic(
+          tenant.botToken,
+          tenant.chatId,
+          reply.threadId,
+          "✅ Resolved — the AI has this chat again. Reply here anytime to take back over.",
+        ).catch((e) => console.error("telegram resolve ack failed (best-effort):", e));
+      }
+      return new Response("ok");
+    }
     await doFetch(env, tenantId, sessionId, "https://do/operator", {
       method: "POST",
       body: JSON.stringify({ text: reply.text }),
@@ -459,8 +481,12 @@ async function handleOperatorHandoffs(request: Request, env: Env): Promise<Respo
         ts: number | null;
       };
       const resolved = s.resolved === true;
-      return s.handedOff && (includeResolved || !resolved)
-        ? { sessionId, lastMessage: s.lastMessage, handedOff: true as const, ts: s.ts, resolved }
+      // Default inbox = handed-off & unresolved. Resolving hands the session back to
+      // the AI (handedOff flips false), so resolved rows are listed by their resolved
+      // flag instead — includeResolved keeps the app's history/undo-swipe view alive.
+      const listed = resolved ? includeResolved : s.handedOff;
+      return listed
+        ? { sessionId, lastMessage: s.lastMessage, handedOff: s.handedOff, ts: s.ts, resolved }
         : null;
     }),
   );
@@ -486,8 +512,10 @@ async function handleOperatorThread(request: Request, env: Env): Promise<Respons
 }
 
 // POST /api/operator/resolve { tenantId, sessionId } → toggle the session's
-// resolved flag in its DO. Resolved sessions drop out of the default inbox; a new
-// live visitor message un-resolves them (the DO handles that on ring-append).
+// resolved flag in its DO. Resolving ALSO hands the session back to the AI
+// (handedOff=false + {type:"resume"} — the DO owns that). Resolved sessions drop
+// out of the default inbox; a new live visitor message un-resolves them WITHOUT
+// re-handing-off (the DO handles both on ring-append).
 async function handleOperatorResolve(request: Request, env: Env): Promise<Response> {
   const b = (await request.json().catch(() => null)) as {
     tenantId?: string;

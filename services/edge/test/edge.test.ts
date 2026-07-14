@@ -12,7 +12,14 @@ import {
 import { renderLeadEmail } from "../src/email";
 import { deliverLead } from "../src/index";
 import { parseOwnerReply, sendToTopic, buildMentions, sendHandoffAlert } from "../src/telegram";
-import { broadcast, SessionDO, RING_MAX, type RingMsg } from "../src/session-do";
+import {
+  broadcast,
+  SessionDO,
+  RING_MAX,
+  HANDBACK_NOTE,
+  HANDBACK_SILENCE_MINUTES,
+  type RingMsg,
+} from "../src/session-do";
 import { pushToApp } from "../src/push";
 import { workersAiRunner, MAX_OUTPUT_TOKENS, type ChatMessage } from "../src/ai";
 import {
@@ -70,14 +77,20 @@ function fakeEnv(extra: Partial<Env> = {}): Env {
 }
 
 // ── a Map-backed fake DurableObjectState (storage only; sockets are no-ops) ──
+// The alarm slot mirrors the platform: ONE pending alarm, setAlarm overwrites,
+// deleteAlarm clears, getAlarm reads it back (tests assert arm/disarm through it).
 function fakeDOState(): DurableObjectState {
   const store = new Map<string, unknown>();
+  let alarm: number | null = null;
   return {
     acceptWebSocket: () => {},
     getWebSockets: () => [],
     storage: {
       get: async (k: string) => store.get(k),
       put: async (k: string, v: unknown) => void store.set(k, v),
+      setAlarm: async (t: number | Date) => void (alarm = typeof t === "number" ? t : t.getTime()),
+      deleteAlarm: async () => void (alarm = null),
+      getAlarm: async () => alarm,
     },
   } as unknown as DurableObjectState;
 }
@@ -1079,6 +1092,209 @@ describe("SessionDO ring buffer", () => {
   });
 });
 
+// ── hand-back: resolve + silence alarm (handoff is no longer forever) ─────────
+describe("SessionDO hand-back", () => {
+  const env = fakeEnv();
+  const authed = { [DO_INTERNAL_HEADER]: doInternalSecret(env) };
+  const post = (do_: SessionDO, path: string, body?: unknown) =>
+    do_.fetch(
+      new Request(`https://do${path}`, {
+        method: "POST",
+        headers: authed,
+        body: body === undefined ? null : JSON.stringify(body),
+      }),
+    );
+  const get = (do_: SessionDO, path: string) =>
+    do_.fetch(new Request(`https://do${path}`, { headers: authed }));
+  const handedOff = async (do_: SessionDO) =>
+    ((await (await get(do_, "/state")).json()) as { handedOff: boolean }).handedOff;
+
+  /** fakeDOState + one visible socket, so broadcasts can be asserted. */
+  function socketDO(e: Env = env): { do_: SessionDO; frames: string[]; state: DurableObjectState } {
+    const frames: string[] = [];
+    const base = fakeDOState();
+    const state = Object.create(base, {
+      getWebSockets: { value: () => [{ send: (d: string) => void frames.push(d) }] },
+    }) as DurableObjectState;
+    return { do_: new SessionDO(state, e), frames, state };
+  }
+  const resumes = (frames: string[]) =>
+    frames.filter((f) => (JSON.parse(f) as { type: string }).type === "resume");
+
+  test("resolve clears handedOff + broadcasts {type:'resume'}", async () => {
+    const { do_, frames, state } = socketDO();
+    await post(do_, "/operator", { text: "human here" }); // handoff
+    expect(await handedOff(do_)).toBe(true);
+    expect(await (await post(do_, "/resolve", {})).json()).toEqual({ ok: true, resolved: true });
+    expect(await handedOff(do_)).toBe(false);
+    expect(resumes(frames)).toHaveLength(1);
+    expect(await state.storage.getAlarm()).toBeNull(); // any pending silence alarm disarmed
+  });
+
+  test("resolve when the bot already has the session → no resume broadcast", async () => {
+    const { do_, frames } = socketDO();
+    await post(do_, "/resolve", {});
+    expect(resumes(frames)).toHaveLength(0);
+  });
+
+  test("un-resolve toggle (undo swipe) does NOT re-hand-off", async () => {
+    const { do_, frames } = socketDO();
+    await post(do_, "/operator", { text: "hi" });
+    await post(do_, "/resolve", {}); // resolved + handed back
+    await post(do_, "/resolve", {}); // undo
+    expect(await handedOff(do_)).toBe(false);
+    expect(resumes(frames)).toHaveLength(1); // only the first resolve resumed
+  });
+
+  test("force-set body: repeated {resolved:true} (Telegram /done) never un-resolves", async () => {
+    const do_ = new SessionDO(fakeDOState(), env);
+    expect(await (await post(do_, "/resolve", { resolved: true })).json()).toEqual({
+      ok: true,
+      resolved: true,
+    });
+    expect(await (await post(do_, "/resolve", { resolved: true })).json()).toEqual({
+      ok: true,
+      resolved: true,
+    });
+    // and a bodyless POST still toggles (the app route sends no body)
+    expect(await (await post(do_, "/resolve")).json()).toEqual({ ok: true, resolved: false });
+  });
+
+  test("visitor msg while handed off arms the silence alarm; operator reply disarms it", async () => {
+    const { do_, state } = socketDO();
+    // visitor msg while NOT handed off → no alarm (bot is answering anyway)
+    await post(do_, "/log", { messages: [{ role: "visitor", text: "hi" }] });
+    expect(await state.storage.getAlarm()).toBeNull();
+
+    await post(do_, "/operator", { text: "human here" });
+    const before = Date.now();
+    await post(do_, "/log", { messages: [{ role: "visitor", text: "anyone?" }] });
+    const alarm = await state.storage.getAlarm();
+    expect(alarm).not.toBeNull();
+    expect(alarm!).toBeGreaterThanOrEqual(before + HANDBACK_SILENCE_MINUTES * 60_000);
+    // seed replays never arm it
+    // (backfill is not the visitor waiting on a silent operator)
+
+    await post(do_, "/operator", { text: "sorry, here now" });
+    expect(await state.storage.getAlarm()).toBeNull();
+  });
+
+  test("HANDBACK_SILENCE_MINUTES env knob tunes the alarm", async () => {
+    const { do_, state } = socketDO(fakeEnv({ HANDBACK_SILENCE_MINUTES: "1" }));
+    await post(do_, "/operator", { text: "hi" });
+    const before = Date.now();
+    await post(do_, "/log", { messages: [{ role: "visitor", text: "ping" }] });
+    const alarm = (await state.storage.getAlarm())!;
+    expect(alarm).toBeGreaterThanOrEqual(before + 60_000);
+    expect(alarm).toBeLessThan(before + 2 * 60_000); // 1 min, not the 5-min default
+  });
+
+  test("alarm fires → hand back: handedOff false + resume + bot-styled ring note", async () => {
+    const { do_, frames } = socketDO();
+    await post(do_, "/operator", { text: "human here" });
+    await post(do_, "/log", { messages: [{ role: "visitor", text: "hello?" }] });
+    await do_.alarm();
+    expect(await handedOff(do_)).toBe(false);
+    expect(resumes(frames)).toHaveLength(1);
+    const { messages } = (await (await get(do_, "/log")).json()) as { messages: RingMsg[] };
+    expect(messages[messages.length - 1]).toMatchObject({ role: "ai", text: HANDBACK_NOTE });
+  });
+
+  test("stray alarm when the bot already has the session → silent no-op", async () => {
+    const { do_, frames } = socketDO();
+    await do_.alarm();
+    expect(resumes(frames)).toHaveLength(0);
+    const { messages } = (await (await get(do_, "/log")).json()) as { messages: RingMsg[] };
+    expect(messages).toHaveLength(0); // no note appended
+  });
+});
+
+// ── Telegram /done command → resolve + hand back (worker-level) ──────────────
+describe("telegram /done hand-back", () => {
+  async function webhookSend(env: Env, text: string, threadId = 9) {
+    return worker.fetch(
+      new Request("https://edge.test/api/telegram/webhook", {
+        method: "POST",
+        body: JSON.stringify({
+          message: {
+            text,
+            message_thread_id: threadId,
+            from: { id: 777, first_name: "Op", username: "tgop" },
+          },
+        }),
+      }),
+      env,
+    );
+  }
+
+  test("'/done' resolves + hands back, acks in the topic, never reaches the visitor", async () => {
+    const env = wireSessionNS(fakeEnv({ TELEGRAM_BOT_TOKEN: "tok", TELEGRAM_CHAT_ID: "-100" }));
+    await linkThreadSession(env, "self", 9, "s-tg");
+    // hand off via a real operator reply first
+    await webhookSend(env, "a human is here now");
+
+    // stub outbound fetch (Telegram) for the rest of the test — the /done ack AND
+    // the follow-up /api/chat's topic mirror both go through it.
+    const tg: { url: string; body: any }[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      tg.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null });
+      return Response.json({ ok: true, result: { message_thread_id: 9 } });
+    }) as typeof fetch;
+    try {
+      expect((await webhookSend(env, "/done")).status).toBe(200);
+
+      // ack posted into the topic (best-effort sendMessage)
+      expect(tg.some((c) => c.url.includes("sendMessage") && /Resolved/.test(c.body?.text))).toBe(
+        true,
+      );
+      // the command was NOT forwarded to the visitor as an operator reply
+      const thread = await worker.fetch(
+        new Request("https://edge.test/api/operator/thread", {
+          method: "POST",
+          body: JSON.stringify({ tenantId: "self", sessionId: "s-tg" }),
+        }),
+        env,
+      );
+      const { messages } = (await thread.json()) as { messages: RingMsg[] };
+      expect(messages.map((m) => m.text)).toEqual(["a human is here now"]); // no "/done"
+      // and the session is handed back — the bot answers the next visitor message
+      const chat = await worker.fetch(
+        new Request("https://edge.test/api/chat", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: "s-tg", tenantId: "self", message: "back again" }),
+        }),
+        env,
+      );
+      expect(((await chat.json()) as { handedOff: boolean }).handedOff).toBe(false);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
+  test("'resolved' (case-insensitive) works too; normal replies still forward", async () => {
+    const env = wireSessionNS(fakeEnv({ TELEGRAM_BOT_TOKEN: "tok", TELEGRAM_CHAT_ID: "-100" }));
+    await linkThreadSession(env, "self", 9, "s-tg2");
+    await webhookSend(env, "taking this");
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({ ok: true, result: { message_thread_id: 9 } })) as unknown as typeof fetch;
+    try {
+      await webhookSend(env, "Resolved");
+      const chat = await worker.fetch(
+        new Request("https://edge.test/api/chat", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: "s-tg2", tenantId: "self", message: "hi" }),
+        }),
+        env,
+      );
+      expect(((await chat.json()) as { handedOff: boolean }).handedOff).toBe(false);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});
+
 // ── operator app routes (Buttr §3a–§3c) ──────────────────────────────────────
 describe("operator app routes", () => {
   const post = (path: string, body: unknown) =>
@@ -1180,22 +1396,23 @@ describe("operator app routes", () => {
     expect(conversations).toHaveLength(1);
     expect(conversations[0]).toMatchObject({ sessionId: "s-live", resolved: true });
 
-    // a new live visitor message (the chat path's ring-append) un-resolves it
-    await worker.fetch(
+    // a new live visitor message (the chat path's ring-append) un-resolves it —
+    // but does NOT re-hand-off: resolve handed the session back to the AI, so the
+    // bot answers (handedOff:false on the chat response = the founder's bug fixed).
+    const chat = await worker.fetch(
       new Request("https://edge.test/api/chat", {
         method: "POST",
         body: JSON.stringify({ sessionId: "s-live", tenantId: "self", message: "hello again?" }),
       }),
       env,
     );
-    const revived = await worker.fetch(post("/api/operator/handoffs", { tenantId: "self" }), env);
-    const rows = (
-      (await revived.json()) as {
-        conversations: { sessionId: string; resolved: boolean }[];
-      }
-    ).conversations;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ sessionId: "s-live", resolved: false });
+    expect(((await chat.json()) as { handedOff: boolean }).handedOff).toBe(false);
+    // not handed off anymore → out of the handoff inbox even with includeResolved
+    const revived = await worker.fetch(
+      post("/api/operator/handoffs", { tenantId: "self", includeResolved: true }),
+      env,
+    );
+    expect(((await revived.json()) as { conversations: unknown[] }).conversations).toHaveLength(0);
   });
 
   test("thread of an untouched session → empty messages", async () => {

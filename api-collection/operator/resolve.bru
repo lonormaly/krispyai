@@ -28,9 +28,12 @@ tests {
 }
 
 docs {
-  Toggle a session's `resolved` flag (operator inbox hygiene). Resolved sessions are
-  excluded from the default `/api/operator/handoffs` response; toggling again un-resolves
-  (undo an accidental swipe). A NEW live visitor message on a resolved session also
-  un-resolves it automatically — the conversation is live again. Missing `tenantId` or
-  `sessionId` → 400. Response: `{ ok: true, resolved: boolean }` (the new state).
+  Toggle a session's `resolved` flag (operator inbox hygiene). Resolving ALSO hands the
+  session back to the AI: `handedOff` flips false and `{ type: "resume" }` is broadcast
+  to the session's WebSockets, so the bot answers the visitor's next message. Resolved
+  sessions are excluded from the default `/api/operator/handoffs` response; toggling
+  again un-resolves (undo an accidental swipe) WITHOUT re-handing-off. A NEW live
+  visitor message on a resolved session also un-resolves it automatically — the
+  conversation is live again, answered by the AI. Missing `tenantId` or `sessionId`
+  → 400. Response: `{ ok: true, resolved: boolean }` (the new state).
 }

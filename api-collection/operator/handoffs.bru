@@ -32,6 +32,7 @@ docs {
   handoff index exists — the Worker scans the session→thread KV map (first page, 1000
   sessions) and asks each SessionDO for a one-shot summary. Missing `tenantId` → 400.
   Resolved sessions are EXCLUDED by default; pass `includeResolved: true` to list them
-  too (rows carry `resolved: true`).
-  Response: `{ conversations: [{ sessionId, lastMessage, handedOff: true, ts, resolved }] }`.
+  too (rows carry `resolved: true` and `handedOff: false` — resolving hands the session
+  back to the AI).
+  Response: `{ conversations: [{ sessionId, lastMessage, handedOff, ts, resolved }] }`.
 }

@@ -193,7 +193,12 @@ paths:
       description: >
         A WebSocket upgrade request; the Worker forwards it to the `(tenant, session)` DO. The
         visitor receives `{ type: "ready", handedOff }` on connect, then `operator` / `handoff`
-        / `resume` events. Not a normal JSON response — this row documents the upgrade contract.
+        / `resume` events. `{ type: "resume" }` = the AI took the session back — sent when an
+        operator resolves it (app swipe, `/api/operator/resolve`, Telegram `/done`) or when the
+        operator-silence alarm fires (`HANDBACK_SILENCE_MINUTES` after a visitor message on a
+        handed-off session with no operator reply, default 5). The widget drops its "human
+        joined" framing and the bot answers again. Not a normal JSON response — this row
+        documents the upgrade contract.
         With `role=operator` the DO tags the socket as an operator's (the Buttr app's in-thread
         live channel) — it receives the full event union PLUS the operator-only
         `{ type: "message", role: "visitor" | "ai", text, ts }` mirror of live ring appends
@@ -266,7 +271,8 @@ paths:
         Every handed-off session for the tenant, newest activity first, each with a
         `lastMessage` preview from the session's ring buffer. Resolved sessions are
         EXCLUDED by default; pass `includeResolved: true` to list them too (rows carry
-        `resolved: true`). No dedicated handoff index
+        `resolved: true` and `handedOff: false` — resolving hands the session back to
+        the AI). No dedicated handoff index
         exists — the Worker scans the session→thread KV map (first page, 1000 sessions) and
         asks each SessionDO for a one-shot summary.
       security: [] # tonight — see /api/operator/reply auth note
@@ -330,13 +336,18 @@ paths:
   /api/operator/resolve:
     post:
       tags: [public]
-      summary: Toggle a session's resolved flag (inbox hygiene)
+      summary: Toggle a session's resolved flag (inbox hygiene + hand back to the AI)
       operationId: operatorResolve
       description: >
-        Toggle the session's `resolved` flag in its SessionDO. Resolved sessions drop out
-        of the default `/api/operator/handoffs` inbox; toggling again un-resolves (undo an
-        accidental swipe). A NEW live visitor message on a resolved session un-resolves it
-        automatically — the conversation is live again.
+        Toggle the session's `resolved` flag in its SessionDO. Resolving ALSO hands the
+        session back to the AI — `handedOff` flips false and `{ type: "resume" }` is
+        broadcast to the session's WebSockets (the widget drops its "human joined"
+        framing), so the bot answers the visitor's next message. Resolved sessions drop
+        out of the default `/api/operator/handoffs` inbox; toggling again un-resolves
+        (undo an accidental swipe) WITHOUT re-handing-off — an operator reply re-takes
+        over. A NEW live visitor message on a resolved session un-resolves it
+        automatically (also without re-handing-off — the conversation is live again,
+        answered by the AI).
       security: [] # tonight — see /api/operator/reply auth note
       requestBody:
         required: true
@@ -375,7 +386,12 @@ paths:
       description: >
         Telegram calls this with the owner's reply in a forum topic. The Worker verifies the
         secret Telegram echoes back, resolves the session for the topic, and pushes the reply
-        to the visitor (setting `handedOff`). Non-owner updates are ack'd and ignored.
+        to the visitor (setting `handedOff` and disarming the silence hand-back alarm).
+        Non-owner updates are ack'd and ignored. COMMAND: a reply of exactly `/done` (or
+        `resolved`, case-insensitive) is NOT forwarded to the visitor — it resolves the
+        session and hands it back to the AI (same semantics as `/api/operator/resolve` with
+        a force-set), then acks into the topic. The command is advertised in the handoff
+        alert message.
       security:
         - telegramWebhookSecret: []
       requestBody:
@@ -577,7 +593,11 @@ components:
               lastMessage:
                 type: [string, "null"]
                 description: The ring-buffer tail (null when the ring is empty).
-              handedOff: { type: boolean, const: true }
+              handedOff:
+                type: boolean
+                description: >
+                  True on default-inbox rows. Resolved rows (via `includeResolved: true`)
+                  carry false — resolving hands the session back to the AI.
               ts:
                 type: [integer, "null"]
                 description: Epoch millis of the last message (null when the ring is empty).

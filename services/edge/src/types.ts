@@ -96,6 +96,9 @@ export interface Env {
   MAX_AI_TURNS?: string;
   /** Output token cap per reply, default MAX_OUTPUT_TOKENS (256). */
   MAX_OUTPUT_TOKENS?: string;
+  /** Operator-silence minutes before a handed-off session hands back to the AI,
+   * default HANDBACK_SILENCE_MINUTES (5). */
+  HANDBACK_SILENCE_MINUTES?: string;
 
   // --- misc ---
   /** CORS allow-origin for the widget. Default "*". */
@@ -128,6 +131,8 @@ export type ServerEvent =
   | { type: "ready"; handedOff: boolean }
   | { type: "operator"; text: string }
   | { type: "handoff" }
+  /** The AI took the session back (operator resolved it, or went silent past the
+   * HANDBACK_SILENCE_MINUTES alarm). Widget drops its "human joined" framing. */
   | { type: "resume" }
   /** Live visitor/AI ring-append mirrored to `role=operator` sockets only (Buttr thread, §3d/§6). */
   | { type: "message"; role: "visitor" | "ai"; text: string; ts: number };

@@ -13,9 +13,17 @@
 //   GET  /log                  → { messages }    (the 20-msg ring — thread read)
 //   POST /log {messages,seed?} → append to the ring (seed: only if the ring is empty)
 //   POST /operator {text}      → set handedOff, broadcast + ring-append operator reply
+//                                (also cancels the silence hand-back alarm)
 //   POST /handoff              → broadcast a handoff prompt (AI escalation)
-//   POST /resolve              → toggle the `resolved` flag (operator inbox hygiene);
-//                                a new LIVE visitor message un-resolves automatically
+//   POST /resolve {resolved?}  → toggle (or force-set) the `resolved` flag (operator
+//                                inbox hygiene); resolving ALSO hands the session back
+//                                to the AI (handedOff=false + {type:"resume"} broadcast).
+//                                A new LIVE visitor message un-resolves automatically
+//                                but does NOT re-hand-off (the bot answers).
+//
+// Silence hand-back: a visitor message on a handed-off session arms the DO alarm
+// (HANDBACK_SILENCE_MINUTES, default 5). An operator reply disarms it. If it fires,
+// the session hands back to the AI so a returning visitor never faces a muted bot.
 import type { Env, ServerEvent } from "./types";
 import { DO_INTERNAL_HEADER, doInternalSecret } from "./store";
 
@@ -50,6 +58,13 @@ export interface RingMsg {
   ts: number;
 }
 
+// ── silence hand-back (DO alarm) ─────────────────────────────────────────────
+// Operator silence after a visitor message on a handed-off session → hand back to
+// the AI. Minutes are env-tunable (HANDBACK_SILENCE_MINUTES); this is the default.
+export const HANDBACK_SILENCE_MINUTES = 5;
+// Bot-styled ring line appended on a silence hand-back (operator thread record).
+export const HANDBACK_NOTE = "No reply from the team for a while — the AI has resumed this chat.";
+
 export class SessionDO {
   private state: DurableObjectState;
   private env: Env;
@@ -77,6 +92,30 @@ export class SessionDO {
     while (log.length > RING_MAX) log.shift();
     await this.state.storage.put("log", log);
     return log;
+  }
+
+  private silenceMs(): number {
+    const mins = Number(this.env.HANDBACK_SILENCE_MINUTES);
+    return (Number.isFinite(mins) && mins > 0 ? mins : HANDBACK_SILENCE_MINUTES) * 60_000;
+  }
+
+  /** Hand the session back to the AI: clear handedOff, disarm the silence alarm,
+   * broadcast {type:"resume"} to every socket (widget un-mutes its framing; the
+   * Buttr thread sees the state flip). No-op when the bot already has the session. */
+  private async handBack(opts: { note?: string } = {}): Promise<void> {
+    await this.state.storage.deleteAlarm();
+    if (!(await this.handedOff())) return;
+    await this.state.storage.put("handedOff", false);
+    if (opts.note) await this.appendRing([{ role: "ai", text: opts.note, ts: Date.now() }]);
+    broadcast(this.state.getWebSockets(), { type: "resume" });
+  }
+
+  /** DO alarm — armed by a visitor message on a handed-off session, disarmed by any
+   * operator reply (and by /resolve). Firing = the operator went silent → hand back.
+   * The DO has ONE alarm slot; setAlarm overwrites, which is exactly the "reset the
+   * countdown on each new visitor message" semantics we want. */
+  async alarm(): Promise<void> {
+    await this.handBack({ note: HANDBACK_NOTE });
   }
 
   /** The internal (Worker-only) HTTP surface is state-mutating — require the shared
@@ -156,9 +195,15 @@ export class SessionDO {
       const log = await this.appendRing(appended);
       // A new LIVE visitor message on a resolved session un-resolves it — the
       // visitor came back, so it belongs in the inbox again. Seed replays are
-      // backfill of old turns, not new activity.
-      if (!seed && appended.some((m) => m.role === "visitor") && (await this.resolved())) {
-        await this.state.storage.put("resolved", false);
+      // backfill of old turns, not new activity. Un-resolving does NOT re-hand-off:
+      // the bot answers, and the visitor can re-request a human normally.
+      if (!seed && appended.some((m) => m.role === "visitor")) {
+        if (await this.resolved()) await this.state.storage.put("resolved", false);
+        // Handed-off + visitor waiting → arm (or reset) the silence hand-back alarm.
+        // Any operator reply disarms it (see /operator).
+        if (await this.handedOff()) {
+          await this.state.storage.setAlarm(Date.now() + this.silenceMs());
+        }
       }
       // Mirror LIVE visitor/AI turns to operator sockets so an open Buttr thread
       // streams in realtime (§3d/§6). Seed replays are backfill (the app reads
@@ -177,16 +222,22 @@ export class SessionDO {
     if (request.method === "POST" && url.pathname.endsWith("/operator")) {
       const { text } = (await request.json()) as { text: string };
       await this.state.storage.put("handedOff", true);
+      await this.state.storage.deleteAlarm(); // the operator replied — disarm the silence hand-back
       await this.appendRing([{ role: "operator", text, ts: Date.now() }]);
       const n = broadcast(this.state.getWebSockets(), { type: "operator", text });
       return Response.json({ ok: true, delivered: n });
     }
 
     // Toggle the resolved flag (operator "done with this one" — inbox hygiene).
-    // Toggling (not one-way set) lets the app undo an accidental swipe.
+    // Toggling (not one-way set) lets the app undo an accidental swipe; a body of
+    // { resolved: boolean } force-sets instead (the Telegram /done path — a repeat
+    // /done must never accidentally un-resolve). Resolving = hand back to the AI.
+    // Un-resolving (undo) does NOT re-hand-off — an operator reply re-takes over.
     if (request.method === "POST" && url.pathname.endsWith("/resolve")) {
-      const next = !(await this.resolved());
+      const body = (await request.json().catch(() => null)) as { resolved?: boolean } | null;
+      const next = typeof body?.resolved === "boolean" ? body.resolved : !(await this.resolved());
       await this.state.storage.put("resolved", next);
+      if (next) await this.handBack();
       return Response.json({ ok: true, resolved: next });
     }
 
