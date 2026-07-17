@@ -16,9 +16,11 @@
 // → no cross-isolate race). Upgrade path: a bounded per-origin set ("live on these N
 // domains") once multi-site lands and the key gains a site segment (seen:<t>:<site>).
 import type { Env } from "./types";
+import { ns } from "./store";
 
-export const kSeen = (tenantId: string) => `seen:${tenantId}`;
-export const SEEN_THROTTLE_MS = 5 * 60_000; // one stamp per tenant per isolate per 5 min
+// Per-site: an unsuffixed tenant keeps `seen:<t>` exactly; site B is `seen:<t>:<siteB>`.
+export const kSeen = (tenantId: string, siteId?: string) => `seen:${ns(tenantId, siteId)}`;
+export const SEEN_THROTTLE_MS = 5 * 60_000; // one stamp per site per isolate per 5 min
 
 /** One tenant's last-seen record — what the dashboard renders. */
 export interface SeenRecord {
@@ -27,8 +29,10 @@ export interface SeenRecord {
   url?: string; // full embedding page URL when the Referer carried it
 }
 
-// In-isolate throttle: tenantId → last ms we wrote KV for it. Bounded like the
-// operator-auth cache; a single account's traffic never approaches the cap.
+// In-isolate throttle: ns(tenant,site) → last ms we wrote KV for it. Keyed by the
+// SITE namespace, not the bare tenant — else a warm isolate that just stamped site A
+// would throttle site B's first heartbeat and B would show "not detected". Bounded
+// like the operator-auth cache; a single account's traffic never approaches the cap.
 const lastStamp = new Map<string, number>();
 
 /** Host (scheme+host) + full url of the page that embedded the widget, from the
@@ -53,27 +57,37 @@ function embedder(request: Request): { origin?: string; url?: string } {
 
 /** Best-effort stamp of the tenant's last-seen record on a widget-config fetch.
  * Throttled in-isolate; never throws (a liveness write must not break the boot). */
-export async function stampSeen(env: Env, tenantId: string, request: Request): Promise<void> {
+export async function stampSeen(
+  env: Env,
+  tenantId: string,
+  request: Request,
+  siteId?: string,
+): Promise<void> {
   const now = Date.now();
-  const prev = lastStamp.get(tenantId);
+  const key = ns(tenantId, siteId);
+  const prev = lastStamp.get(key);
   if (prev !== undefined && now - prev < SEEN_THROTTLE_MS) return; // throttled, no write
   // crude size cap — one account's operators never approach it; clear wholesale if a
   // large fleet ever does (matches operator-auth's cache backstop).
   if (lastStamp.size > 5000) lastStamp.clear();
-  lastStamp.set(tenantId, now);
+  lastStamp.set(key, now);
   const rec: SeenRecord = { at: now, ...embedder(request) };
   try {
-    await env.KRISPY_KV.put(kSeen(tenantId), JSON.stringify(rec));
+    await env.KRISPY_KV.put(kSeen(tenantId, siteId), JSON.stringify(rec));
   } catch (e) {
     // Roll back the throttle so the next request retries the write.
-    lastStamp.delete(tenantId);
+    lastStamp.delete(key);
     console.error("liveness stamp failed:", e);
   }
 }
 
-/** Read a tenant's last-seen record (null if the widget has never phoned home). */
-export async function readSeen(env: Env, tenantId: string): Promise<SeenRecord | null> {
-  const raw = await env.KRISPY_KV.get(kSeen(tenantId));
+/** Read a site's last-seen record (null if the widget has never phoned home). */
+export async function readSeen(
+  env: Env,
+  tenantId: string,
+  siteId?: string,
+): Promise<SeenRecord | null> {
+  const raw = await env.KRISPY_KV.get(kSeen(tenantId, siteId));
   if (!raw) return null;
   try {
     return JSON.parse(raw) as SeenRecord;

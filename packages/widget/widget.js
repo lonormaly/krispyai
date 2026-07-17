@@ -16,6 +16,10 @@
   var cfg = {
     api: ((script && script.getAttribute("data-api")) || "").replace(/\/$/, ""),
     tenant: (script && script.getAttribute("data-tenant")) || "self",
+    // Optional site id for accounts running multiple websites — each site has its
+    // own config/kbase/branding. Absent → the account's default site (unsuffixed),
+    // so existing embeds are unchanged.
+    site: (script && script.getAttribute("data-site")) || "",
     title: (script && script.getAttribute("data-title")) || "Chat with us",
     accent: (script && script.getAttribute("data-accent")) || "#e39a2b",
   };
@@ -656,7 +660,12 @@
         ]
       : [];
   }
-  fetch(cfg.api + "/api/widget/config?t=" + encodeURIComponent(cfg.tenant))
+  fetch(
+    cfg.api +
+      "/api/widget/config?t=" +
+      encodeURIComponent(cfg.tenant) +
+      (cfg.site ? "&s=" + encodeURIComponent(cfg.site) : ""),
+  )
     .then(function (r) {
       return r.json();
     })
@@ -1306,6 +1315,7 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           tenantId: cfg.tenant,
+          siteId: cfg.site || undefined,
           sessionId: sessionId,
           formId: form.id,
           values: values,
@@ -1351,6 +1361,7 @@
       body: JSON.stringify({
         sessionId: sessionId,
         tenantId: cfg.tenant,
+        siteId: cfg.site || undefined,
         message: text,
         history: history.slice(-10),
         source: openSource || undefined, // popup origin → session context (§3.5)

@@ -47,6 +47,14 @@ or wrong secret returns **401** (config routes) / **403** (webhook, billing) and
   [security](/docs/security).
 </Callout>
 
+<Callout>
+  **Multi-site.** An account can run multiple sites, each with its own config/kbase/branding.
+  Pass an optional `?s=<siteId>` (query, on `config`/`liveness`) or `siteId` (body, on
+  `chat`/`lead`/`tenant/config`) to scope to a site. Absent → the account's default site
+  (the bare `tenant:<t>` key), so existing embeds are unchanged. `siteId` is
+  `[a-z0-9_-]{1,40}`; anything else → `400`. Conversations and billing stay account-scoped.
+</Callout>
+
 ## the SessionDO (internal)
 
 the Worker forwards to a `SessionDO` per `(tenant, session)`; the browser never calls it

@@ -12,6 +12,10 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Added
 
+- Multi-site (edge + widget foundation) — one account can run multiple sites, each with its **own** config blob (theme, persona, connectors, forms, popups, kbase) and liveness. A site is an optional `?s=<site>` (query) / `data-site` (embed) / `siteId` (chat & lead body) that suffixes the tenant's KV namespace via `ns(t, s)`. **An absent or `default` site collapses to the exact legacy key — every existing tenant is untouched and nothing migrates** (asserted by test). `siteId` is charset-guarded (`/^[a-z0-9_-]{1,40}$/`) at the trust boundary before it enters a `:`-delimited key; malformed → `400`. Config-consuming routes (`/api/widget/config`, `/api/chat`, `/api/lead`, `/api/tenant/config` GET+POST, `/api/tenant/liveness`) resolve it; conversations (session/thread/DO) and billing (usage/entitlement) stay keyed by tenantId alone — **pooled quota per account, per-site conversations deferred**. The cloud dashboard site-switcher + site table land next.
+
+### Added
+
 - Widget liveness — the widget's boot-time `GET /api/widget/config` now doubles as a heartbeat: the edge stamps a per-tenant last-seen record (timestamp + the embedding page's origin/url from `Origin`/`Referer`), throttled in-isolate to stay well under KV's write budget and never blocking the boot. New secret-authed `GET /api/tenant/liveness?t=<tenant>` returns `{ seen }` so the dashboard can show "live on example.com — last seen 2m ago". Stores last-seen only for now (per-origin set + per-site keying are the multi-site upgrade path).
 
 ### Added

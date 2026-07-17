@@ -28,6 +28,7 @@ import { renderLeadEmail, sendLeadEmail } from "./email";
 import type { Connector, Env, FormSpec, TenantConfig } from "./types";
 import {
   getTenant,
+  resolveSiteId,
   getThreadForSession,
   getSessionForThread,
   linkThreadSession,
@@ -125,6 +126,14 @@ function cors(env: Env): Record<string, string> {
 const json = (env: Env, data: unknown, status = 200) =>
   Response.json(data, { status, headers: cors(env) });
 
+// Multi-site: resolve an optional site id (query ?s= or body.siteId) to a validated
+// value. undefined → the default (unsuffixed) site. A present-but-malformed id is a
+// 400 Response — the caller returns it so a junk id never reaches a `:`-delimited key.
+function siteOr400(env: Env, raw: string | null | undefined): string | undefined | Response {
+  const s = resolveSiteId(raw);
+  return s === null ? json(env, { error: "invalid_site" }, 400) : s;
+}
+
 function sessionStub(env: Env, tenantId: string, sessionId: string) {
   return env.SESSION.get(env.SESSION.idFromName(`${tenantId}:${sessionId}`));
 }
@@ -217,11 +226,14 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     sessionId?: string;
     message?: string;
     tenantId?: string;
+    siteId?: string;
     history?: ChatMessage[];
   } | null;
   if (!body?.sessionId || !body.message?.trim()) {
     return json(env, { error: "sessionId and message required" }, 400);
   }
+  const siteId = siteOr400(env, body.siteId);
+  if (siteId instanceof Response) return siteId;
   // Absurd-payload fast-reject (cost-DoS) BEFORE any work. Legit-but-long messages fall
   // through to the friendly truncation below (clampText); only megabyte payloads 413.
   if (body.message.length > MAX_MESSAGE_HARD) {
@@ -236,6 +248,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // Entitlement gate — before serving any Cloud feature. Self-host is always
   // entitled + unmetered; a Cloud tenant must have a valid (trial/active) sub and
   // be under its monthly cap. Push-driven: the snapshot was synced by billing.
+  // Entitlement + usage are keyed by tenantId ONLY — one account's plan and quota are
+  // pooled across all its sites (a site is a config namespace, not a billing unit).
   const ent = await entitled(env, tenantId);
   if (!ent.entitled) {
     return json(env, { error: "subscription_required", plan: ent.plan, status: ent.status }, 402);
@@ -244,7 +258,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return json(env, { error: "usage_limit_reached", plan: ent.plan }, 429);
   }
 
-  const tenant = await getTenant(env, tenantId);
+  const tenant = await getTenant(env, tenantId, siteId);
 
   // Authoritative memory: one combined DO read (handoff flag + ring) replaces the
   // /state read the flow made anyway — same subrequest count, and the AI context
@@ -433,6 +447,7 @@ async function handleContact(request: Request, env: Env): Promise<Response> {
 // the visitor taps those links; nothing is delivered server-side for them.
 interface LeadPayload {
   tenantId: string;
+  siteId?: string;
   sessionId: string;
   formId: string | null;
   values: Record<string, string>;
@@ -443,10 +458,13 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
   const b = (await request.json().catch(() => null)) as Partial<LeadPayload> | null;
   if (!b?.sessionId) return json(env, { error: "sessionId required" }, 400);
   const tenantId = b.tenantId || DEFAULT_TENANT;
+  const siteId = siteOr400(env, b.siteId);
+  if (siteId instanceof Response) return siteId;
   if (!(await checkLeadRate(env, tenantId, b.sessionId)))
     return json(env, { error: "rate_limited" }, 429);
   await deliverLead(env, {
     tenantId,
+    siteId,
     sessionId: b.sessionId,
     formId: b.formId ?? null,
     values: b.values || {},
@@ -462,7 +480,7 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
  * whatsapp/instagram connectors are never delivered here (CTA-only in the widget).
  */
 export async function deliverLead(env: Env, lead: LeadPayload): Promise<void> {
-  const tenant = await getTenant(env, lead.tenantId);
+  const tenant = await getTenant(env, lead.tenantId, lead.siteId);
   const form = tenant?.forms?.find((f) => f.id === lead.formId) ?? null;
   const connectors = tenant?.connectors ?? [];
   // Which connectors get this lead: the form's scoped set, else all configured.
@@ -716,9 +734,12 @@ function tenantSyncAuthed(request: Request, env: Env): boolean {
 async function handleTenantConfigGet(request: Request, env: Env): Promise<Response> {
   if (!tenantSyncAuthed(request, env))
     return new Response("unauthorized", { status: 401, headers: cors(env) });
-  const tenantId = new URL(request.url).searchParams.get("t");
+  const url = new URL(request.url);
+  const tenantId = url.searchParams.get("t");
   if (!tenantId) return json(env, { error: "t required" }, 400);
-  const cfg = await readTenantConfig(env, tenantId);
+  const siteId = siteOr400(env, url.searchParams.get("s"));
+  if (siteId instanceof Response) return siteId;
+  const cfg = await readTenantConfig(env, tenantId, siteId);
   if (!cfg) return json(env, { error: "not found" }, 404);
   return json(env, cfg);
 }
@@ -818,14 +839,17 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
     return new Response("unauthorized", { status: 401, headers: cors(env) });
   const body = (await request.json().catch(() => null)) as {
     tenantId?: string;
+    siteId?: string;
     config?: Partial<TenantConfig>;
   } | null;
   if (!body?.tenantId || !body.config) {
     return json(env, { error: "tenantId and config required" }, 400);
   }
+  const siteId = siteOr400(env, body.siteId);
+  if (siteId instanceof Response) return siteId;
   const bad = tenantConfigCapError(body.config);
   if (bad) return json(env, { error: bad.error }, bad.status);
-  await mergeTenantConfig(env, body.tenantId, body.config);
+  await mergeTenantConfig(env, body.tenantId, body.config, siteId);
   return json(env, { ok: true });
 }
 
@@ -834,11 +858,14 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
 // Returns ONLY the whitelist projection (publicWidgetConfig) — NEVER botToken/chatId/
 // systemPrompt. The widget must never reach the secret-guarded GET /api/tenant/config.
 async function handleWidgetConfig(request: Request, env: Env): Promise<Response> {
-  const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
-  const cfg = await readTenantConfig(env, t);
-  // Free heartbeat: this fetch fires on every page load, so stamp the tenant's
+  const url = new URL(request.url);
+  const t = url.searchParams.get("t") || DEFAULT_TENANT;
+  const siteId = siteOr400(env, url.searchParams.get("s"));
+  if (siteId instanceof Response) return siteId;
+  const cfg = await readTenantConfig(env, t, siteId);
+  // Free heartbeat: this fetch fires on every page load, so stamp the site's
   // last-seen record (throttled in-isolate, best-effort — never blocks the boot).
-  await stampSeen(env, t, request);
+  await stampSeen(env, t, request, siteId);
   // Short public cache — the boot config (now up to ~10–30KB with a data-URI avatar)
   // is otherwise refetched uncached on every page load. 60s keeps edits near-live.
   return Response.json(publicWidgetConfig(cfg), {
@@ -853,8 +880,11 @@ async function handleWidgetConfig(request: Request, env: Env): Promise<Response>
 async function handleTenantLiveness(request: Request, env: Env): Promise<Response> {
   if (!tenantSyncAuthed(request, env))
     return new Response("unauthorized", { status: 401, headers: cors(env) });
-  const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
-  return json(env, { seen: await readSeen(env, t) });
+  const url = new URL(request.url);
+  const t = url.searchParams.get("t") || DEFAULT_TENANT;
+  const siteId = siteOr400(env, url.searchParams.get("s"));
+  if (siteId instanceof Response) return siteId;
+  return json(env, { seen: await readSeen(env, t, siteId) });
 }
 
 // ── GET /internal/usage ──────────────────────────────────────────────────────

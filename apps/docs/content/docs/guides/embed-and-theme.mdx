@@ -27,12 +27,13 @@ drop one tag on any page, before `</body>`:
 these are the boot-time knobs read off the `<script>` tag. richer appearance is set via the
 theme (below), not attributes.
 
-| attribute     | required | default        | meaning                                         |
-| ------------- | -------- | -------------- | ----------------------------------------------- |
-| `data-api`    | yes      | —              | your `@krispy/edge` Worker base URL             |
-| `data-tenant` | no       | `self`         | tenant id (multi-tenant uses this)              |
-| `data-title`  | no       | `Chat with us` | header text (theme `headerTitle` supersedes it) |
-| `data-accent` | no       | `#e39a2b`      | brand color, used before the theme fetch lands  |
+| attribute     | required | default        | meaning                                                                                 |
+| ------------- | -------- | -------------- | --------------------------------------------------------------------------------------- |
+| `data-api`    | yes      | —              | your `@krispy/edge` Worker base URL                                                     |
+| `data-tenant` | no       | `self`         | tenant id (multi-tenant uses this)                                                      |
+| `data-site`   | no       | (default site) | site id for accounts running multiple websites — each has its own config/kbase/branding |
+| `data-title`  | no       | `Chat with us` | header text (theme `headerTitle` supersedes it)                                         |
+| `data-accent` | no       | `#e39a2b`      | brand color, used before the theme fetch lands                                          |
 
 ## theme (from KV, no redeploy)
 

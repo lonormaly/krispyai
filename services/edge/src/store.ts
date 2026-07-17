@@ -108,10 +108,31 @@ export function doInternalSecret(env: Env): string {
   return env.DO_INTERNAL_SECRET || DO_INTERNAL_DEFAULT;
 }
 
+// ── multi-site namespacing ───────────────────────────────────────────────────
+// One account can run many sites, each with its OWN config blob (theme, persona,
+// connectors, forms, kbase) and liveness. A site is an OPTIONAL suffix on the
+// tenant's KV namespace. `ns(t)` and `ns(t, "default")` collapse to the bare
+// tenantId — so every EXISTING single-site tenant keeps its exact key and NOTHING
+// migrates. Conversations (session/thread/DO) and billing (usage/entitlement) stay
+// keyed by tenantId alone: pooled quota per account, per-site conversations deferred.
+export const DEFAULT_SITE = "default";
+export const ns = (tenantId: string, siteId?: string): string =>
+  siteId && siteId !== DEFAULT_SITE ? `${tenantId}:${siteId}` : tenantId;
+
+// A siteId becomes part of a `:`-delimited KV key, so it MUST be charset-bounded at
+// the trust boundary (keyspace-injection guard). Returns the siteId when valid,
+// undefined when absent, and null when present-but-malformed (the caller 400s).
+const SITE_ID_RE = /^[a-z0-9_-]{1,40}$/;
+export function resolveSiteId(raw: string | null | undefined): string | undefined | null {
+  if (raw === null || raw === undefined || raw === "") return undefined;
+  return SITE_ID_RE.test(raw) ? raw : null;
+}
+
 // ── key builders (pure) ──────────────────────────────────────────────────────
 export const kThreadToSession = (t: string, threadId: number) => `thread:${t}:${threadId}`;
 export const kSessionToThread = (t: string, sessionId: string) => `session:${t}:${sessionId}`;
-export const kTenant = (t: string) => `tenant:${t}`;
+// Config blob is per-site: an unsuffixed tenant keeps `tenant:<t>` exactly.
+export const kTenant = (t: string, siteId?: string) => `tenant:${ns(t, siteId)}`;
 /** Usage counter, bucketed by month so it doubles as a billing period. */
 export const kUsage = (t: string, kind: UsageKind, yyyymm: string) =>
   `usage:${t}:${yyyymm}:${kind}`;
@@ -129,14 +150,18 @@ export function monthKey(now = new Date()): string {
 // "self" (single-tenant self-host) is assembled from env secrets; any other
 // tenant is a JSON blob in KV. Missing/incomplete config → null (Telegram off,
 // chat still works — see chat flow's graceful degradation).
-export async function getTenant(env: Env, tenantId: string): Promise<TenantConfig | null> {
+export async function getTenant(
+  env: Env,
+  tenantId: string,
+  siteId?: string,
+): Promise<TenantConfig | null> {
   if (tenantId === "self") {
     if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return null;
     // forms/connectors/theme (+ prompt/model overrides) only ever live in KV — merge
     // them in so the chat/lead path reads the SAME source as /api/widget/config.
     // Env creds win for botToken/chatId (the secrets); env prompt/model override KV
     // only when set (env unset ⇒ KV value survives).
-    const kv = await readTenantConfig(env, "self");
+    const kv = await readTenantConfig(env, "self", siteId);
     return {
       ...kv,
       botToken: env.TELEGRAM_BOT_TOKEN,
@@ -145,7 +170,7 @@ export async function getTenant(env: Env, tenantId: string): Promise<TenantConfi
       model: env.AI_MODEL ?? kv?.model,
     };
   }
-  const raw = await env.KRISPY_KV.get(kTenant(tenantId));
+  const raw = await env.KRISPY_KV.get(kTenant(tenantId, siteId));
   if (!raw) return null;
   const cfg = JSON.parse(raw) as Partial<TenantConfig>;
   return cfg.botToken && cfg.chatId ? (cfg as TenantConfig) : null;
@@ -160,8 +185,9 @@ export async function getTenant(env: Env, tenantId: string): Promise<TenantConfi
 export async function readTenantConfig(
   env: Env,
   tenantId: string,
+  siteId?: string,
 ): Promise<Partial<TenantConfig> | null> {
-  const raw = await env.KRISPY_KV.get(kTenant(tenantId));
+  const raw = await env.KRISPY_KV.get(kTenant(tenantId, siteId));
   return raw ? (JSON.parse(raw) as Partial<TenantConfig>) : null;
 }
 
@@ -170,12 +196,13 @@ export async function mergeTenantConfig(
   env: Env,
   tenantId: string,
   patch: Partial<TenantConfig>,
+  siteId?: string,
 ): Promise<Partial<TenantConfig>> {
-  const next: Partial<TenantConfig> = { ...(await readTenantConfig(env, tenantId)) };
+  const next: Partial<TenantConfig> = { ...(await readTenantConfig(env, tenantId, siteId)) };
   for (const [k, v] of Object.entries(patch)) {
     if (v !== undefined) (next as Record<string, unknown>)[k] = v;
   }
-  await env.KRISPY_KV.put(kTenant(tenantId), JSON.stringify(next));
+  await env.KRISPY_KV.put(kTenant(tenantId, siteId), JSON.stringify(next));
   return next;
 }
 
