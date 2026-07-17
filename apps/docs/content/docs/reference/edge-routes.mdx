@@ -39,6 +39,9 @@ or wrong secret returns **401** (config routes) / **403** (webhook, billing) and
 | `POST` | `/api/tenant/config`              | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | `{ tenantId, config }` → **merge** into the tenant's KV config. the CLI writes here. out-of-bounds configs are hard-rejected: oversized avatar/kbSources → `413`, bad avatar scheme or non-https CTA url → `400` (see [tenant config → write caps](/docs/reference/tenant-config#write-caps)) |
 | `POST` | `/api/billing/entitlement`        | `x-billing-sync-secret: <BILLING_SYNC_SECRET>`               | mirror an entitlement snapshot into KV (for a hosted/multi-tenant deploy; unused in self-host)                                                                                                                                                                                                |
 | `GET`  | `/api/tenant/liveness?t=<tenant>` | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | "is my widget live?" — returns `{ seen: { at, origin?, url? } \| null }`, the last time the widget booted on a customer page (stamped, throttled, off every `GET /api/widget/config`) + the embedding origin/url. `null` until it phones home                                                 |
+| `GET`  | `/api/tenant/kb-suggestions?t=<tenant>&s=<site>` | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`     | list pending relearning suggestions → `{ suggestions: KbSuggestion[] }` (machine-proposed Q→A from operator-touched sessions; own KV key `suggestions:<ns(t,s)>`, never public)                                                                                                                |
+| `POST` | `/api/tenant/kb-approve`          | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | `{ tenantId, siteId?, id }` → move the suggestion into `kbSources` (+ bump `kbVersion`) and drop it from pending → `{ ok: true, source }`. `404` if the id isn't pending                                                                                                                       |
+| `POST` | `/api/tenant/kb-dismiss`          | `x-tenant-sync-secret: <TENANT_SYNC_SECRET>`                 | `{ tenantId, siteId?, id }` → drop the suggestion, no KB change → `{ ok: true }`                                                                                                                                                                                                              |
 
 <Callout type="warn">
   `GET /api/tenant/config` returns the **full** config (bot token included) and is secret-guarded.
@@ -59,9 +62,21 @@ or wrong secret returns **401** (config routes) / **403** (webhook, billing) and
 
 the Worker forwards to a `SessionDO` per `(tenant, session)`; the browser never calls it
 directly. its surface: the WebSocket upgrade (visitor connects, receives
-`{ type: "ready", handedOff }`), `GET /state` (`{ handedOff }`), `POST /operator {text}`
-(set `handedOff`, broadcast the operator reply), and `POST /handoff` (broadcast a handoff
-prompt). server → browser events: `ready`, `operator`, `handoff`, `resume`.
+`{ type: "ready", handedOff }`), `GET /state` (`{ handedOff }`), `POST /context { tenantId, siteId? }`
+(the chat flow's combined `{ handedOff, messages }` read — the body persists the tenant's
+identity into DO storage **write-once** so the relearning handback, which fires from an alarm
+with no request in flight, can build the per-site `suggestions:` key + meter the AI call),
+`POST /operator {text}` (set `handedOff`, broadcast the operator reply), and `POST /handoff`
+(broadcast a handoff prompt). server → browser events: `ready`, `operator`, `handoff`, `resume`.
+
+**Relearning.** On a real handback (operator had the session, then it resolves or the silence
+alarm fires) the DO makes **one** Workers-AI call to extract a Q→A the human answered that the
+bot couldn't, and appends it (normalized-question dedup, FIFO cap 20) under
+`suggestions:<ns(t,s)>` for a human to approve via `/api/tenant/kb-approve`. **Off by default:**
+it runs only for tenants using the knowledge base (≥1 `kbSource`) — a tenant that never
+configured a KB incurs zero AI cost on handback. Also gated on ≥1 operator message; failures are
+swallowed (never break resolve). The bot never self-modifies its KB — approval is a human click
+(a prompt-injection valve).
 
 ## keeping this in sync
 

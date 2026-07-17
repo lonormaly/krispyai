@@ -23,6 +23,8 @@ interface TenantConfig {
   persona?: PersonaSpec; // bot voice + style rules — SERVER-ONLY, folded into the prompt, NEVER public
   script?: ConversationScript; // scripted opening sequence + starter chips (projected to the widget)
   popups?: PopupSpec[]; // proactive popup engine (theme.popupText is sugar for one timer popup)
+  kbSources?: KbSource[]; // per-doc knowledge registry, assembled into the prompt at chat time
+  kbVersion?: number; // bumped on any kbSources write (retrieval cache key)
   operators?: Operator[]; // humans to @mention on handoff (auto-learned; NEVER public)
 }
 ```
@@ -190,6 +192,45 @@ one engine for both timed and section-proximity teaser popups. `theme.popupText`
 for a single `{ trigger: { kind: "timer" }, text }` entry (with `timing.popupDelayMs` /
 `popupCooldownHrs` as its defaults). No `popups` and no `popupText` → nothing ever shows.
 
+## `KbSource` + relearning
+
+```ts
+interface KbSource {
+  id: string;
+  name: string; // human label / doc title, e.g. "Refund policy"
+  text: string; // the knowledge body
+  updatedAt: number;
+}
+interface KbSuggestion {
+  id: string;
+  question: string; // what the bot couldn't answer
+  answer: string; // what the human did
+  createdAt: number;
+}
+```
+
+`kbSources` is a per-doc knowledge registry assembled into the system prompt at chat time
+as a `## Knowledge` block (between the persona and the forms/guardrail contracts) —
+**runtime assembly, not compile-on-save**, so self-hosters get the identical feature and no
+second writer can race the config field. The knowledge block is deliberately **excluded from
+the `detectPromptLeak` scope**: a bot quoting its own KB verbatim is correctness, not a leak.
+Unset → the prompt is byte-for-byte what it is today. `kbVersion` bumps on any `kbSources`
+write (approve path) — the cache key the size-gated retrieval design expects.
+
+**Relearning.** When a handed-off session hands back to the AI (operator resolves it, or the
+silence alarm fires) and it had ≥1 operator message, the `SessionDO` makes **one** Workers-AI
+call to extract at most one Q→A the human answered that the bot couldn't, and appends it as a
+`KbSuggestion`. It is **off by default** — a session only relearns when the tenant is already
+using the knowledge base (≥1 `kbSource`); a tenant with no `kbSources` incurs zero AI cost on
+handback and behaves exactly as today. When it does run, the suggestion lands as a
+`KbSuggestion` under its **own** per-site KV key `suggestions:<ns(t,s)>` (cap 20 FIFO,
+normalized-question dedup against pending suggestions **and** approved `kbSources`). A separate
+key means the machine-initiated background write can never race a human dashboard save of the
+config blob. Suggestions are **never** projected to the public widget config. Surface them via
+the secret-authed `GET /api/tenant/kb-suggestions`; a human approves (`kb-approve` → moves it
+into `kbSources` + bumps `kbVersion`) or dismisses (`kb-dismiss`) — the bot never self-modifies
+its KB.
+
 ## write caps
 
 `POST /api/tenant/config` hard-rejects out-of-bounds configs at the trust boundary
@@ -217,3 +258,4 @@ for a single `{ trigger: { kind: "timer" }, text }` entry (with `timing.popupDel
 | `thread:<tenant>:<threadId>`     | the session id for that thread                                 |
 | `usage:<tenant>:<yyyymm>:<kind>` | monthly usage counter — `kind` ∈ `ai` \| `handoff` \| `tokens` |
 | `entitlement:<tenant>`           | optional billing snapshot (unused in self-host)                |
+| `suggestions:<ns(t,s)>`          | pending relearning `KbSuggestion[]` (per-site, cap 20 FIFO; own key, never the config blob) |

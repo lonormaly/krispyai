@@ -1,7 +1,16 @@
 // KV-backed state: tenant config, the topic<->session map, and usage metering.
 // Key builders are pure (unit-tested); the KV calls are thin wrappers so the flow
 // code never hand-rolls a key string.
-import type { Connector, Env, Operator, PopupSpec, TenantConfig, WidgetTheme } from "./types";
+import type {
+  Connector,
+  Env,
+  KbSource,
+  KbSuggestion,
+  Operator,
+  PopupSpec,
+  TenantConfig,
+  WidgetTheme,
+} from "./types";
 
 // CTA-capable connector types (double as visitor chat CTAs); email/telegram are
 // delivery-only and never projected. Default label per type when the tenant sets none.
@@ -133,6 +142,9 @@ export const kThreadToSession = (t: string, threadId: number) => `thread:${t}:${
 export const kSessionToThread = (t: string, sessionId: string) => `session:${t}:${sessionId}`;
 // Config blob is per-site: an unsuffixed tenant keeps `tenant:<t>` exactly.
 export const kTenant = (t: string, siteId?: string) => `tenant:${ns(t, siteId)}`;
+// Relearning suggestions live under their OWN per-site key — NOT the config blob — so a
+// machine-initiated background append (DO handback) can never race a human dashboard save.
+export const kSuggestions = (t: string, siteId?: string) => `suggestions:${ns(t, siteId)}`;
 /** Usage counter, bucketed by month so it doubles as a billing period. */
 export const kUsage = (t: string, kind: UsageKind, yyyymm: string) =>
   `usage:${t}:${yyyymm}:${kind}`;
@@ -241,6 +253,113 @@ export async function upsertOperator(env: Env, tenantId: string, op: Operator): 
     if (list.length > OPERATORS_MAX) list.shift(); // evict oldest
   }
   await env.KRISPY_KV.put(kTenant(tenantId), JSON.stringify({ ...cfg, operators: list }));
+}
+
+// ── kbase relearning suggestions (per-site, own KV key) ──────────────────────
+// Machine-proposed Q→A pairs from operator-touched sessions, awaiting a human's approve/
+// dismiss. FIFO-capped like operators; dedup on the NORMALIZED question so an operator
+// answering the same thing thrice doesn't fill the inbox thrice.
+export const SUGGESTIONS_MAX = 20;
+
+// Normalize a question for dedup: lowercase, strip punctuation, collapse whitespace.
+// ponytail: exact-match after normalization; fuzzy similarity (embeddings/token-overlap)
+// is the upgrade path when near-duplicates get annoying.
+export function normalizeQuestion(q: string): string {
+  return q
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function readSuggestions(
+  env: Env,
+  tenantId: string,
+  siteId?: string,
+): Promise<KbSuggestion[]> {
+  const raw = await env.KRISPY_KV.get(kSuggestions(tenantId, siteId));
+  return raw ? (JSON.parse(raw) as KbSuggestion[]) : [];
+}
+
+/**
+ * Append a suggestion unless its normalized question already matches a PENDING suggestion
+ * or an APPROVED kbSource (learned sources embed the question in their text). Returns true
+ * if appended, false if deduped. FIFO-evicts past SUGGESTIONS_MAX.
+ * ponytail: read-modify-write on eventually-consistent KV, same race class as meter() — a
+ * rare concurrent handback could lose one suggestion; its own key means it never races the
+ * config blob (the load-bearing property).
+ */
+export async function appendSuggestion(
+  env: Env,
+  tenantId: string,
+  suggestion: KbSuggestion,
+  siteId?: string,
+): Promise<boolean> {
+  const norm = normalizeQuestion(suggestion.question);
+  if (!norm) return false;
+  const list = await readSuggestions(env, tenantId, siteId);
+  if (list.some((s) => normalizeQuestion(s.question) === norm)) return false;
+  const approved = (await readTenantConfig(env, tenantId, siteId))?.kbSources ?? [];
+  if (approved.some((k) => normalizeQuestion(k.text).includes(norm))) return false;
+  list.push(suggestion);
+  while (list.length > SUGGESTIONS_MAX) list.shift(); // evict oldest
+  await env.KRISPY_KV.put(kSuggestions(tenantId, siteId), JSON.stringify(list));
+  return true;
+}
+
+export async function removeSuggestion(
+  env: Env,
+  tenantId: string,
+  id: string,
+  siteId?: string,
+): Promise<KbSuggestion[]> {
+  const list = (await readSuggestions(env, tenantId, siteId)).filter((s) => s.id !== id);
+  await env.KRISPY_KV.put(kSuggestions(tenantId, siteId), JSON.stringify(list));
+  return list;
+}
+
+/** Approve a suggestion: move it into the (per-site) kbSources registry as a learned
+ * source, bump kbVersion, and drop it from the pending list. Returns the new source, or
+ * null if the id wasn't pending. */
+// Total kbSources text hard-cap — the trust-boundary invariant enforced on the config
+// write path (handleTenantConfigSet). Approving a suggestion is a SECOND write door into
+// kbSources, so it honors the same cap here (index.ts re-exports this for the write path).
+export const KB_SOURCES_MAX_CHARS = 100_000;
+
+export async function approveSuggestion(
+  env: Env,
+  tenantId: string,
+  id: string,
+  siteId?: string,
+): Promise<KbSource | null> {
+  const list = await readSuggestions(env, tenantId, siteId);
+  const s = list.find((x) => x.id === id);
+  if (!s) return null;
+  const cfg = await readTenantConfig(env, tenantId, siteId);
+  const kbSources = cfg?.kbSources ?? [];
+  const source: KbSource = {
+    id: s.id,
+    name: `Learned: ${s.question.slice(0, 60)}`,
+    text: `Q: ${s.question}\nA: ${s.answer}`,
+    updatedAt: Date.now(),
+  };
+  // Honor the same 100K total-text cap the config write path enforces — approvals must
+  // not be a back door that grows kbSources past the invariant (it's injected whole into
+  // the prompt each turn). Over the cap → drop the suggestion, don't corrupt the KB.
+  const total = kbSources.reduce((n, k) => n + (k.text?.length ?? 0), 0) + source.text.length;
+  if (total > KB_SOURCES_MAX_CHARS) {
+    await removeSuggestion(env, tenantId, id, siteId);
+    return null;
+  }
+  kbSources.push(source);
+  await mergeTenantConfig(
+    env,
+    tenantId,
+    { kbSources, kbVersion: (cfg?.kbVersion ?? 0) + 1 },
+    siteId,
+  );
+  await removeSuggestion(env, tenantId, id, siteId);
+  return source;
 }
 
 // ── topic <-> session map ────────────────────────────────────────────────────

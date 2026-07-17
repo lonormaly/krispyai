@@ -10,8 +10,28 @@ Worker's `POST /api/tenant/config` route, which merges the prompt into KV.
 krispy init                  # guided first-run setup (Telegram → train → embed → next steps)
 krispy set-kbase kbase.md    # write kbase.md as the bot's system prompt
 krispy logo logo.png         # remove a logo's bg locally → paste-ready avatar data URI
+krispy kb-suggestions        # list pending relearning suggestions (the approval inbox)
+krispy kb-approve <id>       # approve a suggestion → add it to the bot's kbase
+krispy kb-dismiss <id>       # dismiss a suggestion
 krispy dev                   # run the edge Worker locally (wrangler dev)
 ```
+
+### `krispy kb-suggestions` / `kb-approve` / `kb-dismiss` — the relearning approval inbox
+
+When a handed-off session hands back to the AI and a human had answered something the bot
+couldn't, the edge proposes a `Q→A` **suggestion**. Nothing reaches the bot's knowledge until
+you approve it (human-in-the-loop by design — a visitor can't poison the KB). These are the
+self-host counterpart to Krispy Cloud's `/knowledge` inbox, over the same secret-authed routes:
+
+```sh
+krispy kb-suggestions          # list pending suggestions (id + Q + A)
+krispy kb-approve sug_abc123   # append it to kbSources (+ bump kbVersion), drop it
+krispy kb-dismiss  sug_abc123  # drop it, no KB change
+```
+
+Each command scopes to the tenant's default site; pass `--site <id>` (→ `?s=` / `siteId`) to
+target a specific site. All three require `TENANT_SYNC_SECRET`. `kb-approve` on an unknown id
+prints a clear error and exits non-zero.
 
 ### `krispy logo <file>` — local background removal
 

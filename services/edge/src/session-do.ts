@@ -27,7 +27,8 @@
 // (HANDBACK_SILENCE_MINUTES, default 5). An operator reply disarms it. If it fires,
 // the session hands back to the AI so a returning visitor never faces a muted bot.
 import type { Env, ServerEvent } from "./types";
-import { DO_INTERNAL_HEADER, doInternalSecret } from "./store";
+import { DO_INTERNAL_HEADER, doInternalSecret, readTenantConfig } from "./store";
+import { proposeKbSuggestion } from "./learn";
 
 interface Sendable {
   send(data: string): void;
@@ -114,6 +115,44 @@ export class SessionDO {
     await this.state.storage.put("handedOff", false);
     if (opts.note) await this.appendRing([{ role: "ai", text: opts.note, ts: Date.now() }]);
     broadcast(this.state.getWebSockets(), { type: "resume" });
+    await this.maybeLearn();
+  }
+
+  /** Relearning: on a real handback (operator had the session), extract a Q→A the human
+   * answered into a knowledge suggestion. OFF BY DEFAULT — the tenant opts in by using the
+   * knowledge base (≥1 kbSource); a tenant that never touched the KB feature incurs ZERO
+   * billable AI on handback and behaves exactly as before this feature (HARD RULE 1). Also
+   * gated on ≥1 operator message so a bot-only handback stays silent. Awaited (not
+   * fire-and-forget) so the write completes before the DO can be evicted — the alarm path
+   * has no request keeping it alive — but every failure is swallowed: relearning must NEVER
+   * break resolve/handback.
+   * ponytail: opt-in signal is kbSources presence (fresh KV read on the rare handback path,
+   * no duplicated flag) — add an explicit `relearnEnabled` toggle only if a tenant wants
+   * knowledge WITHOUT auto-suggestions. One AI call per handback, synchronous on the resolve
+   * path (adds ~1s to an operator's resolve tap — acceptable for inbox hygiene). Learns only
+   * from operator-touched sessions; bot-wrong/visitor-gave-up sessions are silent (upgrade
+   * path is unanswered-question detection + thumbs-down feedback into the same inbox). */
+  private async maybeLearn(): Promise<void> {
+    try {
+      const log = await this.ring();
+      if (!log.some((m) => m.role === "operator")) return;
+      const tenantId = await this.state.storage.get<string>("tenantId");
+      if (!tenantId) return; // never learned its identity (no /context POST) — skip
+      const siteId = await this.state.storage.get<string>("siteId");
+      // Opt-in gate: relearning runs only for tenants using the KB feature. No kbSources →
+      // no AI call, no suggestion write — off by default for every operator-only tenant.
+      const cfg = await readTenantConfig(this.env, tenantId, siteId);
+      if (!cfg?.kbSources?.length) return;
+      // Bound the AI latency — a DO alarm has no ctx.waitUntil, so this runs on the
+      // resolve/handback path; a hung Workers-AI call must not block the operator. Race
+      // it against an 8s timeout (extraction is a small single call; slower = give up).
+      await Promise.race([
+        proposeKbSuggestion(this.env, tenantId, siteId, log),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
+    } catch (e) {
+      console.error("relearning failed (best-effort):", e);
+    }
   }
 
   /** DO alarm — armed by a visitor message on a handed-off session, disarmed by any
@@ -161,8 +200,21 @@ export class SessionDO {
     }
 
     // One combined read for the chat flow: the handoff flag + the ring, so the
-    // bot's memory costs the same single subrequest /state used to.
-    if (request.method === "GET" && url.pathname.endsWith("/context")) {
+    // bot's memory costs the same single subrequest /state used to. POSTed by the chat
+    // flow with { tenantId, siteId } so the DO can persist its own identity write-once:
+    // the relearning handback fires from an ALARM with no request in flight, and the DO
+    // can't derive tenantId/siteId from its own name (siteId isn't even in the name).
+    if (url.pathname.endsWith("/context")) {
+      if (request.method === "POST") {
+        const body = (await request.json().catch(() => ({}))) as {
+          tenantId?: string;
+          siteId?: string;
+        };
+        if (body.tenantId && !(await this.state.storage.get<string>("tenantId"))) {
+          await this.state.storage.put("tenantId", body.tenantId);
+          if (body.siteId) await this.state.storage.put("siteId", body.siteId);
+        }
+      }
       const [handedOff, messages] = await Promise.all([this.handedOff(), this.ring()]);
       return Response.json({ handedOff, messages });
     }

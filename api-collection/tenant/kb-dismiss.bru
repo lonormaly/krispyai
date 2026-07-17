@@ -1,0 +1,36 @@
+meta {
+  name: Tenant - dismiss kb suggestion
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/tenant/kb-dismiss
+  body: json
+  auth: none
+}
+
+headers {
+  x-tenant-sync-secret: {{tenantSyncSecret}}
+}
+
+body:json {
+  {
+    "tenantId": "self",
+    "id": "REPLACE_WITH_A_PENDING_SUGGESTION_ID"
+  }
+}
+
+tests {
+  test("responds 200", function() {
+    expect(res.status).to.equal(200);
+    expect(res.getBody().ok).to.equal(true);
+  });
+}
+
+docs {
+  Dismisses a pending relearning suggestion: drops the `id` from the pending list with no
+  KB change → `{ ok: true }` (idempotent — a missing id is a no-op). Add `"siteId":
+  "<site>"` to the body to scope to a site (absent → default). Requires the
+  `x-tenant-sync-secret` header or returns 401.
+}

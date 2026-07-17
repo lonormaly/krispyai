@@ -1,0 +1,30 @@
+meta {
+  name: Tenant - list kb suggestions
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/tenant/kb-suggestions?t=self
+  auth: none
+}
+
+headers {
+  x-tenant-sync-secret: {{tenantSyncSecret}}
+}
+
+tests {
+  test("responds 200 with a suggestions array", function() {
+    expect(res.status).to.equal(200);
+    expect(res.getBody().suggestions).to.be.an("array");
+  });
+}
+
+docs {
+  Lists the tenant's PENDING relearning suggestions — machine-proposed `{ id, question,
+  answer, createdAt }` Q→A pairs extracted from operator-touched sessions on handback,
+  awaiting a human approve/dismiss. Read from the own KV key `suggestions:<ns(t,s)>`
+  (per-site; never the config blob, never the public widget config). Add `&s=<siteId>`
+  to scope to a site (absent → the account's default site). Requires the
+  `x-tenant-sync-secret` header (== TENANT_SYNC_SECRET) or returns 401.
+}

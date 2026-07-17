@@ -1,0 +1,37 @@
+meta {
+  name: Tenant - approve kb suggestion
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/tenant/kb-approve
+  body: json
+  auth: none
+}
+
+headers {
+  x-tenant-sync-secret: {{tenantSyncSecret}}
+}
+
+body:json {
+  {
+    "tenantId": "self",
+    "id": "REPLACE_WITH_A_PENDING_SUGGESTION_ID"
+  }
+}
+
+tests {
+  test("responds 200 or 404 (unknown id)", function() {
+    expect([200, 404]).to.include(res.status);
+  });
+}
+
+docs {
+  Approves a pending relearning suggestion: moves it into the tenant's `kbSources` as a
+  learned source (`{ name: "Learned: <question…>", text: "Q: …\nA: …" }`), bumps
+  `kbVersion`, and drops it from the pending list → `{ ok: true, source }`. `404
+  not_found` if the `id` isn't pending. Add `"siteId": "<site>"` to the body to scope to
+  a site (absent → default). Human-in-the-loop by design — the bot never self-modifies
+  its KB. Requires the `x-tenant-sync-secret` header or returns 401.
+}
