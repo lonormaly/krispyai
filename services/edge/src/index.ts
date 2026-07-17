@@ -22,6 +22,7 @@ import { SessionDO, type RingMsg } from "./session-do";
 import { buildSystemPrompt } from "./system-prompt";
 import { parseOwnerReply, createForumTopic, sendToTopic, sendHandoffAlert } from "./telegram";
 import { authorizeOperator } from "./operator-auth";
+import { stampSeen, readSeen } from "./liveness";
 import { pushToApp } from "./push";
 import { renderLeadEmail, sendLeadEmail } from "./email";
 import type { Connector, Env, FormSpec, TenantConfig } from "./types";
@@ -174,6 +175,8 @@ export default {
       return handleTenantConfigSet(request, env);
     if (request.method === "GET" && path === "/api/widget/config")
       return handleWidgetConfig(request, env);
+    if (request.method === "GET" && path === "/api/tenant/liveness")
+      return handleTenantLiveness(request, env);
     if (request.method === "GET" && path === "/api/usage") return handleUsage(request, env);
     if (request.method === "GET" && path === "/internal/usage")
       return handleAdminUsage(request, env);
@@ -833,11 +836,25 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
 async function handleWidgetConfig(request: Request, env: Env): Promise<Response> {
   const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
   const cfg = await readTenantConfig(env, t);
+  // Free heartbeat: this fetch fires on every page load, so stamp the tenant's
+  // last-seen record (throttled in-isolate, best-effort — never blocks the boot).
+  await stampSeen(env, t, request);
   // Short public cache — the boot config (now up to ~10–30KB with a data-URI avatar)
   // is otherwise refetched uncached on every page load. 60s keeps edits near-live.
   return Response.json(publicWidgetConfig(cfg), {
     headers: { ...cors(env), "Cache-Control": "public, max-age=60" },
   });
+}
+
+// ── GET /api/tenant/liveness ──────────────────────────────────────────────────
+// Secret-authed (x-tenant-sync-secret): the dashboard's "is my widget live?" read.
+// Returns the last-seen record (timestamp + embedding origin/url) or { seen: null }
+// when the widget has never phoned home. Server-to-server only — never the browser.
+async function handleTenantLiveness(request: Request, env: Env): Promise<Response> {
+  if (!tenantSyncAuthed(request, env))
+    return new Response("unauthorized", { status: 401, headers: cors(env) });
+  const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
+  return json(env, { seen: await readSeen(env, t) });
 }
 
 // ── GET /internal/usage ──────────────────────────────────────────────────────

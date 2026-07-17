@@ -12,6 +12,10 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Added
 
+- Widget liveness — the widget's boot-time `GET /api/widget/config` now doubles as a heartbeat: the edge stamps a per-tenant last-seen record (timestamp + the embedding page's origin/url from `Origin`/`Referer`), throttled in-isolate to stay well under KV's write budget and never blocking the boot. New secret-authed `GET /api/tenant/liveness?t=<tenant>` returns `{ seen }` so the dashboard can show "live on example.com — last seen 2m ago". Stores last-seen only for now (per-origin set + per-site keying are the multi-site upgrade path).
+
+### Added
+
 - Edge: new `WidgetTheme` knobs — `glowColor`, `tagline`, `sparkle`, `direction`, `popupText`, and `timing` (`WidgetTiming`: `launcherDelayMs`/`sparkleAfterMs`/`popupDelayMs`/`popupCooldownHrs`/`autoOpenMs`) — projected through the public `GET /api/widget/config` whitelist. All default unset/off: a tenant that configures nothing gets today's neutral widget unchanged.
 - Edge: hard write caps on `POST /api/tenant/config` (trust boundary; invalid configs never reach KV) — `theme.avatar` ≤48KB + scheme check (`buttr` | `https://` | `data:image/(png|webp|jpeg);base64,`), connector CTA urls https-only, free-text `theme.tagline`/`theme.popupText` ≤500 chars, `kbSources` total text ≤100K chars. Size overruns → `413`; malformed values → `400`.
 - Edge: `TenantConfig` gains `persona` (`PersonaSpec`: `toneOfVoice` + `styleRules[]`), `script` (`ConversationScript`: `opening[]` + `starters[]`), and `popups` (`PopupSpec[]`: timer/section-proximity teaser engine; `theme.popupText` is sugar for one timer popup). All default unset — the bot speaks/opens exactly as today until configured.

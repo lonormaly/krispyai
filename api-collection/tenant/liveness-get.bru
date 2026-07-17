@@ -1,0 +1,28 @@
+meta {
+  name: Tenant - get liveness
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/tenant/liveness?t=self
+  auth: none
+}
+
+headers {
+  x-tenant-sync-secret: {{tenantSyncSecret}}
+}
+
+tests {
+  test("returns { seen } with the secret (seen is null until the widget phones home)", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body).to.have.property("seen");
+  });
+}
+
+docs {
+  The dashboard's "is my widget live?" read. Returns `{ seen: { at, origin?, url? } | null }`
+  — the last time the widget booted on a customer page (stamped, throttled, off every
+  GET /api/widget/config) plus the embedding page's origin/url. `null` until the widget
+  has phoned home. Requires `x-tenant-sync-secret` (== TENANT_SYNC_SECRET); 401 otherwise.
+}
