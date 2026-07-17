@@ -6,6 +6,7 @@
 // Usage:
 //   krispy init                 interactive first-run wizard (Telegram → train → embed)
 //   krispy set-kbase <file>     write <file>'s contents as the bot's system prompt
+//   krispy logo <file>          remove a logo's bg locally → paste-ready avatar data URI
 //   krispy dev                  start the edge Worker locally (wrangler dev)
 //
 // Config via env (or flags):
@@ -96,11 +97,16 @@ async function main(argv: string[]): Promise<number> {
     }
     case "set-kbase":
       return setKbase(rest[0]);
+    case "logo": {
+      // Lazy-load the logo pipeline (and its sharp dep) only when logo actually runs.
+      const { logo } = await import("./logo.ts");
+      return logo(rest[0]);
+    }
     case "dev":
       return dev();
     default:
       console.error(
-        "krispy <command>\n  init               guided first-run setup (Telegram → train → embed)\n  set-kbase <file>   write a system prompt into the Worker's KV\n  dev                run the edge Worker locally (wrangler dev)",
+        "krispy <command>\n  init               guided first-run setup (Telegram → train → embed)\n  set-kbase <file>   write a system prompt into the Worker's KV\n  logo <file>        remove a logo's bg locally → paste-ready avatar data URI\n  dev                run the edge Worker locally (wrangler dev)",
       );
       return cmd ? 1 : 0;
   }

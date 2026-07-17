@@ -48,5 +48,9 @@ docs {
   413 avatar_too_large (theme.avatar over 48KB), 413 kb_sources_too_large (kbSources
   total text over 100K chars), 400 avatar_scheme_invalid (avatar must be "buttr",
   https://…, or data:image/(png|webp|jpeg);base64,…), 400 cta_url_not_https
-  (connector profileUrl/url must be https).
+  (connector profileUrl/url must be https), 413 too_many_popups (>8 popups),
+  413 popup_text_too_large (popup text >500 chars), 413 popup_selector_too_large
+  (a near-selector or cancelOnClick >200 chars), 413 too_many_opening (>5 script.opening),
+  413 too_many_starters (>4 script.starters), 413 persona_script_too_large
+  (persona + script combined free text >8K chars).
 }

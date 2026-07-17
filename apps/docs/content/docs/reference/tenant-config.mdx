@@ -20,6 +20,9 @@ interface TenantConfig {
   forms?: FormSpec[]; // lead forms
   connectors?: Connector[]; // delivery / CTA connectors
   theme?: WidgetTheme; // widget appearance
+  persona?: PersonaSpec; // bot voice + style rules — SERVER-ONLY, folded into the prompt, NEVER public
+  script?: ConversationScript; // scripted opening sequence + starter chips (projected to the widget)
+  popups?: PopupSpec[]; // proactive popup engine (theme.popupText is sugar for one timer popup)
   operators?: Operator[]; // humans to @mention on handoff (auto-learned; NEVER public)
 }
 ```
@@ -50,19 +53,34 @@ interface FormField {
 ## `Connector`
 
 ```ts
-type ConnectorType = "email" | "telegram" | "whatsapp" | "instagram";
+type ConnectorType =
+  "email" | "telegram" | "whatsapp" | "phone" | "instagram" | "facebook" | "tiktok" | "link";
 
-interface Connector {
+// CTA fields — a connector doubles as a visitor-facing CTA card. Inert on the
+// delivery-only types (email/telegram); the public projection fills per-type defaults.
+interface CtaFields {
+  cta?: boolean; // default true for CTA-capable types — false keeps it delivery-only
+  label?: string; // button label; projection fills a per-type default when unset
+  caption?: string; // small text above the button ("or keep chatting here")
+  showAfterMs?: number; // per-CTA stagger after the FIRST visitor message. Default 0
+}
+
+interface Connector extends CtaFields {
   id: string;
   type: ConnectorType;
   toAddress?: string; // email
-  phone?: string; // whatsapp — E.164 digits, no "+"
-  profileUrl?: string; // instagram
+  phone?: string; // whatsapp/phone — digits, no "+" (server builds wa.me/tel hrefs)
+  profileUrl?: string; // instagram (https)
+  url?: string; // facebook/tiktok/link (https)
   // telegram uses the top-level botToken/chatId — no per-connector creds
 }
 ```
 
-`telegram` + `email` are delivered server-side; `whatsapp` + `instagram` are CTA links only.
+`telegram` + `email` are delivered server-side; `whatsapp`, `phone`, `instagram`,
+`facebook`, `tiktok`, and `link` render as visitor-facing CTA links. Set `cta: false` to
+keep an otherwise-CTA connector delivery-only (e.g. a whatsapp wired into a form's
+`connectorIds` but never shown as a chat CTA). The public projection computes the href
+server-side (`wa.me/…`, `tel:+…`, or the https url) and supplies a default label per type.
 see [lead forms + connectors](/docs/guides/lead-forms-and-connectors).
 
 ## `Operator`
@@ -119,21 +137,76 @@ interface WidgetTiming {
 every new knob defaults to unset/off — a tenant that configures nothing gets today's
 neutral widget, unchanged.
 
-only these fields are exposed to the public `GET /api/widget/config`; the projection is a
-literal whitelist (never a spread of the config), so `botToken`/`chatId`/`systemPrompt` are
-structurally excluded. see [security](/docs/security).
+only the `WidgetTheme` fields above (plus the `ctas`, `script`, and `popups` projections
+below) are exposed to the public `GET /api/widget/config`; the projection is a literal
+whitelist (never a spread of the config), so `botToken`/`chatId`/`systemPrompt`/`persona`
+are structurally excluded. see [security](/docs/security).
+
+## `PersonaSpec`
+
+```ts
+interface PersonaSpec {
+  toneOfVoice?: string; // free text: "warm, playful boulangerie owner; short sentences"
+  styleRules?: string[]; // discrete do/don't rules: "never discuss competitors"
+}
+```
+
+how the bot **speaks**. Folded into the system prompt by `buildSystemPrompt` (a `## Voice`
+block + a `## Style rules` bullet list), so it sits **inside** the prompt-leak guard scope —
+a bot reciting its own tone verbatim counts as a leak. **Server-only:** `persona` is
+structurally excluded from the public `GET /api/widget/config`. All fields unset → the bot
+speaks exactly as today.
+
+## `ConversationScript`
+
+```ts
+interface ConversationScript {
+  opening?: string[]; // scripted bot-bubble sequence on panel open (projection caps at 5)
+  // opening[0] supersedes theme.greeting; greeting alone == opening of length 1
+  starters?: string[]; // suggested-question chips on a FRESH conversation (projection caps at 4)
+  // click sends the text as the visitor's message
+}
+```
+
+how a conversation **starts**. Projected to the widget. Unset → today's single-greeting
+behavior, unchanged.
+
+## `PopupSpec`
+
+```ts
+interface PopupSpec {
+  trigger:
+    | { kind: "timer"; delayMs?: number } // shown delayMs after load (default 8000)
+    | { kind: "near"; selector: string; dwellMs?: number; threshold?: number }; // 8000 / 0.3
+  text: string; // teaser card copy
+  persist?: boolean; // default true → cooldownHours applies; false = resets every load
+  cooldownHours?: number; // default 24; per-popup localStorage key (source ?? index)
+  cancelOnClick?: string; // selector — visitor clicked the thing itself → dismiss
+  source?: string; // origin label ("popup_pricing") → session context / handoff / lead meta
+}
+```
+
+one engine for both timed and section-proximity teaser popups. `theme.popupText` is sugar
+for a single `{ trigger: { kind: "timer" }, text }` entry (with `timing.popupDelayMs` /
+`popupCooldownHrs` as its defaults). No `popups` and no `popupText` → nothing ever shows.
 
 ## write caps
 
 `POST /api/tenant/config` hard-rejects out-of-bounds configs at the trust boundary
 (nothing invalid ever reaches KV):
 
-| rule                                                                                 | response                                 |
-| ------------------------------------------------------------------------------------ | ---------------------------------------- |
-| `theme.avatar` over 48KB                                                             | `413 { error: "avatar_too_large" }`      |
-| `theme.avatar` not `"buttr"` / `https://…` / `data:image/(png\|webp\|jpeg);base64,…` | `400 { error: "avatar_scheme_invalid" }` |
-| a connector CTA url (`profileUrl`/`url`) not `https://`                              | `400 { error: "cta_url_not_https" }`     |
-| `kbSources` total text over 100K chars                                               | `413 { error: "kb_sources_too_large" }`  |
+| rule                                                                                 | response                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `theme.avatar` over 48KB                                                             | `413 { error: "avatar_too_large" }`         |
+| `theme.avatar` not `"buttr"` / `https://…` / `data:image/(png\|webp\|jpeg);base64,…` | `400 { error: "avatar_scheme_invalid" }`    |
+| a connector CTA url (`profileUrl`/`url`) not `https://`                              | `400 { error: "cta_url_not_https" }`        |
+| `kbSources` total text over 100K chars                                               | `413 { error: "kb_sources_too_large" }`     |
+| more than 8 `popups`                                                                 | `413 { error: "too_many_popups" }`          |
+| a popup `text` over 500 chars                                                        | `413 { error: "popup_text_too_large" }`     |
+| a popup selector (`near` `selector` / `cancelOnClick`) over 200 chars                | `413 { error: "popup_selector_too_large" }` |
+| more than 5 `script.opening` entries                                                 | `413 { error: "too_many_opening" }`         |
+| more than 4 `script.starters` entries                                                | `413 { error: "too_many_starters" }`        |
+| `persona` + `script` combined free text over 8K chars                                | `413 { error: "persona_script_too_large" }` |
 
 ## KV keys
 

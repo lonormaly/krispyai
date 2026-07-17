@@ -392,6 +392,34 @@
     ".panel.rtl .me{border-radius:16px 16px 16px 4px}" +
     ".panel.rtl .bot,.panel.rtl .op,.panel.rtl .typing{border-radius:16px 16px 4px 16px}" +
     ".panel.rtl .ft button svg{transform:rotate(180deg)}" +
+    // ── CTA cards (social connectors) — brand-styled links INSIDE .log, so they
+    // scroll with the transcript like bubbles. Brand colors are network constants
+    // (not tenant tokens); appended into one lazily-created .ctarow card. ──
+    ".ctarow{align-self:stretch;display:flex;flex-direction:column;gap:8px;" +
+    "animation:kmsg .2s cubic-bezier(.16,1,.3,1) both}" +
+    "@media (prefers-reduced-motion:reduce){.ctarow{animation:none}}" +
+    ".ctaitem{display:flex;flex-direction:column;gap:4px}" +
+    ".ctacap{font-size:11px;color:var(--k-muted-fg);padding:0 2px}" +
+    ".cta{display:flex;align-items:center;justify-content:center;gap:8px;" +
+    "padding:10px 14px;border-radius:var(--k-radius);color:#fff;font-weight:600;" +
+    "font-size:14px;text-decoration:none;transition:filter .15s,transform .1s}" +
+    ".cta:hover{filter:brightness(1.06);transform:translateY(-1px)}" +
+    ".cta:active{transform:translateY(0)}" +
+    ".cta svg{width:18px;height:18px;flex:0 0 auto}" +
+    ".cta-instagram{background:linear-gradient(90deg,#833AB4,#E1306C,#F77737)}" +
+    ".cta-whatsapp{background:#25D366}" +
+    ".cta-whatsapp:hover{background:#20BD5A;filter:none}" +
+    ".cta-facebook{background:#1877F2}" +
+    ".cta-tiktok{background:#010101}" +
+    // phone/link fall back to the tenant's primary tint (espresso ink on gold)
+    ".cta-phone,.cta-link{background:var(--k-primary);color:var(--k-espresso)}" +
+    // ── Starter chips (script.starters) — suggested questions above the composer,
+    // fresh conversation only; a click sends the chip text as the visitor message. ──
+    ".starters{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px;background:var(--k-card)}" +
+    ".chip{border:1px solid var(--k-border);background:var(--k-cream);color:var(--k-espresso);" +
+    "border-radius:16px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:var(--k-font);" +
+    "transition:background .15s,border-color .15s}" +
+    ".chip:hover{background:var(--k-muted);border-color:var(--k-primary)}" +
     "</style>" +
     // ── Panel markup ──
     '<div class="panel" part="panel">' +
@@ -473,6 +501,23 @@
     popupCooldownHrs: 24,
     autoOpenMs: 0,
   };
+  // ── boot data beyond theme (projected by publicWidgetConfig): CTA connectors,
+  // forms, conversation script, popups. ALL default empty → nothing new shows. ──
+  var ctas = []; // [{id,type,label,caption,url,showAfterMs}] — server-built https/tel hrefs
+  var forms = []; // [{id,title,fields,afterReplyMs,successText}] — boot copy for the afterReplyMs fallback timer
+  var opening = []; // script.opening — scripted bot bubbles on panel open (opening[0] supersedes greeting)
+  var starters = []; // script.starters — suggested-question chips above the input (max 4)
+  var openSource = ""; // popup "source" label — rides into the chat/lead session context when a popup opens the panel
+  var ctaTimers = []; // per-CTA showAfterMs setTimeouts; cleared on operator takeover
+  var formTimers = []; // FormSpec.afterReplyMs fallback timers; cleared on takeover / when any form shows
+  var ctaArmed = false; // CTAs arm once, on the first visitor message
+  var repliedOnce = false; // first AI reply arms the afterReplyMs form fallback
+  var ctaRow = null; // lazily-created CTA-row card inside .log
+  var startersEl = null; // starter-chip strip above the composer (fresh conversation only)
+  var popShown = false; // a teaser card is currently visible (one at a time)
+  var currentPopupSource = ""; // source of the teaser currently shown
+  var popupTimers = []; // pending popup timers (timer delay + near dwell) — cleared while the panel is open
+  var popupObservers = []; // near-trigger IntersectionObservers — disconnected while the panel is open
   function clampMs(v, dflt) {
     return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(300000, v)) : dflt;
   }
@@ -561,25 +606,55 @@
         }
       }, timing.launcherDelayMs);
     }
-    // proactive timer popup (theme.popupText — §3.5 timer mode; the full popup
-    // engine with "near" triggers lands in Phase 3). Unset = nothing ever shows.
-    var popText = typeof th.popupText === "string" ? th.popupText.trim() : "";
-    if (popText) {
-      var popKey = "krispy_popup_" + cfg.tenant + "_0"; // per-popup key (source ?? index)
-      var lastPop = +localStorage.getItem(popKey) || 0;
-      if (Date.now() - lastPop >= timing.popupCooldownHrs * 3600000) {
-        setTimeout(function () {
-          if (panel.classList.contains("open")) return; // suppressed while chatting
-          popTxtEl.textContent = popText;
-          popEl.classList.add("show");
-          try {
-            localStorage.setItem(popKey, String(Date.now()));
-          } catch {
-            /* quota/private mode — popup just re-shows next load */
-          }
-        }, timing.popupDelayMs);
-      }
+    // popups now flow through the unified engine (applyBoot → initPopups); a bare
+    // theme.popupText degrades to a single timer popup there (popupTextSugar).
+  }
+
+  // ── boot config beyond theme (§3.5/§3.7/§4): CTAs, forms, script, popups ─────
+  // ONE popup engine for timer + section-proximity triggers; theme.popupText is
+  // sugar for a single timer popup. All lists default empty → nothing new shows.
+  function applyBoot(c) {
+    if (!c) return;
+    if (Array.isArray(c.ctas)) ctas = c.ctas;
+    if (Array.isArray(c.forms)) forms = c.forms;
+    if (c.script) {
+      if (Array.isArray(c.script.opening))
+        opening = c.script.opening
+          .filter(function (s) {
+            return typeof s === "string" && s.trim();
+          })
+          .map(function (s) {
+            return s.trim();
+          })
+          .slice(0, 5);
+      if (Array.isArray(c.script.starters))
+        starters = c.script.starters
+          .filter(function (s) {
+            return typeof s === "string" && s.trim();
+          })
+          .map(function (s) {
+            return s.trim();
+          })
+          .slice(0, 4);
     }
+    // c.popups is authoritative whenever the edge sends the key — an explicit []
+    // means "no popups" and must NOT re-desugar a lingering theme.popupText. Only a
+    // key-less config (an older edge that predates popups[]) falls back to the sugar.
+    var popups = Array.isArray(c.popups) ? c.popups : popupTextSugar(c.theme);
+    initPopups(popups);
+  }
+  // theme.popupText → a single timer popup (one engine, no parallel system).
+  function popupTextSugar(th) {
+    var t = th && typeof th.popupText === "string" ? th.popupText.trim() : "";
+    return t
+      ? [
+          {
+            trigger: { kind: "timer", delayMs: timing.popupDelayMs },
+            text: t,
+            cooldownHours: timing.popupCooldownHrs,
+          },
+        ]
+      : [];
   }
   fetch(cfg.api + "/api/widget/config?t=" + encodeURIComponent(cfg.tenant))
     .then(function (r) {
@@ -587,6 +662,7 @@
     })
     .then(function (c) {
       applyTheme(c && c.theme);
+      applyBoot(c);
     })
     .catch(function () {}); // theme is decorative; chat works without it
 
@@ -609,12 +685,22 @@
     renderMute();
   });
 
-  // Popup teaser interactions: card click opens the chat, × just dismisses.
-  // (Cooldown was already stamped at show time, so either way it stays gone.)
+  // Popup teaser interactions: card click opens the chat (carrying the popup's
+  // source into the session), × just dismisses. Cooldown is stamped at show time,
+  // so either way it stays gone.
+  function showPopup(text, source) {
+    if (panel.classList.contains("open") || popShown) return;
+    currentPopupSource = source || "";
+    popTxtEl.textContent = text;
+    popEl.classList.add("show");
+    popShown = true;
+  }
   function hidePopup() {
     popEl.classList.remove("show");
+    popShown = false;
   }
   popEl.addEventListener("click", function () {
+    if (currentPopupSource) openSource = currentPopupSource; // rides into chat/session context
     hidePopup();
     open();
   });
@@ -622,6 +708,90 @@
     e.stopPropagation(); // don't let the dismiss × open the chat
     hidePopup();
   });
+
+  // ── Unified popup engine (§3.5) — timer + section-proximity triggers ─────────
+  // "timer" {delayMs} shows after a delay; "near" {selector,dwellMs,threshold}
+  // observes a host-page element via IntersectionObserver — the dwell timer starts
+  // when the element is ≥threshold visible and clears when it scrolls away. Each
+  // popup keeps its own cooldown key; unmatched selectors are a silent no-op; all
+  // timers/observers are killed while the panel is open (see open()).
+  function initPopups(popups) {
+    if (!Array.isArray(popups)) return;
+    popups.forEach(function (p, i) {
+      if (!p || !p.trigger || typeof p.text !== "string" || !p.text.trim()) return;
+      var text = p.text.trim();
+      var source = typeof p.source === "string" ? p.source : "";
+      var key = "krispy_popup_" + cfg.tenant + "_" + (source || i); // per-popup, never blocks siblings
+      var persist = p.persist !== false; // default true → cooldown applies
+      var cooldownHrs =
+        typeof p.cooldownHours === "number" && isFinite(p.cooldownHours)
+          ? Math.max(0, Math.min(8760, p.cooldownHours))
+          : 24;
+      function coolingDown() {
+        if (!persist) return false; // persist:false resets every page load
+        return Date.now() - (+localStorage.getItem(key) || 0) < cooldownHrs * 3600000;
+      }
+      function fire() {
+        if (panel.classList.contains("open") || popShown || coolingDown()) return;
+        showPopup(text, source);
+        if (persist) {
+          try {
+            localStorage.setItem(key, String(Date.now()));
+          } catch {
+            /* quota/private mode — popup just re-shows next load */
+          }
+        }
+      }
+      var trig = p.trigger;
+      if (trig.kind === "near" && typeof trig.selector === "string") {
+        var el = document.querySelector(trig.selector);
+        if (!el || typeof IntersectionObserver === "undefined") return; // no-op if nothing matches
+        var dwellMs = clampMs(trig.dwellMs, 8000);
+        var threshold =
+          typeof trig.threshold === "number" && trig.threshold >= 0 && trig.threshold <= 1
+            ? trig.threshold
+            : 0.3;
+        var dwellT = null;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (en) {
+              if (en.isIntersecting && en.intersectionRatio >= threshold) {
+                if (!dwellT) {
+                  dwellT = setTimeout(fire, dwellMs);
+                  popupTimers.push(dwellT);
+                }
+              } else if (dwellT) {
+                clearTimeout(dwellT); // scrolled away before dwell elapsed
+                dwellT = null;
+              }
+            });
+          },
+          { threshold: threshold },
+        );
+        io.observe(el);
+        popupObservers.push(io);
+      } else {
+        // timer (default kind)
+        if (coolingDown()) return;
+        popupTimers.push(setTimeout(fire, clampMs(trig.delayMs, timing.popupDelayMs)));
+      }
+      // cancelOnClick — the visitor clicked the thing itself → dismiss + mark shown.
+      if (typeof p.cancelOnClick === "string" && p.cancelOnClick) {
+        document.addEventListener("click", function (e) {
+          if (e.target && e.target.closest && e.target.closest(p.cancelOnClick)) {
+            if (persist) {
+              try {
+                localStorage.setItem(key, String(Date.now()));
+              } catch {
+                /* ignore */
+              }
+            }
+            hidePopup();
+          }
+        });
+      }
+    });
+  }
 
   // WebAudio "ding" — two short oscillator notes, ~150ms. No file, no base64.
   var audioCtx = null;
@@ -775,10 +945,63 @@
     vv.addEventListener("scroll", syncViewport);
   }
 
+  // ── conversation script (§3.7) ──────────────────────────────────────────────
+  // opening[]: a proactive bot-message sequence on panel open — first bubble is
+  // instant (= today's greeting), the rest are separated by the existing typing
+  // indicator. opening[0] supersedes theme.greeting, so a lone greeting is unchanged.
+  function playOpening(seq) {
+    add("bot", seq[0]);
+    var i = 1;
+    (function next() {
+      if (i >= seq.length) return;
+      var typing = add("bot", "…");
+      setTimeout(function () {
+        typing.remove();
+        add("bot", seq[i++]);
+        next();
+      }, 900); // ~1s human pause between scripted bubbles
+    })();
+  }
+  // starters[]: suggested-question chips above the composer, fresh conversation
+  // only; clicking one sends it as the visitor message and removes the strip.
+  function removeStarters() {
+    if (startersEl) {
+      startersEl.remove();
+      startersEl = null;
+    }
+  }
+  function renderStarters() {
+    if (!starters.length || startersEl) return;
+    startersEl = document.createElement("div");
+    startersEl.className = "starters";
+    starters.forEach(function (s) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = s; // textContent, never innerHTML
+      chip.addEventListener("click", function () {
+        sendMessage(s);
+      });
+      startersEl.appendChild(chip);
+    });
+    panel.insertBefore(startersEl, sendForm);
+  }
+
   var opened = false;
   function open() {
     hasInteracted = true; // opening counts as interaction (unlocks audio)
     hidePopup(); // an open panel supersedes the teaser
+    // Suppress popups while chatting: kill pending timers + disconnect observers.
+    popupTimers.forEach(clearTimeout);
+    popupTimers = [];
+    popupObservers.forEach(function (o) {
+      try {
+        o.disconnect();
+      } catch {
+        /* ignore */
+      }
+    });
+    popupObservers = [];
     panel.classList.add("open");
     launcher.classList.remove("kunread", "knudge"); // clear unread on open
     if (!opened) {
@@ -791,9 +1014,12 @@
           if (rm && rm.c && rm.t != null) add(rm.c, rm.t);
         }
         restoring = false;
+      } else if (opening.length) {
+        playOpening(opening); // scripted opener (opening[0] supersedes greeting)
       } else if (greeting) {
-        add("bot", greeting);
+        add("bot", greeting); // today's single-greeting behavior, unchanged
       }
+      if (!savedMsgs.length) renderStarters(); // fresh conversation only
       connectWs();
     }
     syncViewport();
@@ -877,6 +1103,15 @@
     if (humanMarked) return;
     humanMarked = true;
     add("sys", "A team member has joined the chat.");
+    clearFallbacks(); // a human is engaged → CTA/form escape hatches are now noise
+  }
+  // Clear all fallback timers (CTA stagger + afterReplyMs form) on operator takeover
+  // — mirrors "real operator reply hides fallback CTAs/form".
+  function clearFallbacks() {
+    ctaTimers.forEach(clearTimeout);
+    ctaTimers = [];
+    formTimers.forEach(clearTimeout);
+    formTimers = [];
   }
 
   // ── contact capture (on [!HANDOFF] with no form) ────────────────────────
@@ -893,6 +1128,103 @@
     ],
   };
 
+  // ── CTA engine (§4) — social-connector cards inside .log ─────────────────────
+  // Armed on the FIRST visitor message; each CTA renders once after its own
+  // showAfterMs (staggered) into a lazily-created .ctarow card that scrolls with
+  // the transcript. Server projects only cta!==false connectors with https/tel
+  // hrefs + default labels; form.connectorIds scoping stays server-side. All
+  // timers are cleared on operator takeover (clearFallbacks).
+  var DEFAULT_CTA_LABEL = {
+    whatsapp: "Chat on WhatsApp",
+    instagram: "DM us on Instagram",
+    facebook: "Find us on Facebook",
+    tiktok: "Follow on TikTok",
+    phone: "Call us",
+    link: "Visit us",
+  };
+  // Static per-type brand glyphs (constant SVG, NOT tenant data — safe to inject
+  // as innerHTML, same pattern as the send/close chrome icons above).
+  var CTA_GLYPH = {
+    instagram:
+      '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor"/></svg>',
+    whatsapp:
+      '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15L2 22l5.2-1.4A10 10 0 1012 2zm0 2a8 8 0 11-4.2 14.8l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm4.3 10.6c-.2.5-1.2 1-1.6 1-.4.1-.9.2-2.9-.6-2.4-1-3.9-3.5-4-3.7-.1-.2-.9-1.2-.9-2.3 0-1.1.6-1.6.8-1.8.2-.2.4-.3.6-.3h.4c.2 0 .4 0 .6.5l.7 1.7c0 .2.1.3 0 .5l-.3.5-.3.3c-.2.1-.3.3-.1.6.1.2.7 1 1.4 1.6.9.8 1.6 1 1.9 1.2.2.1.4 0 .5-.1l.6-.7c.2-.2.3-.2.5-.1l1.6.8c.2.1.4.2.5.3.1.2.1.6-.1 1z"/></svg>',
+    facebook:
+      '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 9h2.5l.5-3H14V4.3c0-.8.3-1.3 1.5-1.3H17V.3C16.6.2 15.6 0 14.5 0 12 0 11 1.5 11 4v2H8.5v3H11v9h3V9z"/></svg>',
+    tiktok:
+      '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 3c.3 2 1.6 3.5 3.5 3.8v2.6c-1.3 0-2.5-.4-3.5-1.1v5.4a5.4 5.4 0 11-5.4-5.4c.3 0 .5 0 .8.1v2.7a2.7 2.7 0 102 2.6V3H16z"/></svg>',
+    phone:
+      '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 013 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>',
+  };
+  function ctaContainer() {
+    if (!ctaRow || !ctaRow.isConnected) {
+      ctaRow = document.createElement("div");
+      ctaRow.className = "ctarow";
+      log.appendChild(ctaRow);
+    }
+    return ctaRow;
+  }
+  function renderCta(c) {
+    if (!c || typeof c.url !== "string") return;
+    if (!/^(https:\/\/|tel:)/i.test(c.url)) return; // only https/wa.me/tel hrefs render
+    var item = document.createElement("div");
+    item.className = "ctaitem";
+    if (typeof c.caption === "string" && c.caption) {
+      var cap = document.createElement("div");
+      cap.className = "ctacap";
+      cap.textContent = c.caption; // textContent, never innerHTML
+      item.appendChild(cap);
+    }
+    var a = document.createElement("a");
+    a.className = "cta cta-" + (c.type || "link");
+    a.href = c.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    var glyph = CTA_GLYPH[c.type];
+    if (glyph) {
+      var gs = document.createElement("span");
+      gs.className = "ctaglyph";
+      gs.style.cssText = "display:flex";
+      gs.innerHTML = glyph; // static brand constant — not tenant data
+      a.appendChild(gs);
+    }
+    var lbl = document.createElement("span");
+    lbl.textContent = c.label || DEFAULT_CTA_LABEL[c.type] || "Contact us";
+    a.appendChild(lbl);
+    item.appendChild(a);
+    ctaContainer().appendChild(item);
+    log.scrollTop = log.scrollHeight;
+  }
+  function armCtas() {
+    ctaArmed = true;
+    ctas.forEach(function (c) {
+      if (!c) return;
+      ctaTimers.push(
+        setTimeout(
+          function () {
+            if (handedOff) return; // operator took over before this CTA fired
+            renderCta(c);
+          },
+          clampMs(c.showAfterMs, 0),
+        ),
+      );
+    });
+  }
+  // afterReplyMs form fallback (§4): after the first AI reply, any form carrying
+  // afterReplyMs arms a one-shot showForm timer — cancelled by [!FORM] (showForm
+  // clears formTimers), by another form already showing, or by operator takeover.
+  function armFormFallback() {
+    forms.forEach(function (f) {
+      var ms = f && clampMs(f.afterReplyMs, 0);
+      if (f && ms > 0)
+        formTimers.push(
+          setTimeout(function () {
+            if (!formOpen && !handedOff) showForm(f);
+          }, ms),
+        );
+    });
+  }
+
   // ── data-driven lead form (on [!FORM:<id>], carried by res.form) ─────────
   // Built entirely with createElement/textContent — NEVER innerHTML for any value
   // (form fields, options, CTA labels/urls are all tenant/visitor-controlled → XSS).
@@ -900,6 +1232,9 @@
   function showForm(form) {
     if (formOpen || !form || !form.fields) return;
     formOpen = true;
+    // any form showing cancels the afterReplyMs fallback (incl. a [!FORM] trigger)
+    formTimers.forEach(clearTimeout);
+    formTimers = [];
     var wrap = document.createElement("form");
     wrap.className = "cap";
 
@@ -975,6 +1310,7 @@
           formId: form.id,
           values: values,
           history: history.slice(-10),
+          source: openSource || undefined, // popup origin → lead meta (§3.5)
         }),
       }).catch(function () {});
       // Collapse in place to a compact transcript record — the card stays in
@@ -989,13 +1325,15 @@
   }
 
   // ── send ─────────────────────────────────────────────────────────────────
-  sendForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var text = input.value.trim();
+  // Extracted so starter chips (§3.7) can send too — a chip click IS a visitor
+  // message. The FIRST visitor message arms the CTA stagger (§4).
+  function sendMessage(text) {
+    text = (text || "").trim();
     if (!text) return;
-    input.value = "";
+    removeStarters(); // suggested chips are for the empty state only
     add("me", text);
     history.push({ role: "user", content: text });
+    if (!ctaArmed && ctas.length) armCtas(); // first visitor message arms CTAs
     sendBtn.disabled = true;
     var typing = handedOff ? null : add("bot", "…");
     // 30s guard: a hung request (e.g. mid-deploy) must never leave typing dots
@@ -1015,6 +1353,7 @@
         tenantId: cfg.tenant,
         message: text,
         history: history.slice(-10),
+        source: openSource || undefined, // popup origin → session context (§3.5)
       }),
     })
       .then(function (r) {
@@ -1031,6 +1370,10 @@
           add(res.degraded ? "op" : "bot", res.reply);
           history.push({ role: "assistant", content: res.reply });
           notifyInbound(); // self-gates: no-op while panel open
+          if (!repliedOnce && !handedOff) {
+            repliedOnce = true;
+            armFormFallback(); // first AI reply → afterReplyMs form timer (§4)
+          }
         }
         if (res.form) showForm(res.form);
         else if (res.handoff) showForm(DEFAULT_CONTACT_FORM);
@@ -1044,5 +1387,12 @@
         sendBtn.disabled = false;
         input.focus();
       });
+  }
+  sendForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    sendMessage(text);
   });
 })();

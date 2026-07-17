@@ -166,20 +166,37 @@ paths:
       operationId: widgetConfig
       description: >
         The widget's boot-time read of its appearance/forms. Returns ONLY the whitelist
-        projection (`theme`) — NEVER botToken/chatId/systemPrompt. Do not confuse with the
-        secret-guarded `GET /api/tenant/config`, which returns the full config.
+        projection (`theme`, `ctas`, `script`, `popups`) — NEVER botToken/chatId/systemPrompt/
+        persona. Do not confuse with the secret-guarded `GET /api/tenant/config`, which
+        returns the full config.
       security: [] # public — no auth
       parameters:
         - $ref: "#/components/parameters/Tenant"
       responses:
         "200":
-          description: The public theme projection (fields are all optional / may be absent).
+          description: The public projection (fields are all optional / may be absent).
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   theme: { $ref: "#/components/schemas/WidgetTheme" }
+                  ctas:
+                    type: array
+                    description: "CTA-capable connectors (minus cta:false opt-outs), with server-built href + default label."
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        type: { $ref: "#/components/schemas/ConnectorType" }
+                        label: { type: string }
+                        caption: { type: string }
+                        url: { type: string, description: "wa.me/tel/https, built server-side." }
+                        showAfterMs: { type: integer }
+                  script: { $ref: "#/components/schemas/ConversationScript" }
+                  popups:
+                    type: array
+                    items: { $ref: "#/components/schemas/PopupSpec" }
 
   /api/usage:
     get:
@@ -625,8 +642,13 @@ paths:
           description: Missing/wrong `x-tenant-sync-secret` (or the secret is not configured).
         "413":
           description: >
-            Config over a hard size cap — `avatar_too_large` (`theme.avatar` over 48KB) or
-            `kb_sources_too_large` (`kbSources` total text over 100K chars). Nothing is written.
+            Config over a hard size cap — `avatar_too_large` (`theme.avatar` over 48KB),
+            `kb_sources_too_large` (`kbSources` total text over 100K chars),
+            `too_many_popups` (>8 popups), `popup_text_too_large` (popup `text` over 500
+            chars), `popup_selector_too_large` (a `near` selector or `cancelOnClick` over
+            200 chars), `too_many_opening` (>5 `script.opening`), `too_many_starters`
+            (>4 `script.starters`), or `persona_script_too_large` (`persona` + `script`
+            combined free text over 8K chars). Nothing is written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -972,17 +994,89 @@ components:
 
     ConnectorType:
       type: string
-      enum: [email, telegram, whatsapp, instagram]
+      enum: [email, telegram, whatsapp, phone, instagram, facebook, tiktok, link]
 
     Connector:
       type: object
       required: [id, type]
+      description: >
+        Delivery channel and/or visitor-facing CTA. The CTA fields (cta/label/caption/
+        showAfterMs) are inert on the delivery-only types (email/telegram).
       properties:
         id: { type: string }
         type: { $ref: "#/components/schemas/ConnectorType" }
         toAddress: { type: string, description: "email." }
-        phone: { type: string, description: "whatsapp (E.164 digits, no +)." }
-        profileUrl: { type: string, description: "instagram." }
+        phone: { type: string, description: "whatsapp/phone (digits, no +)." }
+        profileUrl: { type: string, description: "instagram (https)." }
+        url: { type: string, description: "facebook/tiktok/link (https)." }
+        cta:
+          {
+            type: boolean,
+            description: "Default true for CTA-capable types — false keeps it delivery-only.",
+          }
+        label: { type: string, description: "Button label; projection fills a per-type default." }
+        caption: { type: string, description: "Small text above the button." }
+        showAfterMs:
+          {
+            type: integer,
+            description: "Per-CTA stagger after the first visitor message. Default 0.",
+          }
+
+    PersonaSpec:
+      type: object
+      description: >
+        How the bot SPEAKS. Folded into the system prompt by buildSystemPrompt — SERVER-ONLY,
+        never returned by GET /api/widget/config.
+      properties:
+        toneOfVoice: { type: string, description: "Free text: warm, playful boulangerie owner." }
+        styleRules:
+          type: array
+          items: { type: string }
+          description: 'Discrete do/don''t rules: "never discuss competitors".'
+
+    ConversationScript:
+      type: object
+      description: How a conversation STARTS. Projected to the widget.
+      properties:
+        opening:
+          type: array
+          items: { type: string }
+          description: "Scripted bot-bubble sequence on open (projection caps at 5); opening[0] supersedes theme.greeting."
+        starters:
+          type: array
+          items: { type: string }
+          description: "Suggested-question chips on a fresh conversation (projection caps at 4)."
+
+    PopupSpec:
+      type: object
+      required: [trigger, text]
+      description: One engine for timed AND section-proximity teaser popups.
+      properties:
+        trigger:
+          oneOf:
+            - type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [timer] }
+                delayMs: { type: integer, description: "Shown delayMs after load. Default 8000." }
+            - type: object
+              required: [kind, selector]
+              properties:
+                kind: { type: string, enum: [near] }
+                selector: { type: string, description: "CSS selector to observe (≤200 chars)." }
+                dwellMs: { type: integer, description: "Default 8000." }
+                threshold: { type: number, description: "Intersection ratio. Default 0.3." }
+        text: { type: string, description: "Teaser card copy (≤500 chars)." }
+        persist:
+          {
+            type: boolean,
+            description: "Default true → cooldownHours applies; false resets each load.",
+          }
+        cooldownHours: { type: integer, description: "Default 24; per-popup localStorage key." }
+        cancelOnClick:
+          { type: string, description: "Selector — clicking it dismisses the popup (≤200 chars)." }
+        source:
+          { type: string, description: "Origin label → session context / handoff / lead meta." }
 
     Operator:
       type: object
@@ -1021,6 +1115,14 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Connector" }
         theme: { $ref: "#/components/schemas/WidgetTheme" }
+        persona:
+          allOf: [{ $ref: "#/components/schemas/PersonaSpec" }]
+          description: "Bot voice + style rules. SERVER-ONLY — never exposed to the public widget config."
+        script: { $ref: "#/components/schemas/ConversationScript" }
+        popups:
+          type: array
+          items: { $ref: "#/components/schemas/PopupSpec" }
+          description: "Proactive popup engine; theme.popupText is sugar for one timer popup."
         operators:
           type: array
           description: "Handoff-mention operators (auto-learned, capped at 10). NEVER exposed to the public widget config."

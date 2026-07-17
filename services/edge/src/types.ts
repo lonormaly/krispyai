@@ -17,13 +17,33 @@ export interface FormSpec {
   connectorIds?: string[]; // which connectors receive this lead; default = ALL configured
   successText?: string; // shown in the collapsed card after submit; widget has a default
 }
-export type ConnectorType = "email" | "telegram" | "whatsapp" | "instagram";
-export interface Connector {
+export type ConnectorType =
+  | "email"
+  | "telegram"
+  | "whatsapp"
+  | "phone"
+  | "instagram"
+  | "facebook"
+  | "tiktok"
+  | "link";
+// CTA fields — the code already treats connectors as dual-purpose (delivery AND
+// visitor-facing CTA cards). These live on the connector rather than a parallel ctas[]
+// list. Inert on delivery-only types (email/telegram); the projection fills per-type
+// defaults for the CTA-capable ones.
+export interface CtaFields {
+  cta?: boolean; // default true for CTA-capable types — false keeps a connector
+  // delivery-only (e.g. a whatsapp wired into form.connectorIds but never shown as a CTA)
+  label?: string; // button label; projection fills a per-type default when unset
+  caption?: string; // small text above the button ("or keep chatting here")
+  showAfterMs?: number; // per-CTA stagger after the FIRST visitor message. Default 0.
+}
+export interface Connector extends CtaFields {
   id: string;
   type: ConnectorType;
   toAddress?: string; // email
-  phone?: string; // whatsapp (E.164 digits, no +)
+  phone?: string; // whatsapp/phone (digits, no +)
   profileUrl?: string; // instagram
+  url?: string; // facebook/tiktok/link (https)
   // telegram uses the existing top-level botToken/chatId — no per-connector creds
 }
 
@@ -59,6 +79,38 @@ export interface WidgetTiming {
   autoOpenMs?: number; // default 0 = never — auto-open panel after inbound msg while closed (field-proven: 2000)
 }
 
+// ── Persona + conversation script (Feature B) ─────────────────────────────
+// Two halves of "the bot sounds like OUR shop": how it SPEAKS (server-side, folded
+// into the system prompt, NEVER projected) and how a conversation STARTS (widget-side,
+// projected via publicWidgetConfig). All fields default unset — the bot behaves exactly
+// as today until the tenant writes persona/script.
+export interface PersonaSpec {
+  // → buildSystemPrompt() only; structurally excluded from the public boot config
+  toneOfVoice?: string; // free text: "warm, playful boulangerie owner; short sentences"
+  styleRules?: string[]; // discrete do/don't rules: "never discuss competitors"
+}
+export interface ConversationScript {
+  // → publicWidgetConfig() + widget boot render
+  opening?: string[]; // scripted bot-bubble sequence on panel open; opening[0] supersedes
+  // theme.greeting (greeting alone == opening of length 1). Projection caps at 5.
+  starters?: string[]; // suggested-question chips above the input on a FRESH conversation;
+  // click sends the text as the visitor's message. Projection caps at 4.
+}
+
+// ── Popup engine (Feature B) — one engine for timed AND section-proximity popups ──
+// Each entry renders a teaser card above the launcher. theme.popupText is sugar for a
+// single timer popup. Default: no popups configured = nothing ever shows.
+export interface PopupSpec {
+  trigger:
+    | { kind: "timer"; delayMs?: number } // default 8000
+    | { kind: "near"; selector: string; dwellMs?: number; threshold?: number }; // 8000 / 0.3
+  text: string; // the suggestive message (teaser card copy)
+  persist?: boolean; // default true → cooldownHours applies; false = resets every load
+  cooldownHours?: number; // default 24; per-popup localStorage key (source ?? index)
+  cancelOnClick?: string; // selector — visitor clicked the thing itself → dismiss popup
+  source?: string; // origin label ("popup_pricing"); rides session context → handoff/lead meta
+}
+
 export interface TenantConfig {
   /** Telegram bot token (BotFather). */
   botToken: string;
@@ -77,6 +129,14 @@ export interface TenantConfig {
   connectors?: Connector[];
   /** Feature B — widget appearance. */
   theme?: WidgetTheme;
+  /** Feature B — bot voice + style rules. SERVER-ONLY: folded into buildSystemPrompt,
+   * NEVER projected to the public widget config (it's instruction text). */
+  persona?: PersonaSpec;
+  /** Feature B — scripted opening sequence + starter chips (projected to the widget). */
+  script?: ConversationScript;
+  /** Feature B — proactive popup engine (timer + section-proximity); theme.popupText
+   * is sugar for a single timer popup. */
+  popups?: PopupSpec[];
   /** Quiet-ops — operators to @mention on handoff. Auto-learned from topic replies
    * (see upsertOperator). SECRET-ADJACENT: never expose to the public widget config. */
   operators?: Operator[];

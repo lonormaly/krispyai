@@ -15,6 +15,19 @@ test("guardrails survive a tenant custom prompt override", () => {
   expect(p).toContain(HANDOFF_MARKER); // handoff contract still re-appended
 });
 
+test("persona (tone + style rules) reaches the built prompt, inside the guardrail scope", () => {
+  const p = buildSystemPrompt("You are Bob.", undefined, {
+    toneOfVoice: "warm, playful baker",
+    styleRules: ["never discuss competitors", "always answer in Hebrew"],
+  });
+  expect(p).toContain("warm, playful baker"); // tone folded in
+  expect(p).toContain("- never discuss competitors"); // style rules as a bullet list
+  expect(p).toContain("- always answer in Hebrew");
+  expect(p).toContain(SECURITY_INSTRUCTION); // persona sits BEFORE the guardrails (leak scope)
+  // an unset persona leaves the prompt exactly as it was (no empty Voice/Style headers)
+  expect(buildSystemPrompt("You are Bob.")).not.toContain("## Voice");
+});
+
 test("guardrails cover disclosure refusal, scope limits, and injection resistance", () => {
   const g = SECURITY_INSTRUCTION.toLowerCase();
   expect(g).toContain("system prompt"); // refuse prompt extraction

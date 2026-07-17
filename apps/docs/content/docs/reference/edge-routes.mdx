@@ -16,7 +16,7 @@ one Cloudflare Worker hosts all of these plus the `SessionDO`. CORS allow-origin
 | `POST` | `/api/contact`                   | `{ sessionId, tenantId?, name?, contact?, message? }` → `{ ok: true }` — legacy contact-capture shim (maps onto the lead fan-out) |
 | `POST` | `/api/lead`                      | `{ tenantId?, sessionId, formId?, values, history }` → `{ ok: true }` — a form's captured values fan out to delivery connectors   |
 | `GET`  | `/api/session/:id/ws?t=<tenant>` | WebSocket upgrade → `SessionDO`. `426` if not an upgrade. the visitor's live channel                                              |
-| `GET`  | `/api/widget/config?t=<tenant>`  | → `{ theme: {...} }` — the **public, secret-free** widget projection (whitelist only)                                             |
+| `GET`  | `/api/widget/config?t=<tenant>`  | → `{ theme, ctas, script, popups }` — the **public, secret-free** widget projection (whitelist only; no `persona`)                |
 | `GET`  | `/api/usage?t=<tenant>`          | → `{ tenantId, usage: { ai, handoff, tokens }, plan, entitled, status, limits, withinLimits }`                                    |
 | `GET`  | `/health`                        | → `{ status: "ok", service: "edge" }`                                                                                             |
 
@@ -41,8 +41,9 @@ or wrong secret returns **401** (config routes) / **403** (webhook, billing) and
 
 <Callout type="warn">
   `GET /api/tenant/config` returns the **full** config (bot token included) and is secret-guarded.
-  `GET /api/widget/config` is the public read the browser uses — it returns **only** the theme
-  whitelist and never the token/prompt. don't confuse them. see [security](/docs/security).
+  `GET /api/widget/config` is the public read the browser uses — it returns **only** the whitelist
+  (`theme`, `ctas`, `script`, `popups`) and never the token/prompt/persona. don't confuse them. see
+  [security](/docs/security).
 </Callout>
 
 ## the SessionDO (internal)

@@ -553,6 +553,24 @@ describe("tenant config routes", () => {
     ).toBe(200);
   });
 
+  test("connector phone must be digits-only → 400 (feeds tel:/wa.me hrefs)", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, {
+      connectors: [{ id: "wa", type: "whatsapp", phone: "not-a-number" }],
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("cta_phone_invalid");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // a real number with the usual separators passes
+    expect(
+      (
+        await postCfg(env, {
+          connectors: [{ id: "wa", type: "whatsapp", phone: "+1 (555) 234-5678" }],
+        })
+      ).status,
+    ).toBe(200);
+  });
+
   test("kbSources total text over 100K chars → 413 (cap precedes the schema)", async () => {
     const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
     const res = await postCfg(env, {
@@ -582,6 +600,78 @@ describe("tenant config routes", () => {
     // under the cap passes
     expect(
       (await postCfg(env, { theme: { popupText: "we usually reply in minutes" } })).status,
+    ).toBe(200);
+  });
+
+  test("popups: >8 entries → 413; oversized text → 413; oversized selector → 413", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const one = { trigger: { kind: "timer" }, text: "hi" };
+    // >8 entries
+    const nine = await postCfg(env, { popups: Array(9).fill(one) });
+    expect(nine.status).toBe(413);
+    expect((await nine.json()).error).toBe("too_many_popups");
+    // oversized text
+    const bigText = await postCfg(env, {
+      popups: [{ trigger: { kind: "timer" }, text: "x".repeat(501) }],
+    });
+    expect(bigText.status).toBe(413);
+    expect((await bigText.json()).error).toBe("popup_text_too_large");
+    // oversized near-selector
+    const bigSel = await postCfg(env, {
+      popups: [{ trigger: { kind: "near", selector: "a".repeat(201) }, text: "hi" }],
+    });
+    expect(bigSel.status).toBe(413);
+    expect((await bigSel.json()).error).toBe("popup_selector_too_large");
+    // oversized cancelOnClick selector
+    const bigCancel = await postCfg(env, {
+      popups: [{ trigger: { kind: "timer" }, text: "hi", cancelOnClick: "a".repeat(201) }],
+    });
+    expect(bigCancel.status).toBe(413);
+    expect((await bigCancel.json()).error).toBe("popup_selector_too_large");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // a well-formed set of popups passes
+    expect(
+      (
+        await postCfg(env, {
+          popups: [
+            { trigger: { kind: "near", selector: "#pricing" }, text: "questions on pricing?" },
+          ],
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  test("script: >5 opening → 413, >4 starters → 413", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const tooManyOpening = await postCfg(env, { script: { opening: Array(6).fill("hi") } });
+    expect(tooManyOpening.status).toBe(413);
+    expect((await tooManyOpening.json()).error).toBe("too_many_opening");
+    const tooManyStarters = await postCfg(env, { script: { starters: Array(5).fill("q?") } });
+    expect(tooManyStarters.status).toBe(413);
+    expect((await tooManyStarters.json()).error).toBe("too_many_starters");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // within bounds passes
+    expect(
+      (await postCfg(env, { script: { opening: ["hi", "welcome"], starters: ["pricing?"] } }))
+        .status,
+    ).toBe(200);
+  });
+
+  test("persona + script combined text over 8K chars → 413", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, {
+      persona: { toneOfVoice: "x".repeat(5000), styleRules: ["y".repeat(4000)] },
+    });
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe("persona_script_too_large");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // a normal persona passes
+    expect(
+      (
+        await postCfg(env, {
+          persona: { toneOfVoice: "warm baker", styleRules: ["no exclamation marks"] },
+        })
+      ).status,
     ).toBe(200);
   });
 });

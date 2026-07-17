@@ -61,4 +61,86 @@ describe("publicWidgetConfig", () => {
     expect(out.theme.primaryColor).toBeUndefined();
     expect((out as Record<string, unknown>).botToken).toBeUndefined();
   });
+
+  test("script (opening/starters) projects, capped 5/4; persona NEVER leaks", () => {
+    const out = publicWidgetConfig({
+      botToken: "x",
+      persona: { toneOfVoice: "warm baker", styleRules: ["no exclamation marks"] },
+      script: {
+        opening: ["hi", "welcome", "a", "b", "c", "overflow"],
+        starters: ["pricing?", "hours?", "book?", "menu?", "overflow"],
+      },
+    });
+    expect(out.script.opening).toEqual(["hi", "welcome", "a", "b", "c"]); // sliced to 5
+    expect(out.script.starters).toEqual(["pricing?", "hours?", "book?", "menu?"]); // sliced to 4
+    // persona (instruction text) is server-only — must never reach the boot config
+    const flat = JSON.stringify(out);
+    expect(flat).not.toContain("persona");
+    expect(flat).not.toContain("warm baker");
+    expect(flat).not.toContain("exclamation");
+    expect((out as Record<string, unknown>).persona).toBeUndefined();
+  });
+
+  test("ctas: CTA-capable connectors project with server-built href + default label", () => {
+    const out = publicWidgetConfig({
+      botToken: "x",
+      connectors: [
+        { id: "wa", type: "whatsapp", phone: "15551234" },
+        { id: "ig", type: "instagram", profileUrl: "https://instagram.com/shop", label: "Say hi" },
+        { id: "ph", type: "phone", phone: "15559999", caption: "or call", showAfterMs: 4000 },
+        { id: "em", type: "email", toAddress: "leads@shop.com" }, // delivery-only, excluded
+        { id: "wa2", type: "whatsapp", phone: "15550000", cta: false }, // opt-out, excluded
+        { id: "wa3", type: "whatsapp" }, // no phone → no href → dropped
+      ],
+    });
+    expect(out.ctas).toEqual([
+      {
+        id: "wa",
+        type: "whatsapp",
+        label: "Chat on WhatsApp",
+        caption: undefined,
+        url: "https://wa.me/15551234",
+        showAfterMs: undefined,
+      },
+      {
+        id: "ig",
+        type: "instagram",
+        label: "Say hi",
+        caption: undefined,
+        url: "https://instagram.com/shop",
+        showAfterMs: undefined,
+      },
+      {
+        id: "ph",
+        type: "phone",
+        label: "Call us",
+        caption: "or call",
+        url: "tel:+15559999",
+        showAfterMs: 4000,
+      },
+    ]);
+    // email address (delivery channel) must never surface in the public CTA projection
+    expect(JSON.stringify(out)).not.toContain("leads@shop.com");
+  });
+
+  test("popups: explicit list wins; theme.popupText desugars to one timer popup", () => {
+    // explicit popups[] pass through
+    const explicit = publicWidgetConfig({
+      botToken: "x",
+      popups: [{ trigger: { kind: "near", selector: "#pricing" }, text: "questions on pricing?" }],
+    });
+    expect(explicit.popups).toEqual([
+      { trigger: { kind: "near", selector: "#pricing" }, text: "questions on pricing?" },
+    ]);
+    // no popups[] but popupText set → sugar to a single timer popup with timing defaults
+    const sugar = publicWidgetConfig({
+      botToken: "x",
+      theme: { popupText: "need a hand?", timing: { popupDelayMs: 5000, popupCooldownHrs: 12 } },
+    });
+    expect(sugar.popups).toEqual([
+      { trigger: { kind: "timer", delayMs: 5000 }, text: "need a hand?", cooldownHours: 12 },
+    ]);
+    // neither → empty
+    expect(publicWidgetConfig({ botToken: "x" }).popups).toEqual([]);
+  });
 });

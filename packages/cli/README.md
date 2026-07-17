@@ -9,8 +9,30 @@ Worker's `POST /api/tenant/config` route, which merges the prompt into KV.
 ```sh
 krispy init                  # guided first-run setup (Telegram → train → embed → next steps)
 krispy set-kbase kbase.md    # write kbase.md as the bot's system prompt
+krispy logo logo.png         # remove a logo's bg locally → paste-ready avatar data URI
 krispy dev                   # run the edge Worker locally (wrangler dev)
 ```
+
+### `krispy logo <file>` — local background removal
+
+The self-host counterpart to Krispy Cloud's AI logo bg-removal — but fully local: no cloud
+call, no API key. It removes the background with a **corner chroma-key** (samples the four
+corners; if they agree on one background color, flood-fills that region to transparent) and
+prints a ready-to-paste `data:image/png;base64,…` avatar URI:
+
+```sh
+krispy logo ./logo.png | pbcopy     # the data URI is the only thing on stdout
+```
+
+Then paste it as `theme.avatar` in your tenant config (the dashboard, or a
+`POST /api/tenant/config` body) — the widget renders it in both the header and the launcher
+badge. Accepts `.png/.jpg/.jpeg/.webp/.svg`; downscales to 144px (~5–30KB). An
+already-transparent image (SVG / transparent PNG) passes through untouched, and a photographic
+/ busy background it can't cleanly key is kept as-is — background removal never mangles a logo.
+
+Corner chroma-key is the documented floor: it excels at logos on a flat background. The upgrade
+path is local ONNX segmentation (modnet) if arbitrary backgrounds become worth a large model
+download. This command depends on `sharp` (lazy-loaded, so the CLI core stays dep-free).
 
 ### `krispy init` — the wizard
 

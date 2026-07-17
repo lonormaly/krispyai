@@ -1,13 +1,56 @@
 // KV-backed state: tenant config, the topic<->session map, and usage metering.
 // Key builders are pure (unit-tested); the KV calls are thin wrappers so the flow
 // code never hand-rolls a key string.
-import type { Env, Operator, TenantConfig } from "./types";
+import type { Connector, Env, Operator, PopupSpec, TenantConfig, WidgetTheme } from "./types";
+
+// CTA-capable connector types (double as visitor chat CTAs); email/telegram are
+// delivery-only and never projected. Default label per type when the tenant sets none.
+const DEFAULT_CTA_LABEL: Record<string, string> = {
+  whatsapp: "Chat on WhatsApp",
+  instagram: "DM us on Instagram",
+  facebook: "Find us on Facebook",
+  tiktok: "Follow on TikTok",
+  phone: "Call us",
+  link: "Learn more",
+};
+
+// Server-built href per type — the widget renders only what's here, never assembling a
+// URL from raw phone/profile fields. wa.me/tel are the only non-https schemes allowed.
+function ctaHref(c: Connector): string | undefined {
+  switch (c.type) {
+    case "whatsapp":
+      return c.phone ? `https://wa.me/${c.phone}` : undefined;
+    case "phone":
+      return c.phone ? `tel:+${c.phone}` : undefined;
+    case "instagram":
+      return c.profileUrl;
+    case "facebook":
+    case "tiktok":
+    case "link":
+      return c.url;
+    default:
+      return undefined; // email/telegram — not a CTA
+  }
+}
+
+// theme.popupText is sugar for a single timer popup — expand it so the widget reads one
+// popups[] contract regardless of which knob the tenant set (timing supplies its defaults).
+function popupTextSugar(th: WidgetTheme): PopupSpec[] {
+  if (!th.popupText) return [];
+  return [
+    {
+      trigger: { kind: "timer", delayMs: th.timing?.popupDelayMs },
+      text: th.popupText,
+      cooldownHours: th.timing?.popupCooldownHrs,
+    },
+  ];
+}
 
 // ── public widget config (secret-free whitelist) ─────────────────────────────
 // The ONLY fields the unauthenticated public widget may read. Secret-free by
-// construction: botToken/chatId/systemPrompt/model AND operators (Telegram user ids)
-// are structurally excluded (we project explicit theme keys, never spread cfg). The
-// leak-guard test enforces this.
+// construction: botToken/chatId/systemPrompt/model, operators (Telegram user ids) AND
+// persona (instruction text) are structurally excluded (we project explicit keys, never
+// spread cfg). The leak-guard test enforces this.
 export function publicWidgetConfig(cfg: Partial<TenantConfig> | null) {
   const th = cfg?.theme ?? {};
   return {
@@ -28,7 +71,29 @@ export function publicWidgetConfig(cfg: Partial<TenantConfig> | null) {
       popupText: th.popupText,
       timing: th.timing,
     },
-    // Feature A appends PUBLIC-safe form + connector-CTA projections here.
+    // CTA-capable connectors only, minus per-connector opt-outs (cta === false). Server
+    // computes the href (wa.me/tel/https) + default label; a connector with no resolvable
+    // href is dropped so a half-configured row never renders a dead CTA.
+    ctas: (cfg?.connectors ?? [])
+      .filter((c) => c.type in DEFAULT_CTA_LABEL && c.cta !== false)
+      .map((c) => ({
+        id: c.id,
+        type: c.type,
+        label: c.label ?? DEFAULT_CTA_LABEL[c.type],
+        caption: c.caption,
+        url: ctaHref(c),
+        showAfterMs: c.showAfterMs,
+      }))
+      .filter((c) => c.url !== undefined),
+    // Scripted opening sequence + starter chips (widget-side). Persona (tone/style) is the
+    // server-only half and is NOT projected. Caps mirror the widget render limits (§3.7).
+    script: {
+      opening: cfg?.script?.opening?.slice(0, 5),
+      starters: cfg?.script?.starters?.slice(0, 4),
+    },
+    // Popup engine — explicit popups[] wins; otherwise theme.popupText desugars to one
+    // timer popup (back-compat). No popups + no popupText = [] (nothing ever shows).
+    popups: cfg?.popups ?? popupTextSugar(th),
   };
 }
 

@@ -23,7 +23,10 @@ tests {
 
 docs {
   PUBLIC (CORS-*, no secret): the widget's boot-time read of its appearance. Returns ONLY the
-  whitelist projection `{ theme: {...} }` — NEVER botToken/chatId/systemPrompt. Do NOT confuse
-  with the secret-guarded `GET /api/tenant/config`, which returns the full config incl. the
-  bot token. See `openapi.yaml` and `reference/edge-routes.mdx`.
+  whitelist projection `{ theme, ctas, script, popups }` — NEVER botToken/chatId/systemPrompt/
+  persona (persona is instruction text folded into the system prompt, never projected). `ctas`
+  are CTA-capable connectors (minus `cta:false` opt-outs) with server-built hrefs + default
+  labels; `popups` is the popup engine (or the `theme.popupText` sugar). Do NOT confuse with the
+  secret-guarded `GET /api/tenant/config`, which returns the full config incl. the bot token.
+  See `openapi.yaml` and `reference/edge-routes.mdx`.
 }

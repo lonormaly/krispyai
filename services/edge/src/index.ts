@@ -264,7 +264,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // Telegram is optional: no config → topic ops no-op, chat still answers.
   const result = await chatFlow(
     {
-      systemPrompt: buildSystemPrompt(tenant?.systemPrompt, tenant?.forms),
+      systemPrompt: buildSystemPrompt(tenant?.systemPrompt, tenant?.forms, tenant?.persona),
       // Ring-derived (or seed) history in; chatFlow applies the sliding window +
       // counts turns (chokepoint).
       history,
@@ -729,6 +729,11 @@ async function handleTenantConfigGet(request: Request, env: Env): Promise<Respon
 export const AVATAR_MAX_CHARS = 48 * 1024; // data-URI logos; ~10–30KB typical
 export const KB_SOURCES_MAX_CHARS = 100_000; // total text across all sources
 export const THEME_TEXT_MAX_CHARS = 500; // free-text theme strings projected to the public widget
+export const POPUPS_MAX = 8; // popup entries per tenant
+export const SELECTOR_MAX_CHARS = 200; // CSS selector strings (near-trigger + cancelOnClick)
+export const OPENING_MAX = 5; // scripted opening bubbles (mirrors the projection cap)
+export const STARTERS_MAX = 4; // starter chips (mirrors the projection cap)
+export const PERSONA_SCRIPT_MAX_CHARS = 8 * 1024; // combined persona + script free text
 const AVATAR_SCHEME = /^(https:\/\/|data:image\/(png|webp|jpeg);base64,)/;
 
 function tenantConfigCapError(
@@ -753,12 +758,54 @@ function tenantConfigCapError(
       if (u !== undefined && !u.startsWith("https://"))
         return { error: "cta_url_not_https", status: 400 };
     }
+    // phone feeds server-built `tel:+<phone>` / `wa.me/<phone>` hrefs — digits only
+    // (after stripping the usual + - space () separators). A junk phone would only
+    // yield a dead link, but reject it at the boundary rather than serve a broken CTA.
+    const phone = (c as { phone?: string }).phone;
+    if (phone !== undefined && !/^[0-9]+$/.test(phone.replace(/[\s+()-]/g, "")))
+      return { error: "cta_phone_invalid", status: 400 };
   }
   const kbSources = (cfg as { kbSources?: { text?: string }[] }).kbSources;
   if (kbSources) {
     const total = kbSources.reduce((n, s) => n + (s.text?.length ?? 0), 0);
     if (total > KB_SOURCES_MAX_CHARS) return { error: "kb_sources_too_large", status: 413 };
   }
+  // Popups render teaser cards + observe CSS selectors on the visitor's page — all reach
+  // the public boot config. Bound the count, the copy, and the selector strings.
+  const popups = cfg.popups;
+  if (popups) {
+    if (popups.length > POPUPS_MAX) return { error: "too_many_popups", status: 413 };
+    for (const p of popups) {
+      if ((p.text?.length ?? 0) > THEME_TEXT_MAX_CHARS)
+        return { error: "popup_text_too_large", status: 413 };
+      const selectors = [
+        p.trigger?.kind === "near" ? p.trigger.selector : undefined,
+        p.cancelOnClick,
+      ];
+      for (const sel of selectors) {
+        if (sel !== undefined && sel.length > SELECTOR_MAX_CHARS)
+          return { error: "popup_selector_too_large", status: 413 };
+      }
+    }
+  }
+  // Conversation script (opening bubbles + starter chips) is bounded by entry count; the
+  // widget renders at most 5/4 (projection slices to match). Persona (tone + style rules)
+  // + script share one combined text cap — persona rides the system prompt, script the boot.
+  const script = cfg.script;
+  if (script) {
+    if ((script.opening?.length ?? 0) > OPENING_MAX)
+      return { error: "too_many_opening", status: 413 };
+    if ((script.starters?.length ?? 0) > STARTERS_MAX)
+      return { error: "too_many_starters", status: 413 };
+  }
+  const sumLen = (arr?: string[]) => (arr ?? []).reduce((n, s) => n + s.length, 0);
+  const personaScriptChars =
+    (cfg.persona?.toneOfVoice?.length ?? 0) +
+    sumLen(cfg.persona?.styleRules) +
+    sumLen(script?.opening) +
+    sumLen(script?.starters);
+  if (personaScriptChars > PERSONA_SCRIPT_MAX_CHARS)
+    return { error: "persona_script_too_large", status: 413 };
   return null;
 }
 

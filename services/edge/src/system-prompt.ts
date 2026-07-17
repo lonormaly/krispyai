@@ -7,6 +7,8 @@
 // out, still shows the human-readable text to the visitor, and kicks off the
 // contact-capture / operator-ping flow.
 
+import type { PersonaSpec } from "./types";
+
 export const HANDOFF_MARKER = "[!HANDOFF]";
 
 // Reinforces the output-token cap (ai.ts MAX_OUTPUT_TOKENS) in words the model obeys,
@@ -48,16 +50,34 @@ function formsBlock(forms?: FormRef[]): string {
   return `\n\nWhen a visitor is ready for a concrete next step you can't complete in chat — booking, quote, details, demo — briefly say you'll get their info to the team, then append [!FORM:<id>] at the very end. Never explain the token. Available forms: ${list}.`;
 }
 
+/** The persona block interpolated into the prompt — how the bot SPEAKS (tone + style
+ * rules). Instruction text, so it sits INSIDE detectPromptLeak's scope (chat.ts checks the
+ * reply against the full assembled prompt): a bot reciting its own tone verbatim IS a leak. */
+function personaBlock(persona?: PersonaSpec): string {
+  if (!persona) return "";
+  const parts: string[] = [];
+  if (persona.toneOfVoice?.trim()) parts.push(`## Voice\n${persona.toneOfVoice.trim()}`);
+  if (persona.styleRules?.length)
+    parts.push(`## Style rules\n${persona.styleRules.map((r) => `- ${r}`).join("\n")}`);
+  return parts.length ? `\n\n${parts.join("\n\n")}` : "";
+}
+
 /** Build the system prompt, letting a tenant override the whole thing. */
-export function buildSystemPrompt(custom?: string, forms?: FormRef[]): string {
+export function buildSystemPrompt(
+  custom?: string,
+  forms?: FormRef[],
+  persona?: PersonaSpec,
+): string {
   const base = custom?.trim() ? custom.trim() : DEFAULT_PROMPT;
   // Even a custom prompt must know the handoff contract, so always restate it.
   const withHandoff = custom?.includes(HANDOFF_MARKER)
     ? base
     : `${base}\n\nWhen a human should take over, append ${HANDOFF_MARKER} at the very end of your reply.`;
-  // SECURITY_INSTRUCTION + BREVITY are ALWAYS appended, even over a custom prompt, so the
-  // guardrails and length cap can never be dropped by a tenant overriding the base prompt.
-  return `${withHandoff}${formsBlock(forms)}\n\n${SECURITY_INSTRUCTION}\n\n${BREVITY_INSTRUCTION}`;
+  // Persona rides between the instructions and the forms/guardrail contracts — the bot's
+  // voice, still inside the leak-guard scope. SECURITY_INSTRUCTION + BREVITY are ALWAYS
+  // appended, even over a custom prompt, so the guardrails and length cap can never be
+  // dropped by a tenant overriding the base prompt.
+  return `${withHandoff}${personaBlock(persona)}${formsBlock(forms)}\n\n${SECURITY_INSTRUCTION}\n\n${BREVITY_INSTRUCTION}`;
 }
 
 export interface ParsedReply {

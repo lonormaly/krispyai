@@ -15,6 +15,7 @@ core, no arg-parser dependency.
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `krispy init`             | guided first-run wizard — Telegram → train → embed → next steps. persists each step via `POST /api/tenant/config`. |
 | `krispy set-kbase <file>` | write `<file>`'s contents as the bot's system prompt (`POST /api/tenant/config`).                                  |
+| `krispy logo <file>`      | remove a logo's background locally (no cloud) → print a paste-ready `theme.avatar` data URI.                       |
 | `krispy dev`              | run the edge Worker locally — a thin wrapper over `wrangler dev` in `services/edge`.                               |
 
 running `krispy` with no command (or an unknown one) prints usage.
@@ -36,6 +37,28 @@ you've already set.
 `init` needs a real terminal (TTY); in CI or piped input it exits with guidance instead of
 hanging. it's the only command with dependencies (`@clack/prompts`, `picocolors`), lazy-loaded
 so the core stays lean.
+
+### `krispy logo`
+
+the self-host counterpart to Krispy Cloud's AI logo background-removal — fully local, no cloud
+call and no API key. it removes the background with a **corner chroma-key** (samples the four
+corners; if they agree on one background color, flood-fills that region to transparent) and
+prints a ready-to-paste `data:image/png;base64,…` URI on stdout:
+
+```sh
+krispy logo ./logo.png | pbcopy
+```
+
+paste the result as `theme.avatar` in your tenant config (the dashboard, or a
+`POST /api/tenant/config` body) — the widget renders it in both the header and the launcher
+badge, and the edge write-path already accepts `data:image/(png|webp|jpeg)` avatars up to 48KB.
+accepts `.png/.jpg/.jpeg/.webp/.svg` and downscales to 144px (~5–30KB). an already-transparent
+image (SVG / transparent PNG) passes through untouched, and a photographic / busy background it
+can't cleanly key is kept as-is — removal never mangles a logo.
+
+corner chroma-key is the documented floor: it excels at logos on a flat background. the upgrade
+path is local ONNX segmentation (modnet) if arbitrary backgrounds ever justify a large model
+download. `logo` depends on `sharp`, lazy-loaded so the CLI core stays dependency-free at import.
 
 ## env / config
 

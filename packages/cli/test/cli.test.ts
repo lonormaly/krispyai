@@ -1,6 +1,8 @@
 // Smoke test: the CLI routes commands and guards inputs — run it as a subprocess so
 // we exercise the real bin (arg parse + exit codes) without a live Worker.
 import { expect, test, describe } from "bun:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const BIN = new URL("../src/index.ts", import.meta.url).pathname;
 
@@ -48,6 +50,49 @@ describe("krispy cli", () => {
     const r = run(["init"]);
     expect(r.code).toBe(1);
     expect(r.err).toContain("TTY");
+  });
+});
+
+describe("krispy logo (local bg removal)", () => {
+  test("no file → usage, exit 1", () => {
+    const r = run(["logo"]);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("usage");
+  });
+
+  test("a flat-background logo → a transparent-PNG data URI on stdout", async () => {
+    const sharp = (await import("sharp")).default;
+    // A red square (the "logo") on a solid white background the corners agree on.
+    const fixture = join(tmpdir(), "krispy-fixture-logo.png");
+    await sharp({
+      create: { width: 64, height: 64, channels: 3, background: "#ffffff" },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: { width: 32, height: 32, channels: 3, background: "#ff0000" },
+          })
+            .png()
+            .toBuffer(),
+          top: 16,
+          left: 16,
+        },
+      ])
+      .png()
+      .toBuffer()
+      .then((buf) => Bun.write(fixture, buf));
+
+    const r = run(["logo", fixture]);
+    expect(r.code).toBe(0);
+    expect(r.out.trim()).toStartWith("data:image/png;base64,");
+    // The chroma-key actually punched the white corners to alpha — decode and check corner α=0.
+    const b64 = r.out.trim().slice("data:image/png;base64,".length);
+    const { data, info } = await sharp(Buffer.from(b64, "base64"))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect(data[3]).toBe(0); // top-left pixel is transparent
+    expect(data[(info.width * info.height - 1) * 4 + 3]).toBe(0); // bottom-right too
   });
 });
 
