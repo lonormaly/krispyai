@@ -44,7 +44,11 @@ import {
   writeEntitlement,
   readTenantConfig,
   mergeTenantConfig,
+  KB_SOURCES_MAX_CHARS,
   publicWidgetConfig,
+  readSuggestions,
+  approveSuggestion,
+  removeSuggestion,
   DO_INTERNAL_HEADER,
   doInternalSecret,
   checkLeadRate,
@@ -186,6 +190,12 @@ export default {
       return handleWidgetConfig(request, env);
     if (request.method === "GET" && path === "/api/tenant/liveness")
       return handleTenantLiveness(request, env);
+    if (request.method === "GET" && path === "/api/tenant/kb-suggestions")
+      return handleKbSuggestions(request, env);
+    if (request.method === "POST" && path === "/api/tenant/kb-approve")
+      return handleKbApprove(request, env);
+    if (request.method === "POST" && path === "/api/tenant/kb-dismiss")
+      return handleKbDismiss(request, env);
     if (request.method === "GET" && path === "/api/usage") return handleUsage(request, env);
     if (request.method === "GET" && path === "/internal/usage")
       return handleAdminUsage(request, env);
@@ -267,7 +277,12 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // (warn-logged so drift is observable); a slow DO never slows chat down.
   let ctx: { handedOff: boolean; messages: RingMsg[] } | null = null;
   try {
+    // POST (not GET) so the DO can persist tenantId+siteId write-once — the relearning
+    // handback fires from an alarm with no request in flight and the DO can't derive them
+    // from its own name. Still returns { handedOff, messages } — same single subrequest.
     const r = await doFetch(env, tenantId, body.sessionId, "https://do/context", {
+      method: "POST",
+      body: JSON.stringify({ tenantId, siteId }),
       signal: AbortSignal.timeout(RING_READ_TIMEOUT_MS),
     });
     ctx = (await r.json()) as { handedOff: boolean; messages: RingMsg[] };
@@ -281,7 +296,19 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // Telegram is optional: no config → topic ops no-op, chat still answers.
   const result = await chatFlow(
     {
-      systemPrompt: buildSystemPrompt(tenant?.systemPrompt, tenant?.forms, tenant?.persona),
+      systemPrompt: buildSystemPrompt(
+        tenant?.systemPrompt,
+        tenant?.forms,
+        tenant?.persona,
+        tenant?.kbSources,
+      ),
+      // Leak-check scope = the INSTRUCTION portion only (same prompt WITHOUT the injected
+      // knowledge block), so a bot quoting its own kbSources verbatim isn't flagged as a
+      // prompt leak. Undefined when there's no knowledge (chatFlow falls back to systemPrompt,
+      // which is then identical) — avoids the extra build on the common no-KB path.
+      leakScope: tenant?.kbSources?.length
+        ? buildSystemPrompt(tenant?.systemPrompt, tenant?.forms, tenant?.persona)
+        : undefined,
       // Ring-derived (or seed) history in; chatFlow applies the sliding window +
       // counts turns (chokepoint).
       history,
@@ -751,7 +778,7 @@ async function handleTenantConfigGet(request: Request, env: Env): Promise<Respon
 // ahead of its schema landing (cap precedes the field — later phases ship into an
 // already-guarded door).
 export const AVATAR_MAX_CHARS = 48 * 1024; // data-URI logos; ~10–30KB typical
-export const KB_SOURCES_MAX_CHARS = 100_000; // total text across all sources
+export { KB_SOURCES_MAX_CHARS }; // defined in store.ts, shared with the approve-suggestion write path
 export const THEME_TEXT_MAX_CHARS = 500; // free-text theme strings projected to the public widget
 export const POPUPS_MAX = 8; // popup entries per tenant
 export const SELECTOR_MAX_CHARS = 200; // CSS selector strings (near-trigger + cancelOnClick)
@@ -850,6 +877,57 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
   const bad = tenantConfigCapError(body.config);
   if (bad) return json(env, { error: bad.error }, bad.status);
   await mergeTenantConfig(env, body.tenantId, body.config, siteId);
+  return json(env, { ok: true });
+}
+
+// ── kbase relearning suggestions (secret-authed, per-site) ───────────────────
+// The approval inbox surface: list machine-proposed Q→A suggestions, approve one into
+// kbSources, or dismiss it. Same secret + ?s= scoping as the other config routes.
+// Suggestions never reach the public widget config (own KV key, never projected).
+
+// GET /api/tenant/kb-suggestions?t=<tenant>&s=<site> → { suggestions: KbSuggestion[] }
+async function handleKbSuggestions(request: Request, env: Env): Promise<Response> {
+  if (!tenantSyncAuthed(request, env))
+    return new Response("unauthorized", { status: 401, headers: cors(env) });
+  const url = new URL(request.url);
+  const tenantId = url.searchParams.get("t");
+  if (!tenantId) return json(env, { error: "t required" }, 400);
+  const siteId = siteOr400(env, url.searchParams.get("s"));
+  if (siteId instanceof Response) return siteId;
+  return json(env, { suggestions: await readSuggestions(env, tenantId, siteId) });
+}
+
+// POST /api/tenant/kb-approve { tenantId, siteId?, id } → move the suggestion into
+// kbSources (+ bump kbVersion) and drop it from the pending list. 404 if unknown id.
+async function handleKbApprove(request: Request, env: Env): Promise<Response> {
+  if (!tenantSyncAuthed(request, env))
+    return new Response("unauthorized", { status: 401, headers: cors(env) });
+  const b = (await request.json().catch(() => null)) as {
+    tenantId?: string;
+    siteId?: string;
+    id?: string;
+  } | null;
+  if (!b?.tenantId || !b.id) return json(env, { error: "tenantId and id required" }, 400);
+  const siteId = siteOr400(env, b.siteId);
+  if (siteId instanceof Response) return siteId;
+  const source = await approveSuggestion(env, b.tenantId, b.id, siteId);
+  if (!source) return json(env, { error: "not_found" }, 404);
+  return json(env, { ok: true, source });
+}
+
+// POST /api/tenant/kb-dismiss { tenantId, siteId?, id } → drop the suggestion, no KB change.
+async function handleKbDismiss(request: Request, env: Env): Promise<Response> {
+  if (!tenantSyncAuthed(request, env))
+    return new Response("unauthorized", { status: 401, headers: cors(env) });
+  const b = (await request.json().catch(() => null)) as {
+    tenantId?: string;
+    siteId?: string;
+    id?: string;
+  } | null;
+  if (!b?.tenantId || !b.id) return json(env, { error: "tenantId and id required" }, 400);
+  const siteId = siteOr400(env, b.siteId);
+  if (siteId instanceof Response) return siteId;
+  await removeSuggestion(env, b.tenantId, b.id, siteId);
   return json(env, { ok: true });
 }
 

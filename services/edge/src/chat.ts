@@ -41,6 +41,11 @@ export interface ChatDeps {
   /** Record real (or estimated) token usage for this turn (optional; no-op if unwired). */
   meterTokens?: (usage: TokenUsage) => Promise<void>;
   systemPrompt: string;
+  /** The prompt slice detectPromptLeak checks the reply against — the INSTRUCTION portion
+   * only (systemPrompt + persona + contracts), EXCLUDING any injected kbSources knowledge.
+   * A bot quoting its own knowledge verbatim is correctness, not a leak. Defaults to
+   * `systemPrompt` when unset (identical when no knowledge is injected). */
+  leakScope?: string;
   /** Prior turns for context (optional). */
   history?: ChatMessage[];
   /** Sliding-window size the AI sees (default MAX_HISTORY_MSGS). */
@@ -143,7 +148,7 @@ export async function chatFlow(deps: ChatDeps, input: ChatInput): Promise<ChatRe
   // tokens despite SECURITY_INSTRUCTION. Deterministic, zero-latency catch on the
   // already-stripped visitor text — on a hit, never show the leak: swallow the reply
   // and pull in a human (a leak attempt means a hostile visitor worth an operator's eyes).
-  if (detectPromptLeak(clean, deps.systemPrompt)) {
+  if (detectPromptLeak(clean, deps.leakScope ?? deps.systemPrompt)) {
     console.warn("prompt_leak_suppressed");
     await deps.meter("handoff");
     await toTopic(threadId, "🛡️ Suppressed a suspected prompt-leak — bringing in a human.");

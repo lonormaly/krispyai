@@ -53,6 +53,30 @@ describe("krispy cli", () => {
   });
 });
 
+describe("krispy kb-* (relearning approval inbox)", () => {
+  test("usage lists the kb-suggestions command", () => {
+    expect(run([]).err).toContain("kb-suggestions");
+  });
+
+  test("kb-suggestions without TENANT_SYNC_SECRET → exit 1 before any network call", () => {
+    const r = run(["kb-suggestions"], { TENANT_SYNC_SECRET: "" });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("TENANT_SYNC_SECRET");
+  });
+
+  test("kb-approve without an id → usage, exit 1", () => {
+    const r = run(["kb-approve"], { TENANT_SYNC_SECRET: "x" });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("usage");
+  });
+
+  test("kb-dismiss without TENANT_SYNC_SECRET → exit 1 (id present, secret missing)", () => {
+    const r = run(["kb-dismiss", "sug_123"], { TENANT_SYNC_SECRET: "" });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("TENANT_SYNC_SECRET");
+  });
+});
+
 describe("krispy logo (local bg removal)", () => {
   test("no file → usage, exit 1", () => {
     const r = run(["logo"]);

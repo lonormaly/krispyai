@@ -7,7 +7,13 @@
 //   krispy init                 interactive first-run wizard (Telegram → train → embed)
 //   krispy set-kbase <file>     write <file>'s contents as the bot's system prompt
 //   krispy logo <file>          remove a logo's bg locally → paste-ready avatar data URI
+//   krispy kb-suggestions       list pending relearning suggestions (approval inbox)
+//   krispy kb-approve <id>      approve a suggestion → add it to the bot's kbase
+//   krispy kb-dismiss <id>      dismiss a suggestion
 //   krispy dev                  start the edge Worker locally (wrangler dev)
+//
+// The kb-* commands accept an optional --site <id> flag (→ ?s= / siteId) to scope a
+// single site; omit it for the tenant's default site.
 //
 // Config via env (or flags):
 //   KRISPY_API      edge Worker base URL   (default http://localhost:8787)
@@ -78,6 +84,104 @@ async function setKbase(file: string | undefined): Promise<number> {
   return 0;
 }
 
+// A machine-proposed Q→A the operator answered that the bot couldn't (mirror of the
+// edge's KbSuggestion — the CLI stays self-contained, so it's re-declared, not imported).
+interface KbSuggestion {
+  id: string;
+  question: string;
+  answer: string;
+  createdAt: number;
+}
+
+// Pull an optional `--site <id>` (or `--site=<id>`) flag out of args; returns the site id
+// (or undefined → the tenant's default site) and the remaining positional args.
+function parseSite(args: string[]): { site?: string; rest: string[] } {
+  const rest: string[] = [];
+  let site: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--site") site = args[++i];
+    else if (a.startsWith("--site=")) site = a.slice("--site=".length);
+    else rest.push(a);
+  }
+  return { site, rest };
+}
+
+// GET /api/tenant/kb-suggestions — list the pending relearning suggestions (approval inbox).
+async function kbSuggestions(args: string[]): Promise<number> {
+  const { site } = parseSite(args);
+  if (!SECRET) {
+    console.error("TENANT_SYNC_SECRET is required (must match the Worker's TENANT_SYNC_SECRET).");
+    return 1;
+  }
+  const qs = new URLSearchParams({ t: TENANT });
+  if (site) qs.set("s", site);
+  let suggestions: KbSuggestion[];
+  try {
+    const res = await fetch(`${API}/api/tenant/kb-suggestions?${qs}`, {
+      headers: { "x-tenant-sync-secret": SECRET },
+    });
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText} — is the Worker up and the secret right?`);
+    }
+    ({ suggestions } = (await res.json()) as { suggestions: KbSuggestion[] });
+  } catch (err) {
+    console.error(`✗ ${(err as Error).message}`);
+    return 1;
+  }
+  const scope = `tenant "${TENANT}"${site ? ` / site "${site}"` : ""}`;
+  if (!suggestions.length) {
+    console.log(`No pending suggestions for ${scope}.`);
+    return 0;
+  }
+  console.log(`${suggestions.length} pending suggestion(s) for ${scope}:\n`);
+  for (const s of suggestions) {
+    console.log(`${s.id}`);
+    console.log(`  Q: ${s.question}`);
+    console.log(`  A: ${s.answer}`);
+    console.log(`  approve: krispy kb-approve ${s.id}${site ? ` --site ${site}` : ""}\n`);
+  }
+  return 0;
+}
+
+// POST /api/tenant/kb-approve | kb-dismiss — approve a suggestion into the kbase, or drop it.
+// One function: the two routes share body shape ({ tenantId, siteId?, id }) and auth.
+async function kbResolve(action: "approve" | "dismiss", args: string[]): Promise<number> {
+  const { site, rest } = parseSite(args);
+  const id = rest[0];
+  if (!id) {
+    console.error(`usage: krispy kb-${action} <id> [--site <id>]`);
+    return 1;
+  }
+  if (!SECRET) {
+    console.error("TENANT_SYNC_SECRET is required (must match the Worker's TENANT_SYNC_SECRET).");
+    return 1;
+  }
+  try {
+    const res = await fetch(`${API}/api/tenant/kb-${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-tenant-sync-secret": SECRET },
+      body: JSON.stringify({ tenantId: TENANT, siteId: site, id }),
+    });
+    if (res.status === 404) {
+      console.error(`✗ no pending suggestion with id "${id}"`);
+      return 1;
+    }
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText} — is the Worker up and the secret right?`);
+    }
+  } catch (err) {
+    console.error(`✗ ${(err as Error).message}`);
+    return 1;
+  }
+  console.log(
+    action === "approve"
+      ? `✓ approved "${id}" → added to kbase for tenant "${TENANT}"`
+      : `✓ dismissed "${id}" for tenant "${TENANT}"`,
+  );
+  return 0;
+}
+
 // ponytail: `dev` just shells out to wrangler in services/edge — no reimplementation.
 function dev(): Promise<number> {
   const child = spawn("bunx", ["wrangler", "dev"], {
@@ -97,6 +201,12 @@ async function main(argv: string[]): Promise<number> {
     }
     case "set-kbase":
       return setKbase(rest[0]);
+    case "kb-suggestions":
+      return kbSuggestions(rest);
+    case "kb-approve":
+      return kbResolve("approve", rest);
+    case "kb-dismiss":
+      return kbResolve("dismiss", rest);
     case "logo": {
       // Lazy-load the logo pipeline (and its sharp dep) only when logo actually runs.
       const { logo } = await import("./logo.ts");
@@ -106,7 +216,7 @@ async function main(argv: string[]): Promise<number> {
       return dev();
     default:
       console.error(
-        "krispy <command>\n  init               guided first-run setup (Telegram → train → embed)\n  set-kbase <file>   write a system prompt into the Worker's KV\n  logo <file>        remove a logo's bg locally → paste-ready avatar data URI\n  dev                run the edge Worker locally (wrangler dev)",
+        "krispy <command>\n  init                 guided first-run setup (Telegram → train → embed)\n  set-kbase <file>     write a system prompt into the Worker's KV\n  logo <file>          remove a logo's bg locally → paste-ready avatar data URI\n  kb-suggestions       list pending relearning suggestions (--site <id>)\n  kb-approve <id>      approve a suggestion → add it to the kbase (--site <id>)\n  kb-dismiss <id>      dismiss a suggestion (--site <id>)\n  dev                  run the edge Worker locally (wrangler dev)",
       );
       return cmd ? 1 : 0;
   }

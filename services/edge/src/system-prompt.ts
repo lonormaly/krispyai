@@ -7,7 +7,7 @@
 // out, still shows the human-readable text to the visitor, and kicks off the
 // contact-capture / operator-ping flow.
 
-import type { PersonaSpec } from "./types";
+import type { KbSource, PersonaSpec } from "./types";
 
 export const HANDOFF_MARKER = "[!HANDOFF]";
 
@@ -62,11 +62,24 @@ function personaBlock(persona?: PersonaSpec): string {
   return parts.length ? `\n\n${parts.join("\n\n")}` : "";
 }
 
-/** Build the system prompt, letting a tenant override the whole thing. */
+/** The tenant's knowledge sources, rendered as a reference block. Reference material,
+ * NOT a control contract, so it sits before the forms/guardrail contracts — and it is
+ * deliberately EXCLUDED from the leak-guard scope (a bot quoting its own KB verbatim is
+ * correctness, not a leak): the caller builds the leak-scope prompt without kbSources. */
+function knowledgeBlock(kbSources?: KbSource[]): string {
+  if (!kbSources?.length) return "";
+  const body = kbSources.map((s) => `### ${s.name}\n${s.text}`).join("\n\n");
+  return `\n\n## Knowledge\n${body}`;
+}
+
+/** Build the system prompt, letting a tenant override the whole thing. `kbSources` are
+ * injected as a `## Knowledge` block; omit them to get the instruction-only prompt used
+ * as the detectPromptLeak scope (so KB quotes never false-positive as a leak). */
 export function buildSystemPrompt(
   custom?: string,
   forms?: FormRef[],
   persona?: PersonaSpec,
+  kbSources?: KbSource[],
 ): string {
   const base = custom?.trim() ? custom.trim() : DEFAULT_PROMPT;
   // Even a custom prompt must know the handoff contract, so always restate it.
@@ -77,7 +90,7 @@ export function buildSystemPrompt(
   // voice, still inside the leak-guard scope. SECURITY_INSTRUCTION + BREVITY are ALWAYS
   // appended, even over a custom prompt, so the guardrails and length cap can never be
   // dropped by a tenant overriding the base prompt.
-  return `${withHandoff}${personaBlock(persona)}${formsBlock(forms)}\n\n${SECURITY_INSTRUCTION}\n\n${BREVITY_INSTRUCTION}`;
+  return `${withHandoff}${personaBlock(persona)}${knowledgeBlock(kbSources)}${formsBlock(forms)}\n\n${SECURITY_INSTRUCTION}\n\n${BREVITY_INSTRUCTION}`;
 }
 
 export interface ParsedReply {

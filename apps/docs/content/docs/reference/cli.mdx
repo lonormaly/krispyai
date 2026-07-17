@@ -16,7 +16,13 @@ core, no arg-parser dependency.
 | `krispy init`             | guided first-run wizard — Telegram → train → embed → next steps. persists each step via `POST /api/tenant/config`. |
 | `krispy set-kbase <file>` | write `<file>`'s contents as the bot's system prompt (`POST /api/tenant/config`).                                  |
 | `krispy logo <file>`      | remove a logo's background locally (no cloud) → print a paste-ready `theme.avatar` data URI.                       |
+| `krispy kb-suggestions`   | list the pending relearning suggestions — the approval inbox (`GET /api/tenant/kb-suggestions`).                   |
+| `krispy kb-approve <id>`  | approve a suggestion into `kbSources` + bump `kbVersion` (`POST /api/tenant/kb-approve`).                          |
+| `krispy kb-dismiss <id>`  | drop a suggestion, no KB change (`POST /api/tenant/kb-dismiss`).                                                   |
 | `krispy dev`              | run the edge Worker locally — a thin wrapper over `wrangler dev` in `services/edge`.                               |
+
+the `kb-*` commands take an optional `--site <id>` flag (→ `?s=` / `siteId`) to scope a single
+site; omit it for the tenant's default site.
 
 running `krispy` with no command (or an unknown one) prints usage.
 
@@ -59,6 +65,23 @@ can't cleanly key is kept as-is — removal never mangles a logo.
 corner chroma-key is the documented floor: it excels at logos on a flat background. the upgrade
 path is local ONNX segmentation (modnet) if arbitrary backgrounds ever justify a large model
 download. `logo` depends on `sharp`, lazy-loaded so the CLI core stays dependency-free at import.
+
+### `krispy kb-suggestions` / `kb-approve` / `kb-dismiss`
+
+the self-host counterpart to Krispy Cloud's `/knowledge` approval inbox, over the same
+secret-authed routes. when a handed-off session hands back to the AI and a human answered
+something the bot couldn't, the edge proposes a `Q→A` **suggestion**. nothing reaches the bot's
+knowledge until you approve it — human-in-the-loop by design, so a visitor can't poison the KB.
+
+```sh
+krispy kb-suggestions          # list pending suggestions (id + Q + A)
+krispy kb-approve sug_abc123   # append it to kbSources (+ bump kbVersion), drop it
+krispy kb-dismiss  sug_abc123  # drop it, no KB change
+```
+
+each command scopes to the tenant's default site; pass `--site <id>` (→ `?s=` / `siteId`) to
+target a specific site. all three require `TENANT_SYNC_SECRET`; `kb-approve` on an unknown id
+prints a clear error and exits non-zero.
 
 ## env / config
 

@@ -111,6 +111,24 @@ export interface PopupSpec {
   source?: string; // origin label ("popup_pricing"); rides session context → handoff/lead meta
 }
 
+// ── Kbase source registry + relearning (Feature B) ─────────────────────────
+// A per-doc knowledge registry (kills the "one melted string" prompt) assembled into
+// the system prompt at chat time. Relearning: an operator answer the bot couldn't give
+// is extracted into a KbSuggestion (its OWN KV key, never the config blob) for a human
+// to approve into kbSources. All default unset — a tenant with neither behaves as today.
+export interface KbSource {
+  id: string;
+  name: string; // human label / doc title, e.g. "Refund policy"
+  text: string; // the knowledge body
+  updatedAt: number;
+}
+export interface KbSuggestion {
+  id: string;
+  question: string; // what the bot couldn't answer
+  answer: string; // what the human said
+  createdAt: number;
+}
+
 export interface TenantConfig {
   /** Telegram bot token (BotFather). */
   botToken: string;
@@ -137,6 +155,12 @@ export interface TenantConfig {
   /** Feature B — proactive popup engine (timer + section-proximity); theme.popupText
    * is sugar for a single timer popup. */
   popups?: PopupSpec[];
+  /** Feature B — per-doc knowledge registry, assembled into the system prompt at chat
+   * time (buildSystemPrompt). Total text hard-capped at KB_SOURCES_MAX_CHARS on write. */
+  kbSources?: KbSource[];
+  /** Feature B — bumped on any kbSources write; the retrieval cache key
+   * (ram:${tenantId}:${kbVersion}) the size-gated Phase-6 design expects. */
+  kbVersion?: number;
   /** Quiet-ops — operators to @mention on handoff. Auto-learned from topic replies
    * (see upsertOperator). SECRET-ADJACENT: never expose to the public widget config. */
   operators?: Operator[];

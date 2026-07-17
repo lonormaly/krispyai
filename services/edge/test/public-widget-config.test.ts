@@ -56,6 +56,20 @@ describe("publicWidgetConfig", () => {
     expect(JSON.stringify(out)).not.toContain("botToken");
   });
 
+  test("kbSources / kbVersion never reach the public projection", () => {
+    const out = publicWidgetConfig({
+      botToken: "x",
+      kbSources: [{ id: "1", name: "Secret pricing sheet", text: "internal costs", updatedAt: 0 }],
+      kbVersion: 3,
+    });
+    const flat = JSON.stringify(out);
+    expect(flat).not.toContain("kbSources");
+    expect(flat).not.toContain("kbVersion");
+    expect(flat).not.toContain("Secret pricing sheet");
+    expect(flat).not.toContain("internal costs");
+    expect((out as Record<string, unknown>).kbSources).toBeUndefined();
+  });
+
   test("null config → all-undefined theme (graceful fallback)", () => {
     const out = publicWidgetConfig(null);
     expect(out.theme.primaryColor).toBeUndefined();
