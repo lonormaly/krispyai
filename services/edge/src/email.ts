@@ -10,6 +10,7 @@ export type FetchLike = typeof fetch;
 export interface LeadEmail {
   subject: string;
   html: string;
+  replyTo?: string; // the lead's email when the form captured one — owner hits Reply, talks to the lead
 }
 
 // Minimal HTML escape — every value is visitor-controlled and lands in an email body.
@@ -38,6 +39,11 @@ export function renderLeadEmail(
 ): LeadEmail {
   const title = form?.title || "New lead";
   const labelFor = (name: string) => form?.fields.find((f) => f.name === name)?.label || name;
+
+  // reply_to = the value of the form's email-typed field (when captured) — the
+  // tenant replies straight to the lead. Unset when no email field / empty value.
+  const emailField = form?.fields.find((f) => f.type === "email");
+  const replyTo = (emailField && values[emailField.name]?.trim()) || undefined;
 
   const rows = Object.entries(values)
     .filter(([, v]) => v != null && v.trim() !== "")
@@ -70,7 +76,7 @@ export function renderLeadEmail(
     cta +
     `</div>`;
 
-  return { subject: `New lead · ${title}`, html };
+  return { subject: `New lead · ${title}`, html, replyTo };
 }
 
 /**
@@ -96,6 +102,7 @@ export async function sendLeadEmail(
       to,
       subject: mail.subject,
       html: mail.html,
+      reply_to: mail.replyTo, // JSON.stringify drops the key when undefined — omitted, not null
     }),
     signal: AbortSignal.timeout(10_000), // stalled Resend can't hang the Worker
   }).catch(() => {}); // email is best-effort; never block the lead response

@@ -15,6 +15,7 @@ export interface FormSpec {
   title: string; // card heading, e.g. "book a call"
   fields: FormField[];
   connectorIds?: string[]; // which connectors receive this lead; default = ALL configured
+  successText?: string; // shown in the collapsed card after submit; widget has a default
 }
 export type ConnectorType = "email" | "telegram" | "whatsapp" | "instagram";
 export interface Connector {
@@ -30,13 +31,32 @@ export interface Connector {
 export interface WidgetTheme {
   primaryColor?: string; // header + visitor bubble + send button. Default gold #e39a2b
   launcherColor?: string; // FAB only (defaults to primaryColor)
+  glowColor?: string; // hex → drives glow/sparkle/pulse rgba stops. UNSET = no glow
+  // layer at all (default) — the launcher keeps today's neutral look
   position?: "br" | "bl"; // bottom-right | bottom-left. Default "br"
-  avatar?: string; // "buttr" (default, inline data-URI) | an https URL
+  avatar?: string; // "buttr" (default, inline data-URI) | https URL | data:image/… URI
   greeting?: string; // first bot bubble on open
   headerTitle?: string; // header text (supersedes legacy data-title)
+  tagline?: string; // header sub-line ("usually replies in minutes")
   radius?: number; // panel/bubble corner radius px, 0–20. Default 14
   font?: string; // optional CSS font-family stack
   sound?: boolean; // notification ding on inbound message while panel closed. Default true
+  sparkle?: boolean; // idle sparkle loop on the launcher. Default false.
+  direction?: "ltr" | "rtl"; // flips bubble corners, input dir, mirrors send icon. Default "ltr".
+  popupText?: string; // proactive popup copy. Unset = popup off. NOT the greeting —
+  // greeting is the first bot bubble; popupText is the teaser card.
+  timing?: WidgetTiming;
+}
+
+export interface WidgetTiming {
+  // all ms; widget clamps 0–300_000. Defaults are field-proven UX values — each takes
+  // effect only when the feature it belongs to is enabled; none changes the default
+  // widget on its own.
+  launcherDelayMs?: number; // default 0 = no delay
+  sparkleAfterMs?: number; // default 10000; inert unless theme.sparkle
+  popupDelayMs?: number; // default 8000; inert unless theme.popupText
+  popupCooldownHrs?: number; // default 24; inert unless theme.popupText
+  autoOpenMs?: number; // default 0 = never — auto-open panel after inbound msg while closed (field-proven: 2000)
 }
 
 export interface TenantConfig {

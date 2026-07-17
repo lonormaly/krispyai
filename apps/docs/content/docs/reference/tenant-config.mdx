@@ -35,6 +35,7 @@ interface FormSpec {
   title: string; // card heading, e.g. "book a call"
   fields: FormField[];
   connectorIds?: string[]; // which connectors receive this lead; default = ALL configured
+  successText?: string; // shown in the collapsed card after submit; widget has a default
 }
 
 interface FormField {
@@ -90,19 +91,49 @@ alert still fires, just without a mention.
 interface WidgetTheme {
   primaryColor?: string; // header + visitor bubble + send button. Default gold #e39a2b
   launcherColor?: string; // launcher only (defaults to primaryColor)
+  glowColor?: string; // hex → launcher glow/sparkle/pulse tint. Unset = no glow layer at all
   position?: "br" | "bl"; // bottom-right | bottom-left. Default "br"
-  avatar?: string; // "buttr" (inline default) | an https URL
+  avatar?: string; // "buttr" (inline default) | https URL | data:image/… URI (≤48KB)
   greeting?: string; // first bot bubble on open
   headerTitle?: string; // header text (supersedes data-title)
+  tagline?: string; // header sub-line ("usually replies in minutes")
   radius?: number; // corner radius px, clamped 0–20. Default 14
   font?: string; // CSS font-family stack
   sound?: boolean; // notification ding. Default true
+  sparkle?: boolean; // idle sparkle loop on the launcher. Default false
+  direction?: "ltr" | "rtl"; // flips bubble corners + input dir. Default "ltr"
+  popupText?: string; // proactive teaser-popup copy. Unset = popup off
+  timing?: WidgetTiming;
+}
+
+interface WidgetTiming {
+  // all ms; the widget clamps 0–300000. Each takes effect only when its feature is on.
+  launcherDelayMs?: number; // default 0 = no entrance delay
+  sparkleAfterMs?: number; // default 10000; inert unless sparkle
+  popupDelayMs?: number; // default 8000; inert unless popupText
+  popupCooldownHrs?: number; // default 24; inert unless popupText
+  autoOpenMs?: number; // default 0 = never — auto-open after inbound msg while closed
 }
 ```
+
+every new knob defaults to unset/off — a tenant that configures nothing gets today's
+neutral widget, unchanged.
 
 only these fields are exposed to the public `GET /api/widget/config`; the projection is a
 literal whitelist (never a spread of the config), so `botToken`/`chatId`/`systemPrompt` are
 structurally excluded. see [security](/docs/security).
+
+## write caps
+
+`POST /api/tenant/config` hard-rejects out-of-bounds configs at the trust boundary
+(nothing invalid ever reaches KV):
+
+| rule                                                                                 | response                                 |
+| ------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `theme.avatar` over 48KB                                                             | `413 { error: "avatar_too_large" }`      |
+| `theme.avatar` not `"buttr"` / `https://…` / `data:image/(png\|webp\|jpeg);base64,…` | `400 { error: "avatar_scheme_invalid" }` |
+| a connector CTA url (`profileUrl`/`url`) not `https://`                              | `400 { error: "cta_url_not_https" }`     |
+| `kbSources` total text over 100K chars                                               | `413 { error: "kb_sources_too_large" }`  |
 
 ## KV keys
 

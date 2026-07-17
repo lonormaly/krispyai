@@ -31,6 +31,31 @@ describe("publicWidgetConfig", () => {
     expect((out as Record<string, unknown>).operators).toBeUndefined();
   });
 
+  test("new theme knobs (glow/tagline/sparkle/direction/popup/timing) project through", () => {
+    const out = publicWidgetConfig({
+      botToken: "x",
+      theme: {
+        glowColor: "#c4956a",
+        tagline: "usually replies in minutes",
+        sparkle: true,
+        direction: "rtl",
+        popupText: "need a hand?",
+        timing: { launcherDelayMs: 1000, sparkleAfterMs: 10000, autoOpenMs: 0 },
+      },
+    });
+    expect(out.theme.glowColor).toBe("#c4956a");
+    expect(out.theme.tagline).toBe("usually replies in minutes");
+    expect(out.theme.sparkle).toBe(true);
+    expect(out.theme.direction).toBe("rtl");
+    expect(out.theme.popupText).toBe("need a hand?");
+    expect(out.theme.timing).toEqual({
+      launcherDelayMs: 1000,
+      sparkleAfterMs: 10000,
+      autoOpenMs: 0,
+    });
+    expect(JSON.stringify(out)).not.toContain("botToken");
+  });
+
   test("null config → all-undefined theme (graceful fallback)", () => {
     const out = publicWidgetConfig(null);
     expect(out.theme.primaryColor).toBeUndefined();

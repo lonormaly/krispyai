@@ -12,6 +12,14 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Added
 
+- Edge: new `WidgetTheme` knobs — `glowColor`, `tagline`, `sparkle`, `direction`, `popupText`, and `timing` (`WidgetTiming`: `launcherDelayMs`/`sparkleAfterMs`/`popupDelayMs`/`popupCooldownHrs`/`autoOpenMs`) — projected through the public `GET /api/widget/config` whitelist. All default unset/off: a tenant that configures nothing gets today's neutral widget unchanged.
+- Edge: hard write caps on `POST /api/tenant/config` (trust boundary; invalid configs never reach KV) — `theme.avatar` ≤48KB + scheme check (`buttr` | `https://` | `data:image/(png|webp|jpeg);base64,`), connector CTA urls https-only, free-text `theme.tagline`/`theme.popupText` ≤500 chars, `kbSources` total text ≤100K chars. Size overruns → `413`; malformed values → `400`.
+- Edge: `GET /api/widget/config` now sends `Cache-Control: public, max-age=60` — the boot config grew to ~10–30KB with data-URI avatars and was refetched uncached on every page load; 60s keeps edits near-live.
+- Widget: the new theme knobs come alive — `primaryColor` now drives the visitor bubble, send button, and input focus ring (was a dead CSS var); `launcherColor` fills a badge circle behind the launcher mascot; `glowColor` adds an opt-in launcher glow (no glow layer at all when unset); `sparkle` adds a 10s idle shadow-swell + conic-ring loop after `sparkleAfterMs`; `tagline` replaces the header sub-line; `direction: "rtl"` flips the panel (bubble corners, input dir, mirrored send icon); `timing.launcherDelayMs > 0` hides the launcher then plays a one-time entrance pop (skipped on revisit via `sessionStorage`); `timing.autoOpenMs` (opt-in; default 0 = never) auto-opens a closed panel after an inbound reply. All animations respect `prefers-reduced-motion`.
+- Widget: proactive timer popup — `theme.popupText` shows a dismissible teaser card above the launcher after `timing.popupDelayMs` (default 8s) with a per-tenant `timing.popupCooldownHrs` cooldown (default 24h) in `localStorage`; suppressed while the panel is open; clicking it opens the chat. Unset = nothing ever shows.
+- Widget: avatars accept `data:image/…` URIs in addition to `"buttr"` and https URLs (shared `isRenderableAvatar()` gate).
+- Edge/widget: `FormSpec.successText` — the line the submitted lead-form card collapses to in the transcript (widget default: "Thanks — we'll be in touch.").
+- Edge: lead emails set Resend `reply_to` to the lead's captured email (the form's `email`-typed field) — the tenant hits Reply and talks to the lead; omitted when no email was captured.
 - Edge: Telegram **quiet ops** — routine mirrors post silently (`disable_notification`), and a handoff `@mentions` the tenant's operators (via `text_mention` entities, no public username needed) so notifications fire only when a human is needed. New `TenantConfig.operators` (auto-learned from topic replies, capped at 10, never exposed to the public widget config).
 - Tilt: `KRISPY-CORE` banner resource in its own capitalized label group — names the dev dashboard (Tilt has no native project title).
 - Chat suite: lead capture + connectors — edge fan-out and a data-driven widget lead form.
@@ -30,10 +38,13 @@ entry under `[Unreleased]` (see `AGENTS.md` §7 — Documentation sync).
 
 ### Changed
 
+- Widget: handoff-without-form now renders a built-in default contact `FormSpec` through the one lead-form renderer (posts `/api/lead`); the legacy static `.cap` markup + `showCapture()` path is gone. `/api/contact` stays as an edge shim for already-deployed widgets.
 - Edge hardening per security audit: self KV-config merge, fetch timeouts, Telegram mirror best-effort, WS backoff cap, lead rate-limit, DO internal auth.
 
 ### Fixed
 
+- Widget: a tenant avatar now reaches the floating launcher badge too — `applyTheme` set only the header avatar's `src`, so the launcher always kept the default mascot no matter what the tenant configured.
+- Widget: the lead form is no longer a sticky band pinned between the log and the composer — it renders inside the message log as a bubble-style card that scrolls with the conversation (`scrollIntoView` on insert) and collapses in place to a compact record after submit.
 - CI: gitleaks runs via the free CLI image (the GitHub action needs a paid org license — was red on every PR, blocking dependabot).
 - README: real Buttr hero image (was a leftover builders-stack architecture diagram).
 - Dev servers run on fixed ports — edge (wrangler) + widget; portless is an alias only.

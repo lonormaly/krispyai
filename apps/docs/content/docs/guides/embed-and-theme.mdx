@@ -42,22 +42,49 @@ writing `POST /api/tenant/config`) and the widget picks it up on next load; no r
 
 the themeable fields (`WidgetTheme`):
 
-| field           | default          | what it controls                                                  |
-| --------------- | ---------------- | ----------------------------------------------------------------- |
-| `primaryColor`  | `#e39a2b` (gold) | header, visitor bubble, send button                               |
-| `launcherColor` | = `primaryColor` | the floating launcher button only                                 |
-| `position`      | `br`             | `br` (bottom-right) or `bl` (bottom-left)                         |
-| `avatar`        | —                | `"buttr"` (inline default croissant) or an `https://` URL         |
-| `greeting`      | —                | first bot bubble shown when the panel opens                       |
-| `headerTitle`   | —                | header text (supersedes `data-title`)                             |
-| `radius`        | `14`             | panel/bubble corner radius, px, clamped 0–20                      |
-| `font`          | system stack     | a CSS `font-family` stack                                         |
-| `sound`         | `true`           | notification "ding" on inbound messages while the panel is closed |
+| field           | default          | what it controls                                                       |
+| --------------- | ---------------- | ---------------------------------------------------------------------- |
+| `primaryColor`  | `#e39a2b` (gold) | visitor bubble, send button, input focus ring                          |
+| `launcherColor` | transparent      | badge circle behind the launcher mascot                                |
+| `glowColor`     | — (no glow)      | opt-in launcher glow tint (hex); unset = no glow layer at all          |
+| `position`      | `br`             | `br` (bottom-right) or `bl` (bottom-left)                              |
+| `avatar`        | —                | `"buttr"` (inline default), an `https://` URL, or a `data:image/…` URI |
+| `greeting`      | —                | first bot bubble shown when the panel opens                            |
+| `headerTitle`   | —                | header text (supersedes `data-title`)                                  |
+| `tagline`       | built-in         | header sub-line ("we usually reply in minutes")                        |
+| `radius`        | `14`             | panel/bubble corner radius, px, clamped 0–20                           |
+| `font`          | system stack     | a CSS `font-family` stack                                              |
+| `sound`         | `true`           | notification "ding" on inbound messages while the panel is closed      |
+| `sparkle`       | `false`          | idle sparkle loop on the launcher (shadow swell + conic ring)          |
+| `direction`     | `ltr`            | `rtl` flips the panel: bubble corners, input dir, mirrored send icon   |
+| `popupText`     | — (popup off)    | proactive teaser card above the launcher (see timing below)            |
+| `timing`        | see below        | `WidgetTiming` — attention/timing knobs                                |
+
+every new knob is **inert until set** — a tenant that configures nothing keeps today's
+neutral widget, pixel for pixel. all launcher/popup animations respect
+`prefers-reduced-motion`.
+
+### timing (`WidgetTiming`)
+
+all values are milliseconds unless noted, clamped `0–300000`; each only takes effect when
+the feature it belongs to is enabled:
+
+| field              | default | meaning                                                                                                  |
+| ------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
+| `launcherDelayMs`  | `0`     | `>0` hides the launcher, then plays a one-time entrance pop (skipped on revisit in the same tab session) |
+| `sparkleAfterMs`   | `10000` | when the sparkle loop starts; inert unless `sparkle`                                                     |
+| `popupDelayMs`     | `8000`  | when the teaser popup shows; inert unless `popupText`                                                    |
+| `popupCooldownHrs` | `24`    | hours before the popup may show again (per-browser `localStorage`)                                       |
+| `autoOpenMs`       | `0`     | auto-open a closed panel after an inbound reply; `0` = never (try `2000`)                                |
+
+the popup never shows while the panel is open, clicking it opens the chat, and the `×`
+dismisses it for the cooldown window.
 
 <Callout type="warn">
 theme values cross a CSS trust boundary. the widget **sanitizes** them: colors must be
-`#hex` or `rgb(...)`, radius is clamped 0–20, fonts reject `;{}<>`, and avatars must be the
-literal `buttr` or an `https://` URL. anything else is dropped. see [security](/docs/security).
+`#hex` or `rgb(...)` (`glowColor` hex-only), radius is clamped 0–20, fonts reject `;{}<>`,
+timing is clamped, and avatars must be the literal `buttr`, an `https://` URL, or a
+`data:image/…` URI. anything else is dropped. see [security](/docs/security).
 </Callout>
 
 ## what the widget does

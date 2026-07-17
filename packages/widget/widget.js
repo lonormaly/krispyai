@@ -43,6 +43,23 @@
   function clampFont(v) {
     return typeof v === "string" && v && !/[;}<>]/.test(v) ? v : null;
   }
+  // theme.glowColor hex → "r,g,b" for the rgba() glow stops. Bad input = no glow.
+  function hexToRgb(v) {
+    var m = typeof v === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(v);
+    if (!m) return null;
+    var s = m[1];
+    if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+    var n = parseInt(s, 16);
+    return (n >> 16) + "," + ((n >> 8) & 255) + "," + (n & 255);
+  }
+  // Shared avatar gate (mirrored as isRenderableAvatar() in the cloud libs/ui):
+  // "buttr" sentinel, an https URL, or a data:image/ URI — anything else keeps
+  // the default. The avatar IS the logo: header AND floating launcher badge.
+  function isRenderableAvatar(v) {
+    if (typeof v !== "string") return null;
+    if (v === "buttr") return BUTTR;
+    return v.startsWith("https://") || v.startsWith("data:image/") ? v : null;
+  }
 
   // Stable per-visitor session id.
   var KEY = "krispy_session_" + cfg.tenant;
@@ -104,7 +121,8 @@
     "--k-primary:" +
     cfg.accent +
     ";" +
-    "--k-launcher:#fbf6ee;" +
+    // launcher badge circle — transparent by default (theme.launcherColor fills it)
+    "--k-launcher:transparent;" +
     "--k-radius:12px;" +
     "--k-font:Inter,-apple-system,'Segoe UI',Roboto,sans-serif;" +
     // Palette
@@ -128,7 +146,7 @@
     // ── Launcher button ──
     ".btn{position:relative;margin-left:auto;width:76px;height:76px;border:0;background:transparent;cursor:pointer;padding:0;margin-bottom:env(safe-area-inset-bottom,0);display:flex;align-items:center;justify-content:center}" +
     ".btn:active .bic{transform:scale(0.96)}" +
-    ".btn .bic{width:72px;height:72px;object-fit:contain;flex:0 0 auto;pointer-events:none;filter:drop-shadow(0 6px 12px rgba(36,26,18,.28));transition:transform .18s cubic-bezier(.16,1,.3,1)}" +
+    ".btn .bic{width:72px;height:72px;object-fit:contain;flex:0 0 auto;pointer-events:none;border-radius:50%;background:var(--k-launcher);filter:drop-shadow(0 6px 12px rgba(36,26,18,.28));transition:transform .18s cubic-bezier(.16,1,.3,1)}" +
     ".btn:hover .bic{transform:scale(1.08) rotate(-6deg)}" +
     "@media (prefers-reduced-motion:reduce){.btn:hover .bic{transform:none}}" +
     // Unread dot (jam)
@@ -136,10 +154,28 @@
     ".btn.kunread .dot{display:block}" +
     // Online dot (pistachio) — always shows on launcher
     ".btn .online{position:absolute;bottom:1px;right:1px;width:11px;height:11px;border-radius:50%;background:var(--k-pistachio);border:2px solid #fff}" +
-    // Knudge pulse animation
+    // Knudge pulse animation (0.5s ×3 — field-proven incoming-message pulse)
     "@keyframes kpulse{0%,100%{transform:scale(1)}30%{transform:scale(1.12)}60%{transform:scale(.96)}}" +
-    ".btn.knudge{animation:kpulse .6s ease-in-out 2}" +
+    ".btn.knudge{animation:kpulse .5s ease-in-out 3}" +
     "@media (prefers-reduced-motion:reduce){.btn.knudge{animation:none}}" +
+    // ── Opt-in launcher effects — every class below is only ever ADDED when its
+    // theme knob is set (kpop ← timing.launcherDelayMs, kglow ← theme.glowColor,
+    // ksparkle ← theme.sparkle); an unthemed widget never gains any of them.
+    ".btn.khidden{display:none}" +
+    // Entrance pop (field-proven 0.6s curve; plays once after launcherDelayMs)
+    "@keyframes kpop{0%{transform:scale(0) rotate(-12deg)}60%{transform:scale(1.15) rotate(3deg)}80%{transform:scale(.95)}100%{transform:scale(1)}}" +
+    ".btn.kpop .bic{animation:kpop .6s cubic-bezier(.22,1,.36,1) both}" +
+    // Glow — rgba stops on --k-glow ("r,g,b" from theme.glowColor); the opacity
+    // stops are design constants (base .4/.2/.3, hover swell .7/.35/.5)
+    ".btn.kglow .bic{box-shadow:0 0 18px rgba(var(--k-glow),.4),0 0 36px rgba(var(--k-glow),.2),0 4px 14px rgba(var(--k-glow),.3)}" +
+    ".btn.kglow:hover .bic{transform:scale(1.08);box-shadow:0 0 24px rgba(var(--k-glow),.7),0 0 48px rgba(var(--k-glow),.35),0 6px 18px rgba(var(--k-glow),.5)}" +
+    ".btn.kglow:active .bic{transform:scale(.96)}" +
+    // Sparkle — 10s loop, 3s active / 7s idle: shadow swell + conic ring sweep
+    "@keyframes kswell{0%,30%,100%{box-shadow:0 0 18px rgba(var(--k-glow),.4),0 0 36px rgba(var(--k-glow),.2),0 4px 14px rgba(var(--k-glow),.3)}15%{box-shadow:0 0 28px rgba(var(--k-glow),.8),0 0 56px rgba(var(--k-glow),.4),0 6px 20px rgba(var(--k-glow),.6)}}" +
+    ".btn.ksparkle .bic{animation:kswell 10s ease-in-out infinite}" +
+    "@keyframes kring{0%{opacity:0;transform:rotate(0)}10%,25%{opacity:1}30%{opacity:0;transform:rotate(360deg)}100%{opacity:0}}" +
+    ".btn.ksparkle::after{content:'';position:absolute;inset:2px;border-radius:50%;pointer-events:none;opacity:0;background:conic-gradient(from 0deg,transparent,rgba(var(--k-glow),.8) 12%,transparent 30%);-webkit-mask:radial-gradient(closest-side,transparent 80%,#000 82%);mask:radial-gradient(closest-side,transparent 80%,#000 82%);animation:kring 10s linear infinite}" +
+    "@media (prefers-reduced-motion:reduce){.btn.kpop .bic,.btn.ksparkle .bic,.btn.ksparkle::after{animation:none}.btn.kglow:hover .bic{transform:none}}" +
     // ── Panel ──
     ".panel{" +
     "display:none;flex-direction:column;" +
@@ -225,10 +261,10 @@
     "font-size:14px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;" +
     "position:relative" +
     "}" +
-    // Visitor bubble (gold, right-aligned)
+    // Visitor bubble (primary — defaults to brand gold, right-aligned)
     ".me{" +
     "align-self:flex-end;" +
-    "background:var(--k-gold);color:var(--k-espresso);" +
+    "background:var(--k-primary);color:var(--k-espresso);" +
     "border-radius:16px 16px 4px 16px;" +
     "box-shadow:0 1px 4px rgba(36,26,18,.10)" +
     "}" +
@@ -296,14 +332,14 @@
     "}" +
     ".ft input::placeholder{color:var(--k-muted-fg)}" +
     ".ft input:focus{" +
-    "border-color:var(--k-gold);" +
-    "box-shadow:0 0 0 3px rgba(227,154,43,.15);" +
+    "border-color:var(--k-primary);" +
+    "box-shadow:0 0 0 3px var(--k-ring,rgba(227,154,43,.15));" +
     "background:var(--k-card)" +
     "}" +
-    // Send button — gold circle with paper-plane SVG
+    // Send button — primary circle (brand gold by default) with paper-plane SVG
     ".ft button{" +
     "flex:0 0 auto;width:38px;height:38px;border:0;" +
-    "background:var(--k-gold);color:var(--k-espresso);" +
+    "background:var(--k-primary);color:var(--k-espresso);" +
     "border-radius:50%;cursor:pointer;" +
     "display:flex;align-items:center;justify-content:center;" +
     "transition:background 0.15s,transform 0.1s,box-shadow 0.15s;" +
@@ -313,19 +349,26 @@
     ".ft button:active{transform:translateY(0)}" +
     ".ft button:disabled{opacity:.45;cursor:default;transform:none;box-shadow:none}" +
     ".ft button svg{width:17px;height:17px;flex:0 0 auto}" +
-    // ── Contact capture (.cap) ──
+    // ── Lead-form card (.cap) — lives INSIDE .log so it scrolls with the
+    // transcript like a bubble (never a sticky band between log and composer) ──
     ".cap{" +
+    "align-self:flex-start;width:100%;max-width:88%;" +
     "padding:12px 14px;background:var(--k-card);" +
-    "border-top:1px solid var(--k-border);" +
-    "display:none;flex-direction:column;gap:8px;flex-shrink:0" +
+    "border:1px solid var(--k-border);" +
+    "border-radius:var(--k-radius);" +
+    "box-shadow:0 1px 4px rgba(36,26,18,.07);" +
+    "display:flex;flex-direction:column;gap:8px;flex-shrink:0;" +
+    "animation:kmsg .2s cubic-bezier(.16,1,.3,1) both" +
     "}" +
-    ".cap.show{display:flex}" +
+    "@media (prefers-reduced-motion:reduce){.cap{animation:none}}" +
+    // Collapsed after submit — a compact transcript record of the capture
+    ".cap.done{padding:8px 12px;font-size:12px;color:var(--k-muted-fg)}" +
     ".cap input{" +
     "border:1.5px solid var(--k-border);border-radius:8px;" +
     "padding:9px 12px;font-size:16px;background:var(--k-cream);color:var(--k-espresso);outline:none;" +
     "transition:border-color 0.15s" +
     "}" +
-    ".cap input:focus{border-color:var(--k-gold)}" +
+    ".cap input:focus{border-color:var(--k-primary)}" +
     ".cap input::placeholder{color:var(--k-muted-fg)}" +
     ".cap button{" +
     "border:0;background:var(--k-espresso);color:var(--k-cream);" +
@@ -334,6 +377,21 @@
     "transition:background 0.15s" +
     "}" +
     ".cap button:hover{background:#3d2e22}" +
+    // ── Proactive popup teaser (theme.popupText) — display:none until scheduled ──
+    ".pop{display:none;position:relative;max-width:260px;margin:0 0 10px auto;padding:12px 30px 12px 14px;" +
+    "background:var(--k-card);border:1px solid var(--k-border);border-radius:var(--k-radius);" +
+    "box-shadow:0 12px 32px rgba(36,26,18,.18),0 2px 8px rgba(36,26,18,.10);" +
+    "font-size:13px;line-height:1.45;color:var(--k-espresso);cursor:pointer}" +
+    "@keyframes kpopin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+    ".pop.show{display:block;animation:kpopin .35s cubic-bezier(.16,1,.3,1)}" +
+    "@media (prefers-reduced-motion:reduce){.pop.show{animation:none}}" +
+    ".pop .popx{position:absolute;top:4px;right:6px;background:none;border:0;cursor:pointer;color:var(--k-muted-fg);font-size:14px;line-height:1;padding:2px}" +
+    ".pop .popx:hover{color:var(--k-espresso)}" +
+    // ── RTL (theme.direction:"rtl") — flip bubble corners + mirror the send icon;
+    // everything else follows the panel's dir=rtl automatically ──
+    ".panel.rtl .me{border-radius:16px 16px 16px 4px}" +
+    ".panel.rtl .bot,.panel.rtl .op,.panel.rtl .typing{border-radius:16px 16px 4px 16px}" +
+    ".panel.rtl .ft button svg{transform:rotate(180deg)}" +
     "</style>" +
     // ── Panel markup ──
     '<div class="panel" part="panel">' +
@@ -343,7 +401,7 @@
     '<img class="av" alt="Krispy">' +
     '<div class="ttl-wrap">' +
     '<span class="ttl"></span>' +
-    '<span class="sub"><span class="pdot"></span>we usually reply in minutes</span>' +
+    '<span class="sub"><span class="pdot"></span><span class="subtxt">we usually reply in minutes</span></span>' +
     "</div>" +
     '<button type="button" class="mute" aria-label="Mute notifications"></button>' +
     // Close button: inline SVG X (no innerHTML for user data — this is static chrome)
@@ -354,7 +412,6 @@
     "</button>" +
     "</div>" +
     '<div class="log"></div>' +
-    '<form class="cap"><input class="cn" placeholder="Your name"><input class="cc" placeholder="Email or phone"><button type="submit">Leave contact</button></form>' +
     // Composer: text input + paper-plane send button
     '<form class="ft">' +
     '<input class="in" placeholder="Type a message…" autocomplete="off">' +
@@ -364,6 +421,11 @@
     "</svg>" +
     "</button>" +
     "</form>" +
+    "</div>" +
+    // Popup teaser card above the launcher (hidden until theme.popupText schedules it)
+    '<div class="pop">' +
+    '<button type="button" class="popx" aria-label="Dismiss">×</button>' +
+    '<span class="popt"></span>' +
     "</div>" +
     // Launcher button: real Buttr mascot (PNG from the widget CDN, data-URI fallback)
     '<button class="btn" aria-label="Open chat">' +
@@ -380,8 +442,9 @@
     input = $(".in"),
     sendForm = $(".ft"),
     sendBtn = sendForm.querySelector("button");
-  var capForm = $(".cap");
   var avatarEl = $(".av");
+  var popEl = $(".pop"),
+    popTxtEl = $(".popt");
   $(".ttl").textContent = cfg.title;
   // Default avatar + launcher: real Buttr PNG, inline data-URI as onerror fallback.
   var launcherIcon = $(".bic");
@@ -399,11 +462,34 @@
   // ── theme (boot fetch, init-gated, NO poll — decorative → never blocks chat) ──
   var greeting = ""; // optional first bot bubble on open; set by theme
   var soundEnabled = true; // theme.sound (tenant); default ON. AND-gated with visitor mute below.
+  // WidgetTiming — field-proven UX defaults; each value only matters once its
+  // parent feature is on (launcherDelayMs → entrance, sparkleAfterMs → sparkle,
+  // popup* → popupText). autoOpenMs defaults 0 (= never) — neutral like every
+  // other knob; the field-proven value once a tenant opts in is 2000.
+  var timing = {
+    launcherDelayMs: 0,
+    sparkleAfterMs: 10000,
+    popupDelayMs: 8000,
+    popupCooldownHrs: 24,
+    autoOpenMs: 0,
+  };
+  function clampMs(v, dflt) {
+    return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(300000, v)) : dflt;
+  }
   function applyTheme(th) {
     if (!th) return;
     if (th.sound === false) soundEnabled = false;
     var pc = clampColor(th.primaryColor);
-    if (pc) host.style.setProperty("--k-primary", pc);
+    if (pc) {
+      host.style.setProperty("--k-primary", pc);
+      // hover keeps its lift/shadow feedback; the darker-gold shift only makes
+      // sense against the default gold, so a themed primary uses itself
+      host.style.setProperty("--k-gold-hover", pc);
+      // input focus ring — same hue as the themed border (was hardcoded gold);
+      // only when primaryColor is a hex we can alpha-blend, else keep the default
+      var pcRgb = hexToRgb(th.primaryColor);
+      if (pcRgb) host.style.setProperty("--k-ring", "rgba(" + pcRgb + ",.15)");
+    }
     var lc = clampColor(th.launcherColor);
     if (lc) host.style.setProperty("--k-launcher", lc);
     var r = clampRadius(th.radius);
@@ -413,20 +499,87 @@
     if (th.position === "bl") {
       host.style.right = "auto";
       host.style.left = "20px";
-      // bottom-left: the launcher hugs the left edge under the open panel
+      // bottom-left: the launcher + popup hug the left edge under the open panel
       var blBtn = root.querySelector(".btn");
       if (blBtn) {
         blBtn.style.marginLeft = "0";
         blBtn.style.marginRight = "auto";
       }
+      popEl.style.marginLeft = "0";
+      popEl.style.marginRight = "auto";
     }
     if (typeof th.headerTitle === "string" && th.headerTitle)
       $(".ttl").textContent = th.headerTitle;
+    if (typeof th.tagline === "string" && th.tagline) $(".subtxt").textContent = th.tagline;
     if (typeof th.greeting === "string") greeting = th.greeting.trim();
-    // avatar: literal "buttr" → inline default; an https URL → that; else keep default.
-    var isHttps = typeof th.avatar === "string" && th.avatar.startsWith("https://");
-    var av = th.avatar === "buttr" ? BUTTR : isHttps ? th.avatar : null;
-    if (av) avatarEl.src = av;
+    // avatar (shared gate) — brands the header AND the floating launcher badge
+    var av = isRenderableAvatar(th.avatar);
+    if (av) {
+      avatarEl.src = av;
+      launcherIcon.src = av;
+    }
+    if (th.direction === "rtl") {
+      panel.dir = "rtl";
+      panel.classList.add("rtl");
+      popEl.dir = "rtl";
+    }
+    // timing overrides (clamped 0–300s) — inert on their own, consumed below
+    var t = th.timing || {};
+    timing.launcherDelayMs = clampMs(t.launcherDelayMs, 0);
+    timing.sparkleAfterMs = clampMs(t.sparkleAfterMs, 10000);
+    timing.popupDelayMs = clampMs(t.popupDelayMs, 8000);
+    timing.autoOpenMs = clampMs(t.autoOpenMs, 0);
+    timing.popupCooldownHrs =
+      typeof t.popupCooldownHrs === "number" && isFinite(t.popupCooldownHrs)
+        ? Math.max(0, Math.min(8760, t.popupCooldownHrs))
+        : 24;
+    // glow — opt-in: no glowColor (the default) → no glow layer at all
+    var glow = hexToRgb(th.glowColor);
+    if (glow) {
+      host.style.setProperty("--k-glow", glow);
+      launcher.classList.add("kglow");
+    }
+    // sparkle — opt-in idle loop, joins after sparkleAfterMs
+    if (th.sparkle === true)
+      setTimeout(function () {
+        launcher.classList.add("ksparkle");
+      }, timing.sparkleAfterMs);
+    // delayed entrance — opt-in via launcherDelayMs>0; sessionStorage skips the
+    // delay AND the pop on revisit (back-nav shouldn't re-play the entrance).
+    // ponytail: the boot fetch races first paint, so the launcher may blink
+    // before hiding — avoiding that would mean blocking render on config.
+    var SHOWN_KEY = "krispy_btn_shown_" + cfg.tenant;
+    if (timing.launcherDelayMs > 0 && !sessionStorage.getItem(SHOWN_KEY)) {
+      launcher.classList.add("khidden");
+      setTimeout(function () {
+        launcher.classList.remove("khidden");
+        launcher.classList.add("kpop");
+        try {
+          sessionStorage.setItem(SHOWN_KEY, "1");
+        } catch {
+          /* private mode — entrance just re-plays next load */
+        }
+      }, timing.launcherDelayMs);
+    }
+    // proactive timer popup (theme.popupText — §3.5 timer mode; the full popup
+    // engine with "near" triggers lands in Phase 3). Unset = nothing ever shows.
+    var popText = typeof th.popupText === "string" ? th.popupText.trim() : "";
+    if (popText) {
+      var popKey = "krispy_popup_" + cfg.tenant + "_0"; // per-popup key (source ?? index)
+      var lastPop = +localStorage.getItem(popKey) || 0;
+      if (Date.now() - lastPop >= timing.popupCooldownHrs * 3600000) {
+        setTimeout(function () {
+          if (panel.classList.contains("open")) return; // suppressed while chatting
+          popTxtEl.textContent = popText;
+          popEl.classList.add("show");
+          try {
+            localStorage.setItem(popKey, String(Date.now()));
+          } catch {
+            /* quota/private mode — popup just re-shows next load */
+          }
+        }, timing.popupDelayMs);
+      }
+    }
   }
   fetch(cfg.api + "/api/widget/config?t=" + encodeURIComponent(cfg.tenant))
     .then(function (r) {
@@ -454,6 +607,20 @@
     muted = !muted;
     localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
     renderMute();
+  });
+
+  // Popup teaser interactions: card click opens the chat, × just dismisses.
+  // (Cooldown was already stamped at show time, so either way it stays gone.)
+  function hidePopup() {
+    popEl.classList.remove("show");
+  }
+  popEl.addEventListener("click", function () {
+    hidePopup();
+    open();
+  });
+  root.querySelector(".popx").addEventListener("click", function (e) {
+    e.stopPropagation(); // don't let the dismiss × open the chat
+    hidePopup();
   });
 
   // WebAudio "ding" — two short oscillator notes, ~150ms. No file, no base64.
@@ -488,6 +655,7 @@
   }
 
   // Inbound message landed → notify only if the panel is closed.
+  var autoOpenTimer = null;
   function notifyInbound() {
     if (panel.classList.contains("open")) return;
     playDing();
@@ -495,6 +663,14 @@
     launcher.classList.remove("knudge");
     void launcher.offsetWidth; // restart the animation if it's mid-flight
     launcher.classList.add("knudge");
+    // Auto-open: a closed panel with a fresh inbound reply opens itself after
+    // timing.autoOpenMs (opt-in; default 0 = never, field-proven value 2000).
+    // One pending timer max.
+    if (timing.autoOpenMs > 0 && !autoOpenTimer)
+      autoOpenTimer = setTimeout(function () {
+        autoOpenTimer = null;
+        if (!panel.classList.contains("open")) open();
+      }, timing.autoOpenMs);
   }
 
   // First interaction unlocks audio (browser autoplay policy).
@@ -602,6 +778,7 @@
   var opened = false;
   function open() {
     hasInteracted = true; // opening counts as interaction (unlocks audio)
+    hidePopup(); // an open panel supersedes the teaser
     panel.classList.add("open");
     launcher.classList.remove("kunread", "knudge"); // clear unread on open
     if (!opened) {
@@ -662,7 +839,7 @@
           add("op", ev.text);
           notifyInbound();
         } else if (ev.type === "handoff") {
-          showCapture();
+          showForm(DEFAULT_CONTACT_FORM);
         } else if (ev.type === "resume") {
           // The AI took the session back (operator resolved it or went quiet).
           // Reset the human framing so a later takeover announces itself again.
@@ -703,27 +880,18 @@
   }
 
   // ── contact capture (on [!HANDOFF] with no form) ────────────────────────
-  function showCapture() {
-    capForm.classList.add("show");
-  }
-  capForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var name = capForm.querySelector(".cn").value.trim();
-    var contact = capForm.querySelector(".cc").value.trim();
-    if (!contact && !name) return;
-    fetch(cfg.api + "/api/contact", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId: sessionId,
-        tenantId: cfg.tenant,
-        name: name,
-        contact: contact,
-      }),
-    }).catch(function () {});
-    capForm.classList.remove("show");
-    add("sys", "Thanks — we'll reach out.");
-  });
+  // One renderer, one door: the legacy hardcoded .cap markup is gone — handoff
+  // without a tenant form renders this default FormSpec through showForm(),
+  // posting /api/lead like every other form (/api/contact stays an edge shim
+  // for already-deployed widgets).
+  var DEFAULT_CONTACT_FORM = {
+    id: "contact",
+    title: "Leave your contact",
+    fields: [
+      { name: "name", label: "Your name", type: "text" },
+      { name: "contact", label: "Email or phone", type: "text", required: true },
+    ],
+  };
 
   // ── data-driven lead form (on [!FORM:<id>], carried by res.form) ─────────
   // Built entirely with createElement/textContent — NEVER innerHTML for any value
@@ -733,7 +901,7 @@
     if (formOpen || !form || !form.fields) return;
     formOpen = true;
     var wrap = document.createElement("form");
-    wrap.className = "cap show";
+    wrap.className = "cap";
 
     if (form.title) {
       var h = document.createElement("div");
@@ -809,13 +977,15 @@
           history: history.slice(-10),
         }),
       }).catch(function () {});
-      wrap.remove();
+      // Collapse in place to a compact transcript record — the card stays in
+      // the log as proof the details were sent (textContent clears the fields).
+      wrap.textContent = form.successText || "Thanks — we'll be in touch.";
+      wrap.classList.add("done");
       formOpen = false;
-      add("sys", "Thanks — we'll be in touch.");
     });
 
-    log.parentNode.insertBefore(wrap, sendForm); // above the composer, like .cap
-    log.scrollTop = log.scrollHeight;
+    log.appendChild(wrap); // into the log — scrolls with the transcript, never a sticky band
+    wrap.scrollIntoView({ block: "nearest" });
   }
 
   // ── send ─────────────────────────────────────────────────────────────────
@@ -863,7 +1033,7 @@
           notifyInbound(); // self-gates: no-op while panel open
         }
         if (res.form) showForm(res.form);
-        else if (res.handoff) showCapture();
+        else if (res.handoff) showForm(DEFAULT_CONTACT_FORM);
       })
       .catch(function () {
         if (typing) typing.remove();

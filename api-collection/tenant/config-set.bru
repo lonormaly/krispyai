@@ -43,4 +43,10 @@ docs {
   preserved — send only what changed). Writes the exact shape `getTenant()` reads, so a
   saved bot token/prompt immediately drives the bot. Requires the `x-tenant-sync-secret`
   header (== TENANT_SYNC_SECRET) or returns 401.
+
+  Write caps (trust boundary — invalid configs never reach KV):
+  413 avatar_too_large (theme.avatar over 48KB), 413 kb_sources_too_large (kbSources
+  total text over 100K chars), 400 avatar_scheme_invalid (avatar must be "buttr",
+  https://…, or data:image/(png|webp|jpeg);base64,…), 400 cta_url_not_https
+  (connector profileUrl/url must be https).
 }

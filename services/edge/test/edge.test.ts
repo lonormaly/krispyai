@@ -9,7 +9,7 @@ import {
   HANDOFF_MARKER,
   BREVITY_INSTRUCTION,
 } from "../src/system-prompt";
-import { renderLeadEmail } from "../src/email";
+import { renderLeadEmail, sendLeadEmail } from "../src/email";
 import { deliverLead, ringToHistory, RING_HISTORY_MAX } from "../src/index";
 import { parseOwnerReply, sendToTopic, buildMentions, sendHandoffAlert } from "../src/telegram";
 import {
@@ -496,6 +496,94 @@ describe("tenant config routes", () => {
     );
     expect(await res.json()).toEqual({ botToken: "b", chatId: "-200" });
   });
+
+  // ── write caps (trust boundary) — bad configs never reach KV ────────────────
+  const postCfg = async (env: Env, config: unknown) =>
+    worker.fetch(
+      req({
+        path: "/api/tenant/config",
+        method: "POST",
+        headers: authed(),
+        body: JSON.stringify({ tenantId: "t1", config }),
+      }),
+      env,
+    );
+
+  test("avatar over 48KB → 413, nothing written", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, {
+      theme: { avatar: "data:image/png;base64," + "A".repeat(48 * 1024) },
+    });
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe("avatar_too_large");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+  });
+
+  test("avatar scheme: https/data-image/buttr pass, http and data:text rejected", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    for (const avatar of ["buttr", "https://cdn.example/logo.png", "data:image/webp;base64,AA"]) {
+      expect((await postCfg(env, { theme: { avatar } })).status).toBe(200);
+    }
+    for (const avatar of [
+      "http://evil.example/x.png",
+      "data:text/html;base64,AA",
+      "javascript:x",
+    ]) {
+      const res = await postCfg(env, { theme: { avatar } });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("avatar_scheme_invalid");
+    }
+  });
+
+  test("connector CTA urls must be https → 400, nothing written", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, {
+      connectors: [{ id: "ig", type: "instagram", profileUrl: "http://instagram.com/shop" }],
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("cta_url_not_https");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // https passes
+    expect(
+      (
+        await postCfg(env, {
+          connectors: [{ id: "ig", type: "instagram", profileUrl: "https://instagram.com/shop" }],
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  test("kbSources total text over 100K chars → 413 (cap precedes the schema)", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, {
+      kbSources: [
+        { id: "a", name: "a", text: "x".repeat(60_000), updatedAt: 0 },
+        { id: "b", name: "b", text: "x".repeat(60_000), updatedAt: 0 },
+      ],
+    });
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe("kb_sources_too_large");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // under the cap passes
+    expect(
+      (await postCfg(env, { kbSources: [{ id: "a", name: "a", text: "hi", updatedAt: 0 }] }))
+        .status,
+    ).toBe(200);
+  });
+
+  test("free-text theme strings (tagline/popupText) over 500 chars → 413", async () => {
+    const env = fakeEnv({ TENANT_SYNC_SECRET: SECRET });
+    const res = await postCfg(env, { theme: { popupText: "x".repeat(501) } });
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe("theme_text_too_large");
+    expect(await readTenantConfig(env, "t1")).toBeNull();
+    // a long tagline is rejected the same way
+    expect((await postCfg(env, { theme: { tagline: "y".repeat(600) } })).status).toBe(413);
+    // under the cap passes
+    expect(
+      (await postCfg(env, { theme: { popupText: "we usually reply in minutes" } })).status,
+    ).toBe(200);
+  });
 });
 
 // ── DO fan-out ───────────────────────────────────────────────────────────────
@@ -856,6 +944,48 @@ describe("renderLeadEmail", () => {
     const mail = renderLeadEmail(form, { name: "<script>x</script>" }, []);
     expect(mail.html).not.toContain("<script>x</script>");
     expect(mail.html).toContain("&lt;script&gt;");
+  });
+});
+
+// ── sendLeadEmail reply_to (tenant hits Reply → talks to the lead) ───────────
+describe("sendLeadEmail reply_to", () => {
+  // Capture the Resend request body via the injectable fetch.
+  function capturingFetch() {
+    const bodies: any[] = [];
+    const fetchImpl = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    return { bodies, fetchImpl };
+  }
+
+  test("sets reply_to from the form's email-typed field value", async () => {
+    const form = {
+      id: "book",
+      title: "Book a call",
+      fields: [
+        { name: "name", label: "Your name", type: "text" as const },
+        { name: "mail", label: "Your email", type: "email" as const },
+      ],
+    };
+    const mail = renderLeadEmail(form, { name: "Dana", mail: "dana@x.co" }, []);
+    const { bodies, fetchImpl } = capturingFetch();
+    await sendLeadEmail("re_x", "leads@x.co", "owner@x.co", mail, fetchImpl);
+    expect(bodies.length).toBe(1);
+    expect(bodies[0].reply_to).toBe("dana@x.co");
+  });
+
+  test("omits reply_to when no email field was captured", async () => {
+    const form = {
+      id: "book",
+      title: "Book a call",
+      fields: [{ name: "name", label: "Your name", type: "text" as const }],
+    };
+    const mail = renderLeadEmail(form, { name: "Dana" }, []);
+    const { bodies, fetchImpl } = capturingFetch();
+    await sendLeadEmail("re_x", "leads@x.co", "owner@x.co", mail, fetchImpl);
+    expect(bodies.length).toBe(1);
+    expect("reply_to" in bodies[0]).toBe(false);
   });
 });
 

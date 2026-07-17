@@ -42,6 +42,11 @@ field `type` is one of `text` | `email` | `tel` | `textarea` | `select` (`select
 `options`). the widget renders the form entirely with `createElement`/`textContent` (never
 `innerHTML`), so field labels/options are XSS-safe.
 
+the form renders as a card **inside the message log** — it scrolls with the conversation
+like a bubble (chat continues past it) instead of pinning between the log and the composer.
+on submit it collapses in place to a compact one-line record: `successText` if set, else a
+built-in "Thanks — we'll be in touch."
+
 ## teach the bot to raise it
 
 the bot only offers a form if it knows the form exists. the server injects the list of your
@@ -77,9 +82,10 @@ nothing is delivered server-side for them, and they never leave the server as da
 
 - **`[!FORM:<id>]`** → the widget renders your `FormSpec`; on submit it `POST`s to
   `/api/lead`, which fans the values out to the scoped connectors.
-- **`[!HANDOFF]` with no form** → the widget shows a minimal name + contact capture; on
-  submit it `POST`s to `/api/contact` (a back-compat shim that maps onto the same lead
-  fan-out).
+- **`[!HANDOFF]` with no form** → the widget renders a built-in default `FormSpec`
+  (name + a required email/phone field) through the same renderer, posting to `/api/lead`
+  like any other form. `/api/contact` remains as a back-compat shim for already-deployed
+  widgets.
 
 ## write the config
 

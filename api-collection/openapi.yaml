@@ -613,12 +613,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Ok" }
         "400":
-          description: Missing `tenantId` or `config`.
+          description: >
+            Missing `tenantId` or `config`, or a malformed value — `avatar_scheme_invalid`
+            (`theme.avatar` must be `buttr`, `https://…`, or
+            `data:image/(png|webp|jpeg);base64,…`) or `cta_url_not_https` (connector
+            `profileUrl`/`url` must be https).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "401":
           description: Missing/wrong `x-tenant-sync-secret` (or the secret is not configured).
+        "413":
+          description: >
+            Config over a hard size cap — `avatar_too_large` (`theme.avatar` over 48KB) or
+            `kb_sources_too_large` (`kbSources` total text over 100K chars). Nothing is written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
 components:
   parameters:
@@ -889,13 +900,44 @@ components:
         launcherColor: { type: string, description: "FAB only; defaults to primaryColor." }
         position:
           { type: string, enum: [br, bl], description: "bottom-right | bottom-left. Default br." }
-        avatar: { type: string, description: '"buttr" (default) or an https URL.' }
+        glowColor:
+          {
+            type: string,
+            description: "Hex; launcher glow/sparkle/pulse tint. Unset = no glow layer (default).",
+          }
+        avatar:
+          {
+            type: string,
+            description: '"buttr" (default), an https URL, or a data:image/… URI (≤48KB).',
+          }
         greeting: { type: string, description: "First bot bubble on open." }
         headerTitle: { type: string }
+        tagline: { type: string, description: "Header sub-line (e.g. usually replies in minutes)." }
         radius:
           { type: integer, minimum: 0, maximum: 20, description: "Corner radius px. Default 14." }
         font: { type: string, description: "CSS font-family stack." }
         sound: { type: boolean, description: "Notification ding while panel closed. Default true." }
+        sparkle: { type: boolean, description: "Idle sparkle loop on the launcher. Default false." }
+        direction:
+          { type: string, enum: [ltr, rtl], description: "Panel text direction. Default ltr." }
+        popupText: { type: string, description: "Proactive teaser-popup copy. Unset = popup off." }
+        timing: { $ref: "#/components/schemas/WidgetTiming" }
+
+    WidgetTiming:
+      type: object
+      description: >
+        All ms; the widget clamps 0–300000. Each knob takes effect only when its feature
+        is enabled — none changes the default widget on its own.
+      properties:
+        launcherDelayMs: { type: integer, description: "Default 0 = no entrance delay." }
+        sparkleAfterMs: { type: integer, description: "Default 10000; inert unless sparkle." }
+        popupDelayMs: { type: integer, description: "Default 8000; inert unless popupText." }
+        popupCooldownHrs: { type: integer, description: "Default 24; inert unless popupText." }
+        autoOpenMs:
+          {
+            type: integer,
+            description: "Default 0 = never — auto-open after inbound msg while closed.",
+          }
 
     FieldType:
       type: string

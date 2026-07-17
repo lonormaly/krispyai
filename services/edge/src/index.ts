@@ -720,6 +720,48 @@ async function handleTenantConfigGet(request: Request, env: Env): Promise<Respon
   return json(env, cfg);
 }
 
+// ── config write caps (trust boundary) ─────────────────────────────────────
+// Hard rejects on the write path — the widget/chat read paths trust what's in KV,
+// so anything the projection will serve to the public web gets bounded HERE. Size
+// caps → 413; malformed values (scheme/protocol) → 400. kbSources is validated
+// ahead of its schema landing (cap precedes the field — later phases ship into an
+// already-guarded door).
+export const AVATAR_MAX_CHARS = 48 * 1024; // data-URI logos; ~10–30KB typical
+export const KB_SOURCES_MAX_CHARS = 100_000; // total text across all sources
+export const THEME_TEXT_MAX_CHARS = 500; // free-text theme strings projected to the public widget
+const AVATAR_SCHEME = /^(https:\/\/|data:image\/(png|webp|jpeg);base64,)/;
+
+function tenantConfigCapError(
+  cfg: Partial<TenantConfig>,
+): { error: string; status: number } | null {
+  const avatar = cfg.theme?.avatar;
+  if (avatar !== undefined) {
+    if (avatar.length > AVATAR_MAX_CHARS) return { error: "avatar_too_large", status: 413 };
+    if (avatar !== "buttr" && !AVATAR_SCHEME.test(avatar))
+      return { error: "avatar_scheme_invalid", status: 400 };
+  }
+  // Free-text theme strings render verbatim in the public widget — bound them so a
+  // config write can't push an unbounded string into every visitor's boot response.
+  for (const s of [cfg.theme?.tagline, cfg.theme?.popupText]) {
+    if (s !== undefined && s.length > THEME_TEXT_MAX_CHARS)
+      return { error: "theme_text_too_large", status: 413 };
+  }
+  // CTA urls must be https — they render as visitor-facing links in the widget.
+  // `url` (facebook/tiktok/link connectors, later phase) checked alongside profileUrl.
+  for (const c of cfg.connectors ?? []) {
+    for (const u of [c.profileUrl, (c as { url?: string }).url]) {
+      if (u !== undefined && !u.startsWith("https://"))
+        return { error: "cta_url_not_https", status: 400 };
+    }
+  }
+  const kbSources = (cfg as { kbSources?: { text?: string }[] }).kbSources;
+  if (kbSources) {
+    const total = kbSources.reduce((n, s) => n + (s.text?.length ?? 0), 0);
+    if (total > KB_SOURCES_MAX_CHARS) return { error: "kb_sources_too_large", status: 413 };
+  }
+  return null;
+}
+
 // POST /api/tenant/config { tenantId, config } → merge into KV, { ok: true }
 async function handleTenantConfigSet(request: Request, env: Env): Promise<Response> {
   if (!tenantSyncAuthed(request, env))
@@ -731,6 +773,8 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
   if (!body?.tenantId || !body.config) {
     return json(env, { error: "tenantId and config required" }, 400);
   }
+  const bad = tenantConfigCapError(body.config);
+  if (bad) return json(env, { error: bad.error }, bad.status);
   await mergeTenantConfig(env, body.tenantId, body.config);
   return json(env, { ok: true });
 }
@@ -742,7 +786,11 @@ async function handleTenantConfigSet(request: Request, env: Env): Promise<Respon
 async function handleWidgetConfig(request: Request, env: Env): Promise<Response> {
   const t = new URL(request.url).searchParams.get("t") || DEFAULT_TENANT;
   const cfg = await readTenantConfig(env, t);
-  return json(env, publicWidgetConfig(cfg));
+  // Short public cache — the boot config (now up to ~10–30KB with a data-URI avatar)
+  // is otherwise refetched uncached on every page load. 60s keeps edits near-live.
+  return Response.json(publicWidgetConfig(cfg), {
+    headers: { ...cors(env), "Cache-Control": "public, max-age=60" },
+  });
 }
 
 // ── GET /internal/usage ──────────────────────────────────────────────────────

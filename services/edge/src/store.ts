@@ -21,6 +21,12 @@ export function publicWidgetConfig(cfg: Partial<TenantConfig> | null) {
       radius: th.radius,
       font: th.font,
       sound: th.sound,
+      glowColor: th.glowColor,
+      tagline: th.tagline,
+      sparkle: th.sparkle,
+      direction: th.direction,
+      popupText: th.popupText,
+      timing: th.timing,
     },
     // Feature A appends PUBLIC-safe form + connector-CTA projections here.
   };
