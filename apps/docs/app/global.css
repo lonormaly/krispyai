@@ -3,13 +3,13 @@
  *   espresso #241a12 · cream #fbf6ee · gold #e39a2b · jam #f0426b · pistachio #2fbf9e
  * Look: hard offset shadows, mono uppercase micro-labels, lowercase copy. 🥐 = the one emoji.
  */
-@import "fumadocs-ui/style.css";
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@source "../node_modules/fumadocs-ui/dist/**/*.js";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Fumadocs reads HSL triplets for its design tokens. Map them onto the Krispy palette. */
+/* Fumadocs 16 reads full color values on `--color-fd-*` tokens (v3 used HSL
+ * triplets on shadcn-style names). Map them onto the Krispy palette. */
 :root {
   --color-espresso: #241a12;
   --color-cream: #fbf6ee;
@@ -17,44 +17,42 @@
   --color-jam: #f0426b;
   --color-pistachio: #2fbf9e;
 
-  --background: 36 44% 96%; /* cream */
-  --foreground: 30 33% 11%; /* espresso */
-  --card: 40 60% 98%;
-  --card-foreground: 30 33% 11%;
-  --popover: 40 60% 98%;
-  --popover-foreground: 30 33% 11%;
-  --primary: 35 76% 53%; /* gold */
-  --primary-foreground: 30 33% 11%;
-  --secondary: 34 45% 89%;
-  --secondary-foreground: 30 33% 11%;
-  --muted: 34 45% 89%;
-  --muted-foreground: 28 22% 35%;
-  --accent: 34 45% 89%;
-  --accent-foreground: 30 33% 11%;
-  --border: 33 41% 86%;
-  --input: 33 41% 86%;
-  --ring: 35 76% 53%;
+  --color-fd-background: hsl(36 44% 96%); /* cream */
+  --color-fd-foreground: hsl(30 33% 11%); /* espresso */
+  --color-fd-card: hsl(40 60% 98%);
+  --color-fd-card-foreground: hsl(30 33% 11%);
+  --color-fd-popover: hsl(40 60% 98%);
+  --color-fd-popover-foreground: hsl(30 33% 11%);
+  --color-fd-primary: hsl(35 76% 53%); /* gold */
+  --color-fd-primary-foreground: hsl(30 33% 11%);
+  --color-fd-secondary: hsl(34 45% 89%);
+  --color-fd-secondary-foreground: hsl(30 33% 11%);
+  --color-fd-muted: hsl(34 45% 89%);
+  --color-fd-muted-foreground: hsl(28 22% 35%);
+  --color-fd-accent: hsl(34 45% 89%);
+  --color-fd-accent-foreground: hsl(30 33% 11%);
+  --color-fd-border: hsl(33 41% 86%);
+  --color-fd-ring: hsl(35 76% 53%);
   --radius: 0.25rem;
 }
 
 .dark {
-  --background: 30 40% 8%;
-  --foreground: 36 44% 96%;
-  --card: 30 33% 11%;
-  --card-foreground: 36 44% 96%;
-  --popover: 30 33% 11%;
-  --popover-foreground: 36 44% 96%;
-  --primary: 35 76% 53%; /* gold stays */
-  --primary-foreground: 30 33% 11%;
-  --secondary: 30 25% 16%;
-  --secondary-foreground: 36 44% 96%;
-  --muted: 30 25% 16%;
-  --muted-foreground: 34 22% 65%;
-  --accent: 30 25% 16%;
-  --accent-foreground: 36 44% 96%;
-  --border: 30 25% 18%;
-  --input: 30 25% 18%;
-  --ring: 35 76% 53%;
+  --color-fd-background: hsl(30 40% 8%);
+  --color-fd-foreground: hsl(36 44% 96%);
+  --color-fd-card: hsl(30 33% 11%);
+  --color-fd-card-foreground: hsl(36 44% 96%);
+  --color-fd-popover: hsl(30 33% 11%);
+  --color-fd-popover-foreground: hsl(36 44% 96%);
+  --color-fd-primary: hsl(35 76% 53%); /* gold stays */
+  --color-fd-primary-foreground: hsl(30 33% 11%);
+  --color-fd-secondary: hsl(30 25% 16%);
+  --color-fd-secondary-foreground: hsl(36 44% 96%);
+  --color-fd-muted: hsl(30 25% 16%);
+  --color-fd-muted-foreground: hsl(34 22% 65%);
+  --color-fd-accent: hsl(30 25% 16%);
+  --color-fd-accent-foreground: hsl(36 44% 96%);
+  --color-fd-border: hsl(30 25% 18%);
+  --color-fd-ring: hsl(35 76% 53%);
 }
 
 /* Micro-labels: mono, uppercase, tracked — the boulangerie ticket look. */
@@ -63,7 +61,7 @@
   text-transform: uppercase;
   letter-spacing: 0.18em;
   font-size: 0.7rem;
-  color: hsl(var(--muted-foreground));
+  color: var(--color-fd-muted-foreground);
 }
 
 /* Krispy CTA — gold fill, espresso hard offset shadow (no blur). */
