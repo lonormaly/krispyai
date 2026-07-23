@@ -38,7 +38,7 @@ jobs:
       # npm CLI (Node) does the upload; the PACKAGE runtime is Bun. Node ≥20.17 / 22.9 is
       # required for `npm publish` Trusted Publishing (OIDC) support.
       - name: Setup Node (for npm publish + OIDC)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
